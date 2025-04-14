@@ -50,11 +50,11 @@
               <span>Products</span>
             </a>
             <ul class="nav nav-children">
-              <li><a class="nav-link">Categories</a></li>
-              <li><a class="nav-link">Sub Categories</a></li>
-              <li><a class="nav-link">Variations</a></li>	
-              <li><a class="nav-link">All Products</a></li>
-              <li><a class="nav-link">Price Chart</a></li>
+              <li><a class="nav-link" href="/product-categories">Categories</a></li>
+              <li><a class="nav-link" href="/product-subcategories">Sub Categories</a></li>
+              <li><a class="nav-link" href="/product-attributes">Attributes</a></li>	
+              <li><a class="nav-link" href="/products">All Products</a></li>
+              <li><a class="nav-link" href="/manufacturing">Manufacturing</a></li>
             </ul>
           </li>
 
@@ -66,7 +66,6 @@
             <ul class="nav nav-children">
               <li><a class="nav-link">Raw</a></li>
               <li><a class="nav-link">Finish Goods</a></li>
-              <li><a class="nav-link">Manufacturing</a></li>
             </ul>
           </li>
 
@@ -88,7 +87,7 @@
             </a>
             <ul class="nav nav-children">
               <li><a class="nav-link">Vouchers</a></li>
-              <li><a class="nav-link">All Projects</a></li>	
+              <li><a class="nav-link">Payments</a></li>	
             </ul>
           </li>
 
