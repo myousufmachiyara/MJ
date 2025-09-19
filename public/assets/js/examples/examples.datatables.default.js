@@ -26,10 +26,10 @@ Theme Version: 	4.0.0
 			"searching": false  // Ensure search functionality is enabled
 		});
 
-		$('#cust-datatable-default').dataTable({
-			"order": [[0, "desc"]],
-			"pageLength": 25,  // Show all rows
-		});
+		// $('#cust-datatable-default').dataTable({
+		// 	"order": [[0, "desc"]],
+		// 	"pageLength": 25,  // Show all rows
+		// });
 	};
 
 	

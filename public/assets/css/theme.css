@@ -1198,7 +1198,7 @@ a:active {
 	}
 
 	html.fixed.sidebar-left-collapsed .content-body {
-		margin-left: 75px;
+		margin-left: 65px;
 	}
 
 	/* Layout Fixed - Sidebar Left Collapsed & Sidebar Right Opened */
@@ -1324,7 +1324,7 @@ a:active {
 }
 
 .sidebar-left .sidebar-header .sidebar-toggle i {
-	color: #fff;
+	color: #ffffff;
 	font-size: 14.4px;
 	font-size: 0.9rem;
 	line-height: 50px;
@@ -2029,7 +2029,7 @@ html.no-overflowscrolling.custom-scroll .nano > .nano-content {
 html.no-overflowscrolling .sidebar-left .nano {
 	background: #1D2127;
 	box-shadow: -5px 0 0 #2F3139 inset;
-	top: 30px;
+	top: 20px;
 }
 
 html.no-overflowscrolling.sidebar-light:not(.dark) .sidebar-left .nano {
@@ -6203,8 +6203,7 @@ ul.nav-main li a {
 	color: #ffffff;
 	white-space: nowrap;
 	text-overflow: ellipsis;
-	font-size: 12.8px;
-	font-size: 1rem;
+	font-size: 0.9rem;
 }
 
 ul.nav-main li a span.badge {
@@ -16520,7 +16519,7 @@ html.dark .table .actions-hover a {
 	border-bottom: none;
 	border-left: 1px solid #EEE;
 	border-right: 1px solid #EEE;
-	border-top: 3px solid #EEE;
+	/* border-top: 3px solid #EEE; */
 	color: #CCC;
 }
 
@@ -16535,7 +16534,7 @@ html.dark .table .actions-hover a {
 }
 
 .nav-tabs li .nav-link .badge {
-	border-radius: 100%;
+	border-radius: 25px;
 	padding: 6.4px 8.8px;
 	padding: 0.4rem 0.55rem;
 	margin-right: 5px;
@@ -17732,7 +17731,7 @@ p.drop-caps.drop-caps-style-2:first-letter {
 	border: none;
 	box-shadow: 0 1px 2px 1px rgba(0, 0, 0, 0.2);
 	box-sizing: content-box;
-	left: -100px !important;
+	left: 0px !important;
 	padding: 0px 0px;
 	top: 41px !important;
 	transform: none !important;
