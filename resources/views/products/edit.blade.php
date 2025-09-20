@@ -42,6 +42,15 @@
             </div>
 
             <div class="col-md-2">
+              <label>Sub Category </label>
+              <select name="subcategory_id" class="form-control">
+                @foreach($subcategories as $subcat)
+                  <option value="{{ $subcat->id }}" {{ $product->subcategory_id == $subcat->id ? 'selected' : '' }}>{{ $subcat->name }}</option>
+                @endforeach
+              </select>
+            </div>
+
+            <div class="col-md-2">
               <label>SKU</label>
               <input type="text" name="sku" id="sku" class="form-control" value="{{ old('sku', $product->sku) }}">
             </div>

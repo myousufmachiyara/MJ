@@ -39,6 +39,16 @@
               @error('category_id')<div class="text-danger">{{ $message }}</div>@enderror
             </div>
             <div class="col-md-2">
+              <label>Sub Category</label>
+              <select name="subcategory_id" class="form-control">
+                <option value="" selected>Select Sub Category</option>
+                @foreach($subcategories as $subcat)
+                  <option value="{{ $subcat->id }}">{{ $subcat->name }}</option>
+                @endforeach
+              </select>
+              @error('sub_category_id')<div class="text-danger">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-2">
               <label>SKU *</label>
               <input type="text" name="sku" id="sku" class="form-control" value="{{ old('sku') }}" required>
               @error('sku')<div class="text-danger">{{ $message }}</div>@enderror

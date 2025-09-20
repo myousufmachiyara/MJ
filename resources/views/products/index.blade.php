@@ -49,7 +49,7 @@
                 </td>
                 <td>{{ $product->name }}</td>
                 <td>{{ $product->sku }}</td>
-                <td>{{ $product->category->name ?? '-' }}</td>
+                <td>{{ ($product->category->name ?? '-') . ' - ' . ($product->subcategory->name ?? '-') }}</td>
                 <td>
                   <a href="{{ route('products.edit', $product->id) }}" class="text-primary"><i class="fa fa-edit"></i></a>
                   <form method="POST" action="{{ route('products.destroy', $product->id) }}" style="display:inline-block">

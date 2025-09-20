@@ -63,16 +63,21 @@
                     @can('product_categories.index')
                         <li><a class="nav-link" href="{{ route('product_categories.index') }}">Categories</a></li>
                     @endcan
+                    @can('product_subcategories.index')
+                        <li><a class="nav-link" href="{{ route('product_subcategories.index') }}">Sub Categories</a></li>
+                    @endcan
                     @can('attributes.index')
                         <li><a class="nav-link" href="{{ route('attributes.index') }}">Attributes</a></li>
                     @endcan
                     @can('products.index')
                         <li><a class="nav-link" href="{{ route('products.index') }}">All Products</a></li>
                     @endcan
+                    @can('products.index')
+                        <li><a class="nav-link" href="{{ route('market_rates.index') }}">Market Rates</a></li>
+                    @endcan
                 </ul>
             </li>
           @endif
-
 
           {{-- Stock Management --}}
           @if(auth()->user()->can('locations.index') || auth()->user()->can('stock_transfer.index'))

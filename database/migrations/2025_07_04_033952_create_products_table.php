@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('products', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('category_id');
+            $table->unsignedBigInteger('subcategory_id')->nullable();
             $table->string('name');
             $table->string('sku')->unique();
             $table->string('barcode')->nullable();
@@ -40,6 +41,7 @@ return new class extends Migration
 
             $table->foreign('measurement_unit')->references('id')->on('measurement_units')->onDelete('cascade');
             $table->foreign('category_id')->references('id')->on('product_categories')->onDelete('cascade');
+            $table->foreign('subcategory_id')->references('id')->on('product_categories')->onDelete('cascade');
         });
     }
 

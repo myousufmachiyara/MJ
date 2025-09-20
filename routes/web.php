@@ -30,6 +30,7 @@ use App\Http\Controllers\{
     LocationController,
     StockTransferController,
     ProductionReturnController,
+    ProductSubcategoryController,
 };
 
 Auth::routes();
@@ -37,6 +38,7 @@ Auth::routes();
 Route::middleware(['auth'])->group(function () {
     // Dashboard
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+    Route::resource('market_rates', MarketRateController::class)->except(['show']);
 
     // Product Helpers
     Route::get('/products/details', [ProductController::class, 'details'])->name('products.receiving');
@@ -69,6 +71,7 @@ Route::middleware(['auth'])->group(function () {
         // Products
         'products' => ['controller' => ProductController::class, 'permission' => 'products'],
         'product_categories' => ['controller' => ProductCategoryController::class, 'permission' => 'product_categories'],
+        'product_subcategories' => ['controller' => ProductSubcategoryController::class, 'permission' => 'product_subcategories'],
         'attributes' => ['controller' => AttributeController::class, 'permission' => 'attributes'],
 
         // Stock Management

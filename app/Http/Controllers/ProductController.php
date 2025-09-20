@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Product;
 use App\Models\Attribute;
 use App\Models\ProductCategory;
+use App\Models\ProductSubcategory;
 use App\Models\MeasurementUnit;
 use App\Models\ProductVariation;
 use Illuminate\Support\Facades\Log;
@@ -20,9 +21,8 @@ class ProductController extends Controller
 {
     public function index()
     {
-        $products = Product::with('category', 'variations')->get();
-        $categories = ProductCategory::all();
-        return view('products.index', compact('products', 'categories'));
+        $products = Product::with('category', 'subcategory', 'variations')->get();        
+        return view('products.index', compact('products'));
     }
 
     public function barcodeSelection()
@@ -90,10 +90,11 @@ class ProductController extends Controller
     public function create()
     {
         $categories = ProductCategory::all();
+        $subcategories = ProductSubcategory::all();
         $attributes = Attribute::with('values')->get();
         $units = MeasurementUnit::all();
 
-        return view('products.create', compact('categories', 'attributes', 'units'));
+        return view('products.create', compact('categories', 'subcategories' ,'attributes', 'units'));
     }
 
     public function store(Request $request)
@@ -101,6 +102,7 @@ class ProductController extends Controller
         $request->validate([
             'name' => 'required|string|max:255|unique:products,name',
             'category_id' => 'required|exists:product_categories,id',
+            'sub_category_id' => 'nullable|exists:product_subcategories,id',
             'sku' => 'required|string|unique:products,sku',
             'barcode' => 'nullable|string',
             'description' => 'nullable|string',
@@ -122,7 +124,7 @@ class ProductController extends Controller
         try {
             // ✅ Create Product
             $productData = $request->only([
-                'name', 'category_id', 'sku', 'barcode', 'description',
+                'name', 'category_id', 'subcategory_id', 'sku', 'barcode', 'description',
                 'measurement_unit', 'item_type', 'manufacturing_cost',
                 'opening_stock', 'selling_price', 'consumption',
                 'reorder_level', 'max_stock_level', 'minimum_order_qty', 'is_active'
@@ -197,6 +199,7 @@ class ProductController extends Controller
     {
         $product = Product::with(['images', 'variations.attributeValues'])->findOrFail($id);
         $categories = ProductCategory::all();
+        $subcategories = ProductSubcategory::all();
         $attributes = Attribute::with('values')->get();
         $units = MeasurementUnit::all(); // ✅ Add this line
 
@@ -212,6 +215,7 @@ class ProductController extends Controller
         return view('products.edit', compact(
             'product',
             'categories',
+            'subcategories',
             'attributes',
             'attributeValues',
             'units' // ✅ Pass to view
@@ -227,7 +231,7 @@ class ProductController extends Controller
 
             // ✅ Update product
             $product->update($request->only([
-                'name', 'category_id', 'sku', 'measurement_unit', 'item_type',
+                'name', 'category_id', 'subcategory_id', 'sku', 'measurement_unit', 'item_type',
                 'manufacturing_cost', 'opening_stock', 'description', 'selling_price',
                 'consumption', 'reorder_level', 'max_stock_level', 'minimum_order_qty', 'is_active'
             ]));
