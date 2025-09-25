@@ -95,10 +95,7 @@
                 @endforeach
               </select>
             </div>
-            <div class="mb-2">
-              <label>Signature</label>
-              <input type="file" name="signature" accept="image/*" class="form-control" />
-            </div>
+            
           </div>
           <footer class="card-footer text-end">
             <button type="submit" class="btn btn-primary">Create</button>
@@ -137,11 +134,7 @@
                 @endforeach
               </select>
             </div>
-            <div class="mb-2">
-              <label>Signature</label>
-              <input type="file" name="signature" accept="image/*" class="form-control" />
-              <div id="current_signature_preview" style="margin-top: 10px;"></div>
-            </div>
+            
           </div>
           <footer class="card-footer text-end">
             <button type="submit" class="btn btn-primary">Update</button>
@@ -165,19 +158,6 @@
           document.getElementById('edit_name').value = user.name;
           document.getElementById('edit_username').value = user.username;
           document.getElementById('edit_role').value = user.roles[0]?.id || '';
-
-          let previewDiv = document.getElementById('current_signature_preview');
-          previewDiv.innerHTML = '';
-
-          if (user.signature_url) {
-            const img = document.createElement('img');
-            img.src = user.signature_url;
-            img.alt = 'Current Signature';
-            img.style.maxHeight = '100px';
-            img.style.border = '1px solid #ccc';
-            previewDiv.appendChild(img);
-          }
-
         } else {
           alert('User not found.');
         }

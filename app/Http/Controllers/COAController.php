@@ -90,7 +90,7 @@ class COAController extends Controller
             $request->validate([
                 'shoa_id' => 'required|exists:sub_head_of_accounts,id',
                 'name' => 'required|string|max:255|unique:chart_of_accounts,name,' . $id,
-                'account_type' => 'required|string|max:255',
+                'account_type' => 'nullable|string|max:255',
                 'receivables' => 'required|numeric',
                 'payables' => 'required|numeric',
                 'opening_date' => 'required|date',
@@ -100,16 +100,6 @@ class COAController extends Controller
             ]);
 
             $account = ChartOfAccounts::findOrFail($id);
-
-            // ✅ Prevent changing account type if transactions exist
-            if ($account->account_type !== $request->account_type) {
-                $hasTransactions = $account->transactions()->exists(); // assuming relation
-                if ($hasTransactions) {
-                    return back()->withErrors([
-                        'error' => 'Account type cannot be changed because transactions are already recorded.'
-                    ]);
-                }
-            }
 
             // ✅ Update fields safely
             $account->update([

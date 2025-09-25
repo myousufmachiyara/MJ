@@ -35,4 +35,5 @@ class ChartOfAccounts extends Model
     {
         return $this->hasMany(PurchaseInvoice::class, 'vendor_id');
     }
+
 }

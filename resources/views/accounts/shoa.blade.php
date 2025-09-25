@@ -45,9 +45,7 @@
                                     <form action="{{ route('shoa.destroy', $item->id) }}" method="POST" style="display:inline;">
                                         @csrf
                                         @method('DELETE')
-                                        <button class="text-danger bg-transparent" style="border:none" onclick="return confirm('Are you sure?')">
-                                            <i class="fa fa-trash"></i>
-                                        </button>
+                                        <a class="btn btn-link p-0 m-0 text-danger" onclick="return confirm('Are you sure?')"><i class="fa fa-trash-alt"></i></a>
                                     </form>
                                     @endcan
                                 </td>

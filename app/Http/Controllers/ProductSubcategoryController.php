@@ -28,17 +28,21 @@ class ProductSubcategoryController extends Controller
         return redirect()->route('product_subcategories.index')->with('success', 'Subcategory created successfully.');
     }
 
-    public function update(Request $request, ProductSubcategory $productSubcategory)
+    public function update(Request $request, $id)
     {
+        $productSubcategory = ProductSubcategory::findOrFail($id);
+
         $request->validate([
             'category_id' => 'required|exists:product_categories,id',
-            'name'        => 'required|string|max:255|unique:product_subcategories,name,' . $productSubcategory->id,
-            'code'        => 'required|string|max:255|unique:product_subcategories,code,' . $productSubcategory->id,
+            'name'        => 'required|string|max:255|unique:product_subcategories,name,' . $id,
+            'code'        => 'required|string|max:255|unique:product_subcategories,code,' . $id,
         ]);
 
         $productSubcategory->update($request->only('category_id', 'name', 'code', 'description', 'status'));
 
-        return redirect()->route('product_subcategories.index')->with('success', 'Subcategory updated successfully.');
+        return redirect()
+            ->route('product_subcategories.index')
+            ->with('success', 'Subcategory updated successfully.');
     }
 
     public function destroy(ProductSubcategory $productSubcategory)
