@@ -38,11 +38,13 @@ class AttributeController extends Controller
         return redirect()->route('attributes.index')->with('success', 'Attribute created successfully.');
     }
 
-    public function update(Request $request, Attribute $attribute)
+    public function update(Request $request, $id)
     {
+        $attribute = Attribute::findOrFail($id);
+
         $request->validate([
-            'name' => 'required|string|max:255',
-            'slug' => 'required|string|max:255|unique:attributes,slug,' . $attribute->id,
+            'name'   => 'required|string|max:255',
+            'slug'   => 'required|string|max:255|unique:attributes,slug,' . $id,
             'values' => 'required|string' // comma-separated string
         ]);
 
@@ -52,7 +54,7 @@ class AttributeController extends Controller
         // Parse and sanitize new values
         $incomingValues = array_map('trim', explode(',', $request->input('values')));
 
-        // Get existing values as plain array
+        // Get existing values as plain array (lowercase for case-insensitive check)
         $existingValues = $attribute->values->pluck('value')->map('strtolower')->toArray();
 
         // Add only new values (case-insensitive)
@@ -65,11 +67,19 @@ class AttributeController extends Controller
         return redirect()->route('attributes.index')->with('success', 'Attribute updated successfully.');
     }
 
-    public function destroy(Attribute $attribute)
+    public function destroy($id)
     {
-        $attribute->values()->delete(); // Delete related values first
+        $attribute = Attribute::findOrFail($id);
+
+        // Delete related values first
+        $attribute->values()->delete();
+
+        // Delete the attribute itself
         $attribute->delete();
 
-        return redirect()->route('attributes.index')->with('success', 'Attribute deleted successfully.');
+        return redirect()
+            ->route('attributes.index')
+            ->with('success', 'Attribute deleted successfully.');
     }
+
 }
