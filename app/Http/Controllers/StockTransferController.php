@@ -172,8 +172,11 @@ class StockTransferController extends Controller
             $pdf->AddPage();
             $pdf->setCellPadding(1.5);
 
-            $logoPath = public_path('assets/img/Jild-Logo.png');
-            if (file_exists($logoPath)) $pdf->Image($logoPath, 10, 10, 30);
+            // --- Logo ---
+            $logoPath = public_path('assets/img/mj-logo.jpeg');
+            if (file_exists($logoPath)) {
+                $pdf->Image($logoPath, 8, 10, 40);
+            }
 
             $pdf->SetXY(130, 12);
             $transferInfo = '

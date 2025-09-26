@@ -24,12 +24,12 @@
         <div class="card-body">
           <div class="row pb-3">
             <div class="col-md-2">
-              <label>Product Name *</label>
+              <label>Product Name <span class="text-danger">*</span></label>
               <input type="text" name="name" class="form-control" required value="{{ old('name') }}">
               @error('name')<div class="text-danger">{{ $message }}</div>@enderror
             </div>
             <div class="col-md-2">
-              <label>Category *</label>
+              <label>Category <span class="text-danger">*</span></label>
               <select name="category_id" class="form-control" required>
                 <option value="" disabled selected>Select Category</option>
                 @foreach($categories as $cat)
@@ -74,7 +74,7 @@
               </select>
             </div>
 
-            <div class="col-md-2">
+            <div class="col-md-2 mt-3">
               <label>Consumption</label>
               <input type="number" step="any" name="consumption" class="form-control" value="{{ old('consumption', '0') }}">
               @error('consumption')<div class="text-danger">{{ $message }}</div>@enderror

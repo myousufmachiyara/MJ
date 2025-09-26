@@ -233,9 +233,9 @@ class ProductionReturnController extends Controller
         $pdf->setCellPadding(1.5);
 
         // --- Logo ---
-        $logoPath = public_path('assets/img/Jild-Logo.png');
+        $logoPath = public_path('assets/img/mj-logo.jpeg');
         if (file_exists($logoPath)) {
-            $pdf->Image($logoPath, 10, 10, 30);
+            $pdf->Image($logoPath, 8, 10, 40);
         }
 
         // --- Return Info ---

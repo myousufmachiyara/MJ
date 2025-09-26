@@ -31,6 +31,7 @@ use App\Http\Controllers\{
     StockTransferController,
     ProductionReturnController,
     ProductSubcategoryController,
+    MarketRateController,
 };
 
 Auth::routes();

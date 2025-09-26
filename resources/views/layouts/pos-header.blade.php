@@ -115,7 +115,7 @@
         <header class="page-header m-0">
             <div class="logo-container d-none d-md-block">
                 <a href="/" class="logo ">
-                    <img src="/assets/img/Jild-Logo.png" width="60px" alt="Jild Logo" />
+                    <img src="/assets/img/mj-logo.jpeg" width="60px" alt="Jild Logo" />
                 </a>
                 <div id="userbox" class="userbox" style="float:right !important;">
                     <a class="btn btn-success" href="/pos_system"> POS System</a>
@@ -150,7 +150,7 @@
 
             <div class="logo-container d-md-none">
                 <a href="/" class="logo ">
-                    <img src="/assets/img/Jild-Logo.png" width="60px" alt="Jild Logo" />
+                    <img src="/assets/img/mj-logo.jpeg" width="60px" alt="MJ Logo" />
                 </a>
                 <div id="userbox" class="userbox" style="float:right !important;">
                     <a href="#" data-bs-toggle="dropdown" style="margin-right: 20px;">

@@ -16,9 +16,10 @@ class MarketRateController extends Controller
     {
         $rates = MarketRate::with(['product', 'variation'])
             ->orderBy('effective_date', 'desc')
-            ->paginate(20);
+            ->get();
+        $products = Product::all();
 
-        return view('market_rates.index', compact('rates'));
+        return view('products.market-rates', compact('rates','products'));
     }
 
     /**
