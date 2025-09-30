@@ -5,7 +5,13 @@
 @section('content')
 <div class="row">
   <div class="col">
+            @if (session('success'))
+          <div class="alert alert-success">{{ session('success') }}</div>
+        @elseif (session('error'))
+          <div class="alert alert-danger">{{ session('error') }}</div>
+        @endif
     <section class="card">
+      
       <header class="card-header d-flex justify-content-between">
         <h2 class="card-title">Users</h2>
         <div>
@@ -16,11 +22,7 @@
       </header>
 
       <div class="card-body">
-        @if (session('success'))
-          <div class="alert alert-success">{{ session('success') }}</div>
-        @elseif (session('error'))
-          <div class="alert alert-danger">{{ session('error') }}</div>
-        @endif
+
 
         <div class="modal-wrapper table-scroll">
           <table class="table table-bordered table-striped mb-0" id="cust-datatable-default">
@@ -44,6 +46,17 @@
                   <td class="actions">
                     <a href="#updateModal" class="text-primary modal-with-form" onclick="getUser({{ $user->id }})">
                       <i class="fa fa-edit"></i>
+                    </a>
+
+                    <!-- Activate / Deactivate -->
+                    <a href="#activateModal" class="text-{{ $user->is_active ? 'danger' : 'success' }} modal-with-form"
+                      onclick="setActivateUser({{ $user->id }}, {{ $user->is_active ? 'false' : 'true' }})" 
+                      title="{{ $user->is_active ? 'Deactivate User' : 'Activate User' }}">
+                      <i class="fa fa-toggle-{{ $user->is_active ? 'on' : 'off' }}"></i>
+                    </a>
+
+                    <a href="#passwordModal" class="text-success modal-with-form" onclick="getPasswordUser({{ $user->id }})" title="Change Password">
+                      <i class="fa fa-key"></i>
                     </a>
                     <form action="{{ route('users.destroy', $user->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure?')">
                       @csrf
@@ -95,7 +108,6 @@
                 @endforeach
               </select>
             </div>
-            
           </div>
           <footer class="card-footer text-end">
             <button type="submit" class="btn btn-primary">Create</button>
@@ -134,7 +146,6 @@
                 @endforeach
               </select>
             </div>
-            
           </div>
           <footer class="card-footer text-end">
             <button type="submit" class="btn btn-primary">Update</button>
@@ -143,6 +154,57 @@
         </form>
       </section>
     </div>
+
+    <!-- Change Password Modal -->
+    <div id="passwordModal" class="modal-block modal-block-warning mfp-hide">
+      <section class="card">
+        <form id="passwordForm" method="POST" enctype="multipart/form-data">
+          @csrf
+          @method('PUT')
+          <header class="card-header">
+            <h2 class="card-title">Change Password</h2>
+          </header>
+          <div class="card-body">
+            <input type="hidden" name="id" id="password_user_id" />
+
+            <div class="mb-2">
+              <label>New Password</label>
+              <input type="password" name="password" id="new_password" class="form-control" required minlength="6" />
+            </div>
+            <div class="mb-2">
+              <label>Confirm Password</label>
+              <input type="password" name="password_confirmation" id="confirm_password" class="form-control" required minlength="6" />
+            </div>
+          </div>
+          <footer class="card-footer text-end">
+            <button type="submit" class="btn btn-warning">Change Password</button>
+            <button class="btn btn-default modal-dismiss">Cancel</button>
+          </footer>
+        </form>
+      </section>
+    </div>
+
+    <!-- Activate/Deactivate Modal -->
+    <div id="activateModal" class="modal-block modal-block-primary mfp-hide">
+      <section class="card">
+        <form id="activateForm" method="POST">
+          @csrf
+          @method('PUT')
+          <header class="card-header">
+            <h2 class="card-title" id="activateModalTitle">Activate/Deactivate User</h2>
+          </header>
+          <div class="card-body">
+            <input type="hidden" name="id" id="activate_user_id" />
+            <p id="activateModalMessage">Are you sure you want to change the status of this user?</p>
+          </div>
+          <footer class="card-footer text-end">
+            <button type="submit" class="btn btn-primary" id="activateModalButton">Yes, proceed</button>
+            <button class="btn btn-default modal-dismiss">Cancel</button>
+          </footer>
+        </form>
+      </section>
+    </div>
+
   </div>
 </div>
 
@@ -158,6 +220,7 @@
           document.getElementById('edit_name').value = user.name;
           document.getElementById('edit_username').value = user.username;
           document.getElementById('edit_role').value = user.roles[0]?.id || '';
+
         } else {
           alert('User not found.');
         }
@@ -167,5 +230,36 @@
         alert('Error loading user details.');
       });
   }
+
+  function getPasswordUser(id) {
+    document.getElementById('password_user_id').value = id;
+    document.getElementById('passwordForm').action = `/users/${id}/change-password`;
+  }
+
+  function setActivateUser(userId, activate) {
+    document.getElementById('activate_user_id').value = userId;
+
+    const form = document.getElementById('activateForm');
+    form.action = `/users/${userId}/toggle-active`;
+
+    const modalTitle = document.getElementById('activateModalTitle');
+    const modalMessage = document.getElementById('activateModalMessage');
+    const modalButton = document.getElementById('activateModalButton');
+
+    if (activate) {
+      modalTitle.textContent = 'Activate User';
+      modalMessage.textContent = 'Are you sure you want to activate this user?';
+      modalButton.textContent = 'Activate';
+      modalButton.classList.remove('btn-danger');
+      modalButton.classList.add('btn-success');
+    } else {
+      modalTitle.textContent = 'Deactivate User';
+      modalMessage.textContent = 'Are you sure you want to deactivate this user?';
+      modalButton.textContent = 'Deactivate';
+      modalButton.classList.remove('btn-success');
+      modalButton.classList.add('btn-danger');
+    }
+  }
+
 </script>
 @endsection

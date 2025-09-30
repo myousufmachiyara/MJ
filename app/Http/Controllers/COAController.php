@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\ChartOfAccounts;
 use App\Models\SubHeadOfAccounts;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 class COAController extends Controller
 {
@@ -27,9 +29,16 @@ class COAController extends Controller
     public function store(Request $request)
     {
         try {
-            $request->validate([
+            Log::info('COA Store Method Called', ['user_id' => auth()->id(), 'request' => $request->all()]);
+
+            $validated = $request->validate([
                 'shoa_id' => 'required|exists:sub_head_of_accounts,id',
-                'name' => 'required|string|max:255|unique:chart_of_accounts',
+                'name' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    Rule::unique('chart_of_accounts')->whereNull('deleted_at'),
+                ],
                 'account_type' => 'nullable|string|max:255',
                 'receivables' => 'required|numeric',
                 'payables' => 'required|numeric',
@@ -39,23 +48,28 @@ class COAController extends Controller
                 'phone_no' => 'nullable|string|max:250',
             ]);
 
-            // Generate professional account code
             $subHead = SubHeadOfAccounts::findOrFail($request->shoa_id);
             $hoaCode = $subHead->hoa_id;
             $shoaCode = str_pad($subHead->id, 2, '0', STR_PAD_LEFT);
-
             $prefix = $hoaCode . $shoaCode;
 
-            $lastAccount = ChartOfAccounts::where('shoa_id', $request->shoa_id)
-                ->orderBy('account_code', 'desc')
-                ->first();
+            // ✅ Include soft-deleted records
+            $existingCodes = ChartOfAccounts::withTrashed()
+                ->where('account_code', 'like', $prefix . '%')
+                ->pluck('account_code')
+                ->map(function ($code) use ($prefix) {
+                    return intval(substr($code, strlen($prefix)));
+                })
+                ->sort()
+                ->values();
 
-            $lastNumber = $lastAccount ? intval(substr($lastAccount->account_code, -3)) : 0;
-            $coaCode = str_pad($lastNumber + 1, 3, '0', STR_PAD_LEFT);
-
+            $nextNumber = $existingCodes->last() + 1;
+            $coaCode = str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
             $accountCode = $prefix . $coaCode;
 
-            ChartOfAccounts::create([
+            Log::info('Generated Unique Account Code', ['account_code' => $accountCode]);
+
+            $account = ChartOfAccounts::create([
                 'shoa_id' => $request->shoa_id,
                 'account_code' => $accountCode,
                 'name' => $request->name,
@@ -66,15 +80,22 @@ class COAController extends Controller
                 'remarks' => $request->remarks,
                 'address' => $request->address,
                 'phone_no' => $request->phone_no,
-                'created_by'    => auth()->id(),
-                'updated_by' => auth()->id(), 
-
+                'created_by' => auth()->id(),
+                'updated_by' => auth()->id(),
             ]);
+
+            Log::info('Account Successfully Created', ['account' => $account]);
 
             return redirect()->route('coa.index')->with('success', 'Chart of Account created successfully.');
 
         } catch (\Exception $e) {
-            return back()->withErrors(['error' => $e->getMessage()]);
+            Log::error('Error in COA Store', [
+                'error_message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'user_id' => auth()->id(),
+            ]);
+
+            return redirect()->back()->with('error', 'Something went wrong. Please check logs.');
         }
     }
 

@@ -51,15 +51,15 @@ class UserController extends Controller
 
     public function update(Request $request, $id)
     {
-        // Find user by ID or fail
-        $user = User::findOrFail($id);
-
         // Validate the request
         $request->validate([
             'name' => 'required|string|max:255',
-            'username'  => 'required|string|unique:users,username,' . $user->id,
+            'username' => 'required|string|unique:users,username,' . $id,
             'role' => 'required|exists:roles,id',
         ]);
+
+        // Find the user
+        $user = User::findOrFail($id);
 
         // Get basic user data
         $data = $request->only(['name', 'username', 'signature']);
@@ -89,7 +89,7 @@ class UserController extends Controller
 
         } catch (\Exception $e) {
             \Log::error('User update error: ' . $e->getMessage(), [
-                'user_id' => $user->id,
+                'user_id' => $user->id ?? $id,
                 'trace' => $e->getTraceAsString()
             ]);
 
@@ -115,7 +115,6 @@ class UserController extends Controller
                 'id'       => $user->id,
                 'name'     => $user->name,
                 'username' => $user->username,
-                'signature'=> $user->signature,
                 'roles'    => $user->roles->map(fn($r) => [
                 'id'   => $r->id,
                 'name' => $r->name
@@ -124,9 +123,53 @@ class UserController extends Controller
         ]);
     }
 
-    public function destroy(User $user)
+    public function changePassword(Request $request, $id)
     {
+        $request->validate([
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        $user = User::findOrFail($id);
+
+        // Prevent changing password of super admin if needed
+        if ($user->id == 1 || $user->hasRole('super-admin')) {
+            return redirect()->back()->with('error', 'Cannot change password of the super admin user.');
+        }
+
+        $user->password = Hash::make($request->password);
+        $user->save();
+
+        return redirect()->route('users.index')->with('success', 'Password changed successfully.');
+    }
+
+    public function toggleActive($id)
+    {
+        $user = User::findOrFail($id);
+
+        // Prevent super admin from being deactivated (assuming ID=1 or role 'super-admin')
+        if ($user->id == 1 || $user->hasRole('super-admin')) {
+            return redirect()->back()->with('error', 'Cannot deactivate the super admin user.');
+        }
+
+        $user->is_active = !$user->is_active;
+        $user->save();
+
+        $status = $user->is_active ? 'activated' : 'deactivated';
+
+        return redirect()->back()->with('success', "User {$status} successfully.");
+    }
+
+    public function destroy($id)
+    {
+        $user = User::findOrFail($id);
+
+        // Prevent deleting super admin by ID or role
+        if ($user->id == 1 || $user->hasRole('superadmin')) {
+            return redirect()->back()->with('error', 'Cannot delete the superadmin user.');
+        }
+
         $user->delete();
-        return redirect()->back();
+
+        return redirect()->back()->with('success', 'User deleted successfully.');
     }
 }
