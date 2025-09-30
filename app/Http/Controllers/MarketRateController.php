@@ -2,90 +2,130 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Product;
-use App\Models\ProductVariation;
 use App\Models\MarketRate;
+use App\Models\ProductCategory;
+use App\Models\ProductSubcategory;
+use App\Models\AttributeValue;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Exception;
 
 class MarketRateController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
-        $rates = MarketRate::with(['product', 'variation'])
-            ->orderBy('effective_date', 'desc')
-            ->get();
-        $products = Product::all();
+        try {
+            $rates = MarketRate::with(['category', 'subcategory', 'shape', 'size'])->get();
 
-        return view('products.market-rates', compact('rates','products'));
+            $categories = ProductCategory::all();
+            $subcategories = ProductSubcategory::all();
+            $shapes = AttributeValue::whereHas('attribute', fn($q) => $q->where('name', 'Shape'))->get();
+            $sizes = AttributeValue::whereHas('attribute', fn($q) => $q->where('name', 'Size'))->get();
+
+            Log::info('MarketRate index loaded successfully.', ['count' => $rates->count()]);
+
+            return view('products.market-rates', compact('rates', 'categories', 'subcategories', 'shapes', 'sizes'));
+        } catch (Exception $e) {
+            Log::error('MarketRate Index Error', [
+                'message' => $e->getMessage(),
+                'trace'   => $e->getTraceAsString()
+            ]);
+            return back()->with('error', 'Failed to load market rates.');
+        }
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function show($id)
     {
-        $products = Product::all();
-        return view('market_rates.create', compact('products'));
+        try {
+            $rate = MarketRate::findOrFail($id);
+            Log::info('MarketRate show', ['id' => $id]);
+            return response()->json($rate);
+        } catch (Exception $e) {
+            Log::error('MarketRate Show Error', [
+                'id'      => $id,
+                'message' => $e->getMessage(),
+                'trace'   => $e->getTraceAsString()
+            ]);
+            return response()->json(['error' => 'Record not found'], 404);
+        }
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'product_id'      => 'required|exists:products,id',
-            'variation_id'    => 'nullable|exists:product_variations,id',
-            'rate_per_unit'   => 'required|numeric|min:0',
-            'effective_date'  => 'required|date',
+        $request->validate([
+            'category_id'    => 'required|exists:product_categories,id',
+            'subcategory_id' => 'nullable|exists:product_subcategories,id',
+            'shape_id'       => 'nullable|exists:attribute_values,id',
+            'size_id'        => 'nullable|exists:attribute_values,id',
+            'rate'           => 'required|numeric|min:0',
         ]);
 
-        MarketRate::create($validated);
+        try {
+            $rate = MarketRate::create($request->only(['category_id', 'subcategory_id', 'shape_id', 'size_id', 'rate']));
 
-        return redirect()->route('market_rates.index')
-            ->with('success', 'Market rate added successfully.');
+            Log::info('MarketRate created successfully.', [
+                'id'   => $rate->id,
+                'data' => $rate->toArray()
+            ]);
+
+            return redirect()->route('market_rates.index')->with('success', 'Market Rate added successfully.');
+        } catch (Exception $e) {
+            Log::error('MarketRate Store Error', [
+                'request' => $request->all(),
+                'message' => $e->getMessage(),
+                'trace'   => $e->getTraceAsString()
+            ]);
+            return redirect()->back()->withInput()->with('error', 'Failed to add Market Rate.');
+        }
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(MarketRate $market_rate)
+    public function update(Request $request, $id)
     {
-        $products = Product::all();
-        $variations = ProductVariation::where('product_id', $market_rate->product_id)->get();
-
-        return view('market_rates.edit', compact('market_rate', 'products', 'variations'));
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, MarketRate $market_rate)
-    {
-        $validated = $request->validate([
-            'product_id'      => 'required|exists:products,id',
-            'variation_id'    => 'nullable|exists:product_variations,id',
-            'rate_per_unit'   => 'required|numeric|min:0',
-            'effective_date'  => 'required|date',
+        $request->validate([
+            'category_id'    => 'required|exists:product_categories,id',
+            'subcategory_id' => 'nullable|exists:product_subcategories,id',
+            'shape_id'       => 'nullable|exists:attribute_values,id',
+            'size_id'        => 'nullable|exists:attribute_values,id',
+            'rate'           => 'required|numeric|min:0',
         ]);
 
-        $market_rate->update($validated);
+        try {
+            $marketRate = MarketRate::findOrFail($id);
+            $marketRate->update($request->only(['category_id', 'subcategory_id', 'shape_id', 'size_id', 'rate']));
 
-        return redirect()->route('market_rates.index')
-            ->with('success', 'Market rate updated successfully.');
+            Log::info('MarketRate updated successfully.', [
+                'id'   => $marketRate->id,
+                'data' => $marketRate->toArray()
+            ]);
+
+            return redirect()->route('market_rates.index')->with('success', 'Market Rate updated successfully.');
+        } catch (Exception $e) {
+            Log::error('MarketRate Update Error', [
+                'id'      => $id,
+                'request' => $request->all(),
+                'message' => $e->getMessage(),
+                'trace'   => $e->getTraceAsString()
+            ]);
+            return redirect()->back()->withInput()->with('error', 'Failed to update Market Rate.');
+        }
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(MarketRate $market_rate)
+    public function destroy($id)
     {
-        $market_rate->delete();
+        try {
+            $marketRate = MarketRate::findOrFail($id);
+            $marketRate->delete();
 
-        return redirect()->route('market_rates.index')
-            ->with('success', 'Market rate deleted successfully.');
+            Log::info('MarketRate deleted successfully.', ['id' => $id]);
+
+            return redirect()->route('market_rates.index')->with('success', 'Market Rate deleted successfully.');
+        } catch (Exception $e) {
+            Log::error('MarketRate Delete Error', [
+                'id'      => $id,
+                'message' => $e->getMessage(),
+                'trace'   => $e->getTraceAsString()
+            ]);
+            return redirect()->back()->with('error', 'Failed to delete Market Rate.');
+        }
     }
 }

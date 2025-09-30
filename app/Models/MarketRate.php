@@ -7,19 +7,26 @@ use Illuminate\Database\Eloquent\Model;
 class MarketRate extends Model
 {
     protected $fillable = [
-        'product_id',
-        'variation_id',
-        'rate_per_unit',
-        'effective_date',
+        'category_id', 'subcategory_id', 'shape_id', 'size_id', 'rate'
     ];
 
-    public function product()
+    public function category()
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(ProductCategory::class, 'category_id');
     }
 
-    public function variation()
+    public function subcategory()
     {
-        return $this->belongsTo(AttributeValue::class, 'variation_id');
+        return $this->belongsTo(ProductSubcategory::class, 'subcategory_id');
+    }
+
+    public function shape()
+    {
+        return $this->belongsTo(AttributeValue::class, 'shape_id');
+    }
+
+    public function size()
+    {
+        return $this->belongsTo(AttributeValue::class, 'size_id');
     }
 }

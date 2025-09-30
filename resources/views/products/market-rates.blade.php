@@ -19,10 +19,11 @@
             <thead>
               <tr>
                 <th>ID</th>
-                <th>Product</th>
-                <th>Variation</th>
+                <th>Category</th>
+                <th>Subcategory</th>
+                <th>Shape</th>
+                <th>Size</th>
                 <th>Rate / Unit</th>
-                <th>Effective Date</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -30,10 +31,11 @@
               @foreach ($rates as $row)
                 <tr>
                   <td>{{ $row->id }}</td>
-                  <td>{{ $row->product->name ?? '-' }}</td>
-                  <td>{{ $row->variation->name ?? '-' }}</td>
-                  <td><strong>{{ number_format($row->rate_per_unit, 2) }}</strong></td>
-                  <td>{{ \Carbon\Carbon::parse($row->effective_date)->format('d-m-Y') }}</td>
+                  <td>{{ $row->category->name ?? '-' }}</td>
+                  <td>{{ $row->subcategory->name ?? '-' }}</td>
+                  <td>{{ $row->shape->value ?? '-' }}</td>
+                  <td>{{ $row->size->value ?? '-' }}</td>
+                  <td><strong>{{ number_format($row->rate, 2) }}</strong></td>
                   <td class="actions">
                     <a class="text-primary modal-with-form" onclick="getRateDetails({{ $row->id }})" href="#updateModal"><i class="fas fa-edit"></i></a>
                     <a class="btn btn-link p-0 m-0 text-danger" onclick="setDeleteId({{ $row->id }})" href="#deleteModal"><i class="fas fa-trash-alt"></i></a>
@@ -58,30 +60,45 @@
           <div class="card-body">
             <div class="row">
               <div class="col-lg-6 mb-2">
-                <label>Product <span class="text-danger">*</span></label>
-                <select class="form-control select2-js" name="product_id" id="add_product_id" required onchange="loadVariations('add')">
-                  <option value="" disabled selected>Select Product</option>
-                  @foreach($products as $p)
-                    <option value="{{ $p->id }}">{{ $p->name }}</option>
+                <label>Category <span class="text-danger">*</span></label>
+                <select class="form-control select2-js" name="category_id" id="add_category_id" required>
+                  <option value="" disabled selected>Select Category</option>
+                  @foreach($categories as $c)
+                    <option value="{{ $c->id }}">{{ $c->name }}</option>
                   @endforeach
                 </select>
               </div>
 
               <div class="col-lg-6 mb-2">
-                <label>Variation</label>
-                <select class="form-control select2-js" name="variation_id" id="add_variation_id">
-                  <option value="">Select Variation</option>
+                <label>Subcategory</label>
+                <select class="form-control select2-js" name="subcategory_id" id="add_subcategory_id">
+                  <option value="">Select Subcategory</option>
+                </select>
+              </div>
+
+              <div class="col-lg-6 mb-2">
+                <label>Shape</label>
+                <select class="form-control select2-js" name="shape_id" id="add_shape_id">
+                  <option value="">Select Shape</option>
+                  @foreach($shapes as $s)
+                    <option value="{{ $s->id }}">{{ $s->value }}</option>
+                  @endforeach
+                </select>
+              </div>
+
+              <div class="col-lg-6 mb-2">
+                <label>Size</label>
+                <select class="form-control select2-js" name="size_id" id="add_size_id">
+                  <option value="">Select Size</option>
+                  @foreach($sizes as $sz)
+                    <option value="{{ $sz->id }}">{{ $sz->value }}</option>
+                  @endforeach
                 </select>
               </div>
 
               <div class="col-lg-6 mb-2">
                 <label>Rate / Unit <span class="text-danger">*</span></label>
-                <input type="number" class="form-control" name="rate_per_unit" step="any" required>
-              </div>
-
-              <div class="col-lg-6 mb-2">
-                <label>Effective Date</label>
-                <input type="date" class="form-control" name="effective_date" value="{{ date('Y-m-d') }}" required>
+                <input type="number" class="form-control" name="rate" step="any" required>
               </div>
             </div>
           </div>
@@ -114,30 +131,45 @@
               </div>
 
               <div class="col-lg-6 mb-2">
-                <label>Product <span class="text-danger">*</span></label>
-                <select class="form-control select2-js" name="product_id" id="update_product_id" required onchange="loadVariations('update')">
-                  <option value="" disabled>Select Product</option>
-                  @foreach($products as $p)
-                    <option value="{{ $p->id }}">{{ $p->name }}</option>
+                <label>Category <span class="text-danger">*</span></label>
+                <select class="form-control select2-js" name="category_id" id="update_category_id" required>
+                  <option value="" disabled>Select Category</option>
+                  @foreach($categories as $c)
+                    <option value="{{ $c->id }}">{{ $c->name }}</option>
                   @endforeach
                 </select>
               </div>
 
               <div class="col-lg-6 mb-2">
-                <label>Variation</label>
-                <select class="form-control select2-js" name="variation_id" id="update_variation_id">
-                  <option value="">Select Variation</option>
+                <label>Subcategory</label>
+                <select class="form-control select2-js" name="subcategory_id" id="update_subcategory_id">
+                  <option value="">Select Subcategory</option>
+                </select>
+              </div>
+
+              <div class="col-lg-6 mb-2">
+                <label>Shape</label>
+                <select class="form-control select2-js" name="shape_id" id="update_shape_id">
+                  <option value="">Select Shape</option>
+                  @foreach($shapes as $s)
+                    <option value="{{ $s->id }}">{{ $s->value }}</option>
+                  @endforeach
+                </select>
+              </div>
+
+              <div class="col-lg-6 mb-2">
+                <label>Size</label>
+                <select class="form-control select2-js" name="size_id" id="update_size_id">
+                  <option value="">Select Size</option>
+                  @foreach($sizes as $sz)
+                    <option value="{{ $sz->id }}">{{ $sz->value }}</option>
+                  @endforeach
                 </select>
               </div>
 
               <div class="col-lg-6 mb-2">
                 <label>Rate / Unit <span class="text-danger">*</span></label>
-                <input type="number" class="form-control" name="rate_per_unit" id="update_rate_per_unit" step="any" required>
-              </div>
-
-              <div class="col-lg-6 mb-2">
-                <label>Effective Date</label>
-                <input type="date" class="form-control" name="effective_date" id="update_effective_date" required>
+                <input type="number" class="form-control" name="rate" id="update_rate" step="any" required>
               </div>
             </div>
           </div>
@@ -174,41 +206,71 @@
 </div>
 
 <script>
-function getRateDetails(id) {
-    document.getElementById('updateForm').action = `/market_rates/${id}`;
-    fetch(`/market_rates/${id}`)
-        .then(res => res.json())
-        .then(data => {
-            document.getElementById('update_id').value = id;
-            document.getElementById('update_id_hidden').value = id;
-            $('#update_product_id').val(data.product_id).trigger('change');
+  function getRateDetails(id) {
+      document.getElementById('updateForm').action = `/market_rates/${id}`;
+      fetch(`/market_rates/${id}`)
+          .then(res => res.json())
+          .then(data => {
+              document.getElementById('update_id').value = id;
+              document.getElementById('update_id_hidden').value = id;
 
-            setTimeout(() => {
-                $('#update_variation_id').val(data.variation_id).trigger('change');
-            }, 500);
+              // Set category first
+              $('#update_category_id').val(data.category_id).trigger('change');
 
-            document.getElementById('update_rate_per_unit').value = data.rate_per_unit;
-            document.getElementById('update_effective_date').value = data.effective_date;
-        });
-}
+              // Load subcategories of this category
+              fetch(`/get-subcategories/${data.category_id}`)
+                  .then(res => res.json())
+                  .then(subs => {
+                      let options = '<option value="">Select Subcategory</option>';
+                      subs.forEach(sc => {
+                          options += `<option value="${sc.id}" ${sc.id == data.subcategory_id ? 'selected' : ''}>${sc.name}</option>`;
+                      });
+                      $('#update_subcategory_id').html(options).trigger('change');
+                  });
 
-function setDeleteId(id) {
-  document.getElementById('deleteForm').action = `/market_rates/${id}`;
-}
+              // Shapes & sizes
+              $('#update_shape_id').val(data.shape_id).trigger('change');
+              $('#update_size_id').val(data.size_id).trigger('change');
 
-// AJAX: Load variations when product changes
-function loadVariations(prefix) {
-    let productId = document.getElementById(prefix + '_product_id').value;
-    let variationSelect = document.getElementById(prefix + '_variation_id');
+              // Rate
+              document.getElementById('update_rate').value = data.rate;
+          });
+  }
 
-    fetch(`/products/${productId}/variations`)
-      .then(res => res.json())
-      .then(data => {
-        variationSelect.innerHTML = '<option value="">Select Variation</option>';
-        data.forEach(v => {
-          variationSelect.innerHTML += `<option value="${v.id}">${v.name}</option>`;
-        });
-      });
-}
+  function setDeleteId(id) {
+    document.getElementById('deleteForm').action = `/market_rates/${id}`;
+  }
+
+  // Dependent dropdown for Add Modal
+  $('#add_category_id').on('change', function() {
+      let categoryId = $(this).val();
+      if (categoryId) {
+          fetch(`/get-subcategories/${categoryId}`)
+              .then(res => res.json())
+              .then(data => {
+                  let options = '<option value="">Select Subcategory</option>';
+                  data.forEach(sc => {
+                      options += `<option value="${sc.id}">${sc.name}</option>`;
+                  });
+                  $('#add_subcategory_id').html(options).trigger('change');
+              });
+      }
+  });
+
+  // Dependent dropdown for Update Modal
+  $('#update_category_id').on('change', function() {
+      let categoryId = $(this).val();
+      if (categoryId) {
+          fetch(`/get-subcategories/${categoryId}`)
+              .then(res => res.json())
+              .then(data => {
+                  let options = '<option value="">Select Subcategory</option>';
+                  data.forEach(sc => {
+                      options += `<option value="${sc.id}">${sc.name}</option>`;
+                  });
+                  $('#update_subcategory_id').html(options).trigger('change');
+              });
+      }
+  });
 </script>
 @endsection

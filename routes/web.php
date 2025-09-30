@@ -39,7 +39,7 @@ Auth::routes();
 Route::middleware(['auth'])->group(function () {
     // Dashboard
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
-    Route::resource('market_rates', MarketRateController::class)->except(['show']);
+    Route::resource('market_rates', MarketRateController::class);
 
     Route::put('/users/{id}/change-password', [UserController::class, 'changePassword'])->name('users.changePassword');
     Route::put('/users/{id}/toggle-active', [UserController::class, 'toggleActive'])->name('users.toggleActive');
@@ -53,6 +53,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/product/{product}/productions', [ProductionController::class, 'getProductProductions'])->name('product.productions');
     Route::post('/products/bulk-upload', [ProductController::class, 'bulkUploadStore'])->name('products.bulk-upload.store');
     Route::get('/products/bulk-upload/template', [ProductController::class, 'bulkUploadTemplate'])->name('products.bulk-upload.template');
+    Route::get('/get-subcategories/{category_id}', [ProductCategoryController::class, 'getSubcategories']);
 
 
     //Purchase Helper

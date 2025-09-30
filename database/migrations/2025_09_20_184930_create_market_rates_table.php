@@ -13,15 +13,17 @@ return new class extends Migration
     {
         Schema::create('market_rates', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('product_id');   // usually raw material
-            $table->unsignedBigInteger('variation_id'); // shape/size variation
-            $table->decimal('rate_per_unit', 18, 2);
-            $table->date('effective_date')->useCurrent();
-            $table->timestamps();
 
-            // Foreign keys
-            $table->foreign('product_id')->references('id')->on('products')->onDelete('cascade');
-            $table->foreign('variation_id')->references('id')->on('product_variations')->onDelete('cascade');
+            // Relations
+            $table->foreignId('category_id')->constrained('product_categories')->onDelete('cascade');
+            $table->foreignId('subcategory_id')->nullable()->constrained('product_subcategories')->onDelete('cascade');
+            $table->foreignId('shape_id')->nullable()->constrained('attribute_values')->onDelete('cascade');
+            $table->foreignId('size_id')->nullable()->constrained('attribute_values')->onDelete('cascade');
+
+            // Rate
+            $table->decimal('rate', 10, 2);
+
+            $table->timestamps();
         });
     }
 
