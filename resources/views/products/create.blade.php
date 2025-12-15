@@ -40,14 +40,12 @@
             </div>
             <div class="col-md-2">
               <label>Sub Category</label>
-              <select name="subcategory_id" class="form-control">
-                <option value="" selected>Select Sub Category</option>
-                @foreach($subcategories as $subcat)
-                  <option value="{{ $subcat->id }}">{{ $subcat->name }}</option>
-                @endforeach
+              <select name="subcategory_id" id="subcategory_id" class="form-control">
+                <option value="">Select Sub Category</option>
               </select>
-              @error('sub_category_id')<div class="text-danger">{{ $message }}</div>@enderror
+              @error('subcategory_id')<div class="text-danger">{{ $message }}</div>@enderror
             </div>
+
             <div class="col-md-2">
               <label>SKU *</label>
               <input type="text" name="sku" id="sku" class="form-control" value="{{ old('sku') }}" required>
@@ -295,6 +293,34 @@
                 reader.readAsDataURL(file);
             }
         });
+    });
+
+    $('select[name="category_id"]').on('change', function () {
+      let categoryId = $(this).val();
+      let subCategorySelect = $('#subcategory_id');
+
+      subCategorySelect.empty().append('<option value="">Loading...</option>');
+
+      if (categoryId) {
+        $.ajax({
+          url: "{{ route('products.getSubcategories', ':id') }}".replace(':id', categoryId),
+          type: "GET",
+          success: function (data) {
+            subCategorySelect.empty();
+            subCategorySelect.append('<option value="">Select Sub Category</option>');
+
+            if (data.length > 0) {
+              $.each(data, function (key, subcat) {
+                subCategorySelect.append(
+                  `<option value="${subcat.id}">${subcat.name}</option>`
+                );
+              });
+            }
+          }
+        });
+      } else {
+        subCategorySelect.empty().append('<option value="">Select Sub Category</option>');
+      }
     });
   });
 </script>

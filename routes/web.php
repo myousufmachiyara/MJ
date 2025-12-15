@@ -53,8 +53,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/product/{product}/productions', [ProductionController::class, 'getProductProductions'])->name('product.productions');
     Route::post('/products/bulk-upload', [ProductController::class, 'bulkUploadStore'])->name('products.bulk-upload.store');
     Route::get('/products/bulk-upload/template', [ProductController::class, 'bulkUploadTemplate'])->name('products.bulk-upload.template');
-    Route::get('/get-subcategories/{category_id}', [ProductCategoryController::class, 'getSubcategories']);
-
+    Route::get('/get-subcategories/{category_id}', [ProductCategoryController::class, 'getSubcategories'])->name('products.getSubcategories');
 
     //Purchase Helper
     Route::get('/product/{product}/invoices', [PurchaseInvoiceController::class, 'getProductInvoices']);
