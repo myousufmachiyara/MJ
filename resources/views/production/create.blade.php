@@ -358,61 +358,61 @@
     }
 
 
-  // 🔹 When variation changes
-  function onVariationChange(select) {
-    const row = select.closest('tr');
-    const variationId = select.value;
-    const productId = select.selectedOptions[0]?.getAttribute('data-product-id');
+    // 🔹 When variation changes
+    function onVariationChange(select) {
+      const row = select.closest('tr');
+      const variationId = select.value;
+      const productId = select.selectedOptions[0]?.getAttribute('data-product-id');
 
-    if (!variationId || !productId) return;
+      if (!variationId || !productId) return;
 
-    // Fetch invoices using variation id if selected, else product id
-    fetchInvoices(variationId, row, true);
-  }
-
-  // 🔹 Fetch invoices
-  function fetchInvoices(id, row, isVariation = false) {
-    const invoiceSelect = row.querySelector(`select[id^="invoiceSelect"]`);
-    invoiceSelect.innerHTML = `<option value="" disabled selected>Loading...</option>`;
-
-    fetch(`/product/${id}/invoices`)
-      .then(res => res.json())
-      .then(data => {
-        invoiceSelect.innerHTML = `<option value="" disabled selected>Select Invoice</option>`;
-        if (Array.isArray(data) && data.length > 0) {
-          data.forEach(inv => {
-            invoiceSelect.innerHTML += `<option value="${inv.id}" data-rate="${inv.rate}">${inv.id}</option>`;
-          });
-        } else {
-          invoiceSelect.innerHTML = `<option value="">No Invoices Found</option>`;
-        }
-
-        $(invoiceSelect).select2({ width: '100%' });
-      })
-      .catch(() => {
-        invoiceSelect.innerHTML = `<option value="">Error loading invoices</option>`;
-      });
-  }
-
-  // 🔹 When invoice changes
-  function onInvoiceChange(select) {
-    const row = select.closest('tr');
-    const option = select.selectedOptions[0];
-    if (!row || !option) return;
-
-    const rate = option.getAttribute('data-rate') || 0;
-
-    const rateInput = row.querySelector(`input[id^="item_rate_"]`);
-    const qtyInput = row.querySelector(`input[id^="item_qty_"]`);
-    const totalInput = row.querySelector(`input[id^="item_total_"]`);
-
-    if (rateInput) rateInput.value = rate;
-    if (qtyInput && totalInput) {
-      totalInput.value = ((parseFloat(qtyInput.value) || 0) * (parseFloat(rate) || 0)).toFixed(2);
+      // Fetch invoices using variation id if selected, else product id
+      fetchInvoices(variationId, row, true);
     }
 
-    tableTotal();
-  }
+    // 🔹 Fetch invoices
+    function fetchInvoices(id, row, isVariation = false) {
+      const invoiceSelect = row.querySelector(`select[id^="invoiceSelect"]`);
+      invoiceSelect.innerHTML = `<option value="" disabled selected>Loading...</option>`;
+
+      fetch(`/product/${id}/invoices`)
+        .then(res => res.json())
+        .then(data => {
+          invoiceSelect.innerHTML = `<option value="" disabled selected>Select Invoice</option>`;
+          if (Array.isArray(data) && data.length > 0) {
+            data.forEach(inv => {
+              invoiceSelect.innerHTML += `<option value="${inv.id}" data-rate="${inv.rate}">${inv.id}</option>`;
+            });
+          } else {
+            invoiceSelect.innerHTML = `<option value="">No Invoices Found</option>`;
+          }
+
+          $(invoiceSelect).select2({ width: '100%' });
+        })
+        .catch(() => {
+          invoiceSelect.innerHTML = `<option value="">Error loading invoices</option>`;
+        });
+    }
+
+    // 🔹 When invoice changes
+    function onInvoiceChange(select) {
+      const row = select.closest('tr');
+      const option = select.selectedOptions[0];
+      if (!row || !option) return;
+
+      const rate = option.getAttribute('data-rate') || 0;
+
+      const rateInput = row.querySelector(`input[id^="item_rate_"]`);
+      const qtyInput = row.querySelector(`input[id^="item_qty_"]`);
+      const totalInput = row.querySelector(`input[id^="item_total_"]`);
+
+      if (rateInput) rateInput.value = rate;
+      if (qtyInput && totalInput) {
+        totalInput.value = ((parseFloat(qtyInput.value) || 0) * (parseFloat(rate) || 0)).toFixed(2);
+      }
+
+      tableTotal();
+    }
 
 
     function generateVoucher() {

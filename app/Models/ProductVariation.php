@@ -57,4 +57,10 @@ class ProductVariation extends Model
     {
         return $this->hasMany(ProductionReceivingDetail::class, 'variation_id');
     }
+
+    public function usedAsPart()
+    {
+        return $this->hasMany(ProductPart::class, 'part_variation_id');
+    }
+
 }

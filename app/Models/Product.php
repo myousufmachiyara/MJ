@@ -80,4 +80,15 @@ class Product extends Model
     {
         return $this->hasMany(PurchaseInvoiceItem::class, 'item_id');
     }
+
+    public function parts()
+    {
+        return $this->hasMany(ProductPart::class, 'product_id');
+    }
+
+    public function usedInProducts()
+    {
+        return $this->hasMany(ProductPart::class, 'part_id');
+    }
+
 }

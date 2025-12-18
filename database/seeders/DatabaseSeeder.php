@@ -167,6 +167,8 @@ class DatabaseSeeder extends Seeder
             ['id' => 5, 'name' => 'Tola', 'shortcode' => 'tola'],
             ['id' => 6, 'name' => 'Karat', 'shortcode' => 'K'],
             ['id' => 7, 'name' => 'Millimeter', 'shortcode' => 'mm'],
+            ['id' => 8, 'name' => 'Pieces', 'shortcode' => 'pcs'],
+
         ]);
 
         // 📦 Product Categories

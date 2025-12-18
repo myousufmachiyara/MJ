@@ -177,6 +177,63 @@
               </table>
             </div>
           </div>
+
+          <div class="col-12 mt-4">
+            <section class="card">
+              <header class="card-header">
+                <div style="display: flex;justify-content: space-between;">
+                  <h2 class="card-title">Product Parts / Raw Materials</h2>
+                  <div>
+                    <button type="button" class="btn btn-primary btn-sm mt-1" onclick="addPartRow()">
+                      <i class="fa fa-plus"></i> Add Part
+                    </button>
+                  </div>
+                </div>
+              </header>
+
+              <div class="card-body">
+                <table class="table table-bordered" id="partsTable">
+                  <thead>
+                    <tr>
+                      <th>Part</th>
+                      <th>Variation</th>
+                      <th>Qty</th>
+                      <th width="10%">Action</th>
+                    </tr>
+                  </thead>
+
+                  <tbody id="partsTableBody">
+                    <tr class="part-row">
+                      <td>
+                        <select name="parts[0][part_id]" class="form-control select2-js part-select" onchange="onPartChange(this)">
+                          <option value="" disabled selected>Select Part</option>
+                          @foreach($allProducts as $product)
+                            <option value="{{ $product->id }}">{{ $product->name }}</option>
+                          @endforeach
+                        </select>
+                      </td>
+
+                      <td>
+                        <select name="parts[0][part_variation_id]" class="form-control select2-js part-variation-select">
+                          <option value="">Select Variation</option>
+                        </select>
+                      </td>
+
+                      <td>
+                        <input type="number" step="any" name="parts[0][quantity]" class="form-control" value="0">
+                      </td>
+
+                      <td class="part-actions">
+                        <button type="button" class="btn btn-danger btn-sm" onclick="removePartRow(this)">
+                          <i class="fas fa-times"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
         </div>
 
         <footer class="card-footer text-end">
@@ -189,6 +246,9 @@
 </div>
 
 <script>
+  let partIndex = 1;
+
+  
   $(document).ready(function () {
     $('.select2-js').select2();
 
@@ -242,57 +302,57 @@
     }
 
     document.getElementById("imageUpload").addEventListener("change", function(event) {
-        const files = event.target.files;
-        const previewContainer = document.getElementById("previewContainer");
+      const files = event.target.files;
+      const previewContainer = document.getElementById("previewContainer");
 
-        Array.from(files).forEach((file, index) => {
-            if (file && file.type.startsWith("image/")) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    // wrapper div
-                    const wrapper = document.createElement("div");
-                    wrapper.style.position = "relative";
-                    wrapper.style.display = "inline-block";
+      Array.from(files).forEach((file, index) => {
+          if (file && file.type.startsWith("image/")) {
+              const reader = new FileReader();
+              reader.onload = function(e) {
+                  // wrapper div
+                  const wrapper = document.createElement("div");
+                  wrapper.style.position = "relative";
+                  wrapper.style.display = "inline-block";
 
-                    // image element
-                    const img = document.createElement("img");
-                    img.src = e.target.result;
-                    img.style.maxWidth = "150px";
-                    img.style.maxHeight = "150px";
-                    img.style.border = "1px solid #ddd";
-                    img.style.borderRadius = "5px";
-                    img.style.padding = "5px";
+                  // image element
+                  const img = document.createElement("img");
+                  img.src = e.target.result;
+                  img.style.maxWidth = "150px";
+                  img.style.maxHeight = "150px";
+                  img.style.border = "1px solid #ddd";
+                  img.style.borderRadius = "5px";
+                  img.style.padding = "5px";
 
-                    // remove button
-                    const removeBtn = document.createElement("span");
-                    removeBtn.innerHTML = "&times;";
-                    removeBtn.style.position = "absolute";
-                    removeBtn.style.top = "2px";
-                    removeBtn.style.right = "6px";
-                    removeBtn.style.cursor = "pointer";
-                    removeBtn.style.color = "red";
-                    removeBtn.style.fontSize = "20px";
-                    removeBtn.style.fontWeight = "bold";
-                    removeBtn.title = "Remove";
+                  // remove button
+                  const removeBtn = document.createElement("span");
+                  removeBtn.innerHTML = "&times;";
+                  removeBtn.style.position = "absolute";
+                  removeBtn.style.top = "2px";
+                  removeBtn.style.right = "6px";
+                  removeBtn.style.cursor = "pointer";
+                  removeBtn.style.color = "red";
+                  removeBtn.style.fontSize = "20px";
+                  removeBtn.style.fontWeight = "bold";
+                  removeBtn.title = "Remove";
 
-                    // remove handler
-                    removeBtn.addEventListener("click", function() {
-                        wrapper.remove();
+                  // remove handler
+                  removeBtn.addEventListener("click", function() {
+                      wrapper.remove();
 
-                        // 👇 clear the input if all images removed
-                        if (previewContainer.children.length === 0) {
-                            document.getElementById("imageUpload").value = "";
-                        }
-                    });
+                      // 👇 clear the input if all images removed
+                      if (previewContainer.children.length === 0) {
+                          document.getElementById("imageUpload").value = "";
+                      }
+                  });
 
-                    // append
-                    wrapper.appendChild(img);
-                    wrapper.appendChild(removeBtn);
-                    previewContainer.appendChild(wrapper);
-                };
-                reader.readAsDataURL(file);
-            }
-        });
+                  // append
+                  wrapper.appendChild(img);
+                  wrapper.appendChild(removeBtn);
+                  previewContainer.appendChild(wrapper);
+              };
+              reader.readAsDataURL(file);
+          }
+      });
     });
 
     $('select[name="category_id"]').on('change', function () {
@@ -323,5 +383,86 @@
       }
     });
   });
+
+  // ➕ Add new part row
+  function addPartRow() {
+    const tbody = document.getElementById('partsTableBody');
+
+    const row = document.createElement('tr');
+    row.classList.add('part-row');
+
+    row.innerHTML = `
+      <td>
+        <select name="parts[${partIndex}][part_id]" class="form-control select2-js part-select" onchange="onPartChange(this)">
+          <option value="" disabled selected>Select Part</option>
+          @foreach($allProducts as $product)
+            <option value="{{ $product->id }}">{{ $product->name }}</option>
+          @endforeach
+        </select>
+      </td>
+
+      <td>
+        <select name="parts[${partIndex}][part_variation_id]" class="form-control select2-js part-variation-select">
+          <option value="">Select Variation</option>
+        </select>
+      </td>
+
+      <td>
+        <input type="number" step="any" name="parts[${partIndex}][quantity]" class="form-control" value="1" required>
+      </td>
+
+      <td class="part-actions">
+        <button type="button" class="btn btn-danger btn-sm" onclick="removePartRow(this)">
+          <i class="fas fa-times"></i>
+        </button>
+      </td>
+    `;
+
+    tbody.appendChild(row);
+    partIndex++;
+
+    $('.select2-js').select2();
+  }
+
+  // ❌ Remove part row
+  function removePartRow(btn) {
+    const rows = document.querySelectorAll('#partsTableBody tr');
+    if (rows.length > 1) {
+      btn.closest('tr').remove();
+    }
+  }
+
+  // 🔄 Load variations for selected part
+  function onPartChange(select) {
+    const productId = select.value;
+    const row = select.closest('tr');
+    const variationSelect = row.querySelector('.part-variation-select');
+
+    variationSelect.innerHTML = '<option value="">Loading...</option>';
+    variationSelect.disabled = true;
+
+    if (!productId) {
+        variationSelect.innerHTML = '<option value="">Select variation</option>';
+        return;
+    }
+
+    fetch(`/product/${productId}/variations`)
+      .then(res => res.json())
+      .then(data => {
+          variationSelect.innerHTML = '<option value="">No variation</option>';
+
+          if (data.success && data.variation.length > 0) {
+              data.variation.forEach(v => {
+                  variationSelect.innerHTML +=
+                      `<option value="${v.id}">${v.sku}</option>`;
+              });
+              variationSelect.disabled = false;
+          }
+      })
+      .catch(() => {
+        variationSelect.innerHTML = '<option value="">Error loading</option>';
+      });
+  }
+
 </script>
 @endsection

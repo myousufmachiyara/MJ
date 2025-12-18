@@ -9,6 +9,7 @@ use App\Models\ProductCategory;
 use App\Models\ProductSubcategory;
 use App\Models\MeasurementUnit;
 use App\Models\ProductVariation;
+use App\Models\ProductPart;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Picqer\Barcode\BarcodeGeneratorPNG;
@@ -93,8 +94,14 @@ class ProductController extends Controller
         $subcategories = ProductSubcategory::all();
         $attributes = Attribute::with('values')->get();
         $units = MeasurementUnit::all();
+        $allProducts = Product::where('is_active', 1)->get();
 
-        return view('products.create', compact('categories', 'subcategories' ,'attributes', 'units'));
+        $allProducts = Product::where('is_active', 1)
+        ->select('id', 'name', 'item_type')
+        ->orderBy('name')
+        ->get();
+
+        return view('products.create', compact('categories', 'subcategories' ,'attributes', 'units', 'allProducts'));
     }
 
     public function store(Request $request)
@@ -102,12 +109,12 @@ class ProductController extends Controller
         $request->validate([
             'name' => 'required|string|max:255|unique:products,name',
             'category_id' => 'required|exists:product_categories,id',
-            'sub_category_id' => 'nullable|exists:product_subcategories,id',
+            'subcategory_id' => 'nullable|exists:product_subcategories,id',
             'sku' => 'required|string|unique:products,sku',
             'barcode' => 'nullable|string',
             'description' => 'nullable|string',
             'measurement_unit' => 'required|exists:measurement_units,id',
-            'item_type' => 'required|in:fg,raw,service',
+            'item_type' => 'required|in:fg,raw',
             'manufacturing_cost' => 'nullable|numeric',
             'consumption' => 'nullable|numeric',
             'selling_price' => 'nullable|numeric',
@@ -117,6 +124,10 @@ class ProductController extends Controller
             'minimum_order_qty' => 'nullable|numeric',
             'is_active' => 'boolean',
             'prod_att.*' => 'nullable|image|mimes:jpeg,png,jpg,webp',
+            'parts' => 'nullable|array',
+            'parts.*.part_id' => 'nullable|exists:products,id',
+            'parts.*.part_variation_id' => 'nullable|exists:product_variations,id',
+            'parts.*.quantity' => 'nullable|numeric',
         ]);
 
         DB::beginTransaction();
@@ -164,6 +175,37 @@ class ProductController extends Controller
                 }
             }
 
+            // ✅ Save Product Parts (BOM with Variations)
+            if ($request->filled('parts')) {
+                foreach ($request->parts as $part) {
+                    if (empty($part['part_id'])) {
+                        continue; // skip empty rows
+                    }
+
+                    if ($part['part_id'] == $product->id) {
+                        throw new \Exception('Product cannot be added as its own part.');
+                    }
+
+                    // Validate variation belongs to part
+                    if (!empty($part['part_variation_id'])) {
+                        $variation = ProductVariation::where('id', $part['part_variation_id'])
+                            ->where('product_id', $part['part_id'])
+                            ->first();
+
+                        if (!$variation) {
+                            throw new \Exception('Selected variation does not belong to selected part.');
+                        }
+                    }
+
+                    ProductPart::create([
+                        'product_id' => $product->id,
+                        'part_id' => $part['part_id'],
+                        'part_variation_id' => $part['part_variation_id'] ?? null,
+                        'quantity' => $part['quantity'],
+                    ]);
+                }
+            }
+
             DB::commit();
             return redirect()->route('products.index')->with('success', 'Product created successfully.');
         } catch (\Throwable $e) {
@@ -197,11 +239,22 @@ class ProductController extends Controller
 
     public function edit($id)
     {
-        $product = Product::with(['images', 'variations.attributeValues'])->findOrFail($id);
+        $product = Product::with([
+            'images',
+            'variations.attributeValues',
+            'parts.part',              // 🔹 load part product
+            'parts.partVariation'          // 🔹 load variation
+        ])->findOrFail($id);
+
         $categories = ProductCategory::all();
         $subcategories = ProductSubcategory::all();
         $attributes = Attribute::with('values')->get();
         $units = MeasurementUnit::all(); // ✅ Add this line
+
+        $allProducts = Product::where('is_active', 1)
+        ->select('id', 'name', 'item_type')
+        ->orderBy('name')
+        ->get();
 
         // Optional: attach parent attribute (if needed for UI or JS)
         $attributeValues = collect();
@@ -214,6 +267,7 @@ class ProductController extends Controller
 
         return view('products.edit', compact(
             'product',
+            'allProducts',
             'categories',
             'subcategories',
             'attributes',
@@ -301,6 +355,40 @@ class ProductController extends Controller
                 }
             }
 
+            // 🔄 Update Product Parts (BOM)
+            $product->parts()->delete(); // remove old parts
+
+            if ($request->filled('parts')) {
+                foreach ($request->parts as $part) {
+
+                    if (empty($part['part_id'])) {
+                        continue;
+                    }
+
+                    if ($part['part_id'] == $product->id) {
+                        throw new \Exception('Product cannot be added as its own part.');
+                    }
+
+                    // Validate variation belongs to product
+                    if (!empty($part['part_variation_id'])) {
+                        $variation = ProductVariation::where('id', $part['part_variation_id'])
+                            ->where('product_id', $part['part_id'])
+                            ->first();
+
+                        if (!$variation) {
+                            throw new \Exception('Selected variation does not belong to selected part.');
+                        }
+                    }
+
+                    ProductPart::create([
+                        'product_id'        => $product->id,
+                        'part_id'           => $part['part_id'],
+                        'part_variation_id' => $part['part_variation_id'] ?? null,
+                        'quantity'          => $part['quantity'] ?? 1,
+                    ]);
+                }
+            }
+
             DB::commit();
             return redirect()->route('products.index')->with('success', 'Product updated successfully.');
         } catch (\Throwable $e) {
@@ -375,7 +463,7 @@ class ProductController extends Controller
 
     public function getVariations($productId)
     {
-        $product = Product::with('variations', 'measurementUnit')->find($productId);
+        $product = Product::with(['variations', 'measurementUnit'])->find($productId);
 
         if (!$product) {
             return response()->json([
@@ -384,7 +472,7 @@ class ProductController extends Controller
             ]);
         }
 
-        $unitId = $product->measurementUnit->id ?? null;
+        $unitId = optional($product->measurementUnit)->id;
 
         $variations = $product->variations->map(function ($v) use ($unitId) {
             return [
@@ -392,17 +480,17 @@ class ProductController extends Controller
                 'sku'  => $v->sku,
                 'unit' => $unitId,
             ];
-        })->toArray();
+        });
 
         return response()->json([
             'success'   => true,
             'variation' => $variations,
 
-            // 🔹 Extra: add product info for modules that need it
+            // Extra product info (useful for BOM & costing)
             'product'   => [
                 'id'                 => $product->id,
                 'name'               => $product->name,
-                'manufacturing_cost' => $product->manufacturing_cost, // ✅ always included
+                'manufacturing_cost' => $product->manufacturing_cost,
                 'unit'               => $unitId,
             ],
         ]);
