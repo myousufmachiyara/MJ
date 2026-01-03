@@ -189,7 +189,7 @@ class DatabaseSeeder extends Seeder
             // 🔹 Diamond
             ['category_id' => 1, 'name' => 'Diamond I',     'code' => 'DIAM-I',     'created_at' => now(), 'updated_at' => now()],
             ['category_id' => 1, 'name' => 'Diamond SI',    'code' => 'DIAM-SI',    'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 1, 'name' => 'Diamond SI-VS', 'code' => 'DIAM-SI-VS', 'created_at' => now(), 'updated_at' => now()],
+            ['category_id' => 1, 'name' => 'Diamond VS-SI', 'code' => 'DIAM-SI-VS', 'created_at' => now(), 'updated_at' => now()],
 
             // 🔹 Gold
             ['category_id' => 2, 'name' => 'WG 14 CR.', 'code' => 'GOLD-WG14', 'created_at' => now(), 'updated_at' => now()],

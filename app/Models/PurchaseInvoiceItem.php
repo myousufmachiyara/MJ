@@ -9,12 +9,13 @@ class PurchaseInvoiceItem extends Model
     protected $fillable = [
         'purchase_invoice_id',
         'item_id',
-        'variation_id',   // 🔹 add this
+        'temp_product_name',
+        'item_type',
+        'variation_id',
         'quantity',
         'unit',
-        'price',
+        'rate',
         'remarks',
-        
     ];
 
     public function invoice()
@@ -26,14 +27,20 @@ class PurchaseInvoiceItem extends Model
     {
         return $this->belongsTo(Product::class, 'item_id');
     }
-    
-    public function measurementUnit()
-    {
-        return $this->belongsTo(MeasurementUnit::class, 'unit');
-    }
 
     public function variation()
     {
         return $this->belongsTo(ProductVariation::class, 'variation_id');
     }
+
+    public function measurementUnit()
+    {
+        return $this->belongsTo(MeasurementUnit::class, 'unit');
+    }
+
+    public function parts()
+    {
+        return $this->hasMany(PurchaseInvoiceItemPart::class, 'purchase_invoice_item_id');
+    }
 }
+

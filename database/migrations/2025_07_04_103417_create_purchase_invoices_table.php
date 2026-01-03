@@ -13,6 +13,7 @@ return new class extends Migration
     {
         Schema::create('purchase_invoices', function (Blueprint $table) {
             $table->id();
+            $table->string('invoice_no', 10)->unique();
             $table->unsignedBigInteger('vendor_id');
             $table->date('invoice_date');
             $table->string('payment_terms')->nullable();

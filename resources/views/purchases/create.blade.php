@@ -7,6 +7,15 @@
   <div class="col">
     <form action="{{ route('purchase_invoices.store') }}" method="POST" enctype="multipart/form-data">
       @csrf
+      @if ($errors->any())
+        <div class="alert alert-danger">
+          <ul class="mb-0">
+            @foreach ($errors->all() as $error)
+              <li>{{ $error }}</li>
+            @endforeach
+          </ul>
+        </div>
+      @endif
       <section class="card">
         <header class="card-header d-flex justify-content-between align-items-center">
           <h2 class="card-title">New Purchase Invoice</h2>
@@ -14,7 +23,6 @@
 
         <div class="card-body">
           <div class="row">
-            <input type="hidden" id="itemCount" name="items" value="1">
 
             <div class="col-md-2 mb-3">
               <label>Invoice Date</label>
@@ -61,7 +69,6 @@
             <table class="table table-bordered" id="purchaseTable">
               <thead>
                 <tr>
-                  <th>Item Code</th>
                   <th>Item Name</th>
                   <th>Variation</th>
                   <th>Quantity</th>
@@ -72,21 +79,23 @@
                 </tr>
               </thead>
               <tbody id="Purchase1Table">
-                <tr>
-                  <td><input type="text" name="items[0][item_code]" id="item_cod1" class="form-control product-code"></td>
-
+                <tr class="item-row" data-item-index="0">
                   <td>
-                    <select name="items[0][item_id]" id="item_name1" class="form-control select2-js product-select" onchange="onItemNameChange(this)">
-                      <option value="">Select Item</option>
-                      @foreach ($products as $product)
-                        <option value="{{ $product->id }}" 
-                                data-barcode="{{ $product->barcode }}" 
-                                data-unit-id="{{ $product->measurement_unit }}">
-                          {{ $product->name }}
-                        </option>
-                      @endforeach
-                    </select>
-                  </td>
+                      <div class="product-wrapper">
+                        <select name="items[0][item_id]" id="item_name1" class="form-control select2-js product-select" onchange="onItemNameChange(this)">
+                          <option value="">Select product</option>
+                          @foreach($products as $p)
+                            <option value="{{ $p->id }}" data-unit-id="{{ $p->measurement_unit }}">
+                              {{ $p->name }}
+                            </option>
+                          @endforeach
+                        </select>
+
+                        <input type="text" name="items[0][temp_product_name]" class="form-control new-product-input mt-1" style="display:none" placeholder="Enter new product name">
+
+                        <button type="button" class="btn btn-link p-0 toggle-new"> + Product </button>
+                      </div>
+                    </td>
 
                   <td>
                     <select name="items[0][variation_id]" class="form-control select2-js variation-select">
@@ -109,7 +118,28 @@
                   <td><input type="number" id="amount1" class="form-control" value="0" step="any" disabled></td>
                   <td>
                     <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
-                    <input type="hidden" name="items[0][barcode]" id="barcode1">
+                    <button type="button" class="btn btn-sm btn-primary toggle-parts"> <i class="fas fa-wrench"></i> </button>
+                  </td>
+                </tr>
+                <tr class="parts-row" style="display:none;background:#efefef">
+                  <td colspan="7">
+                    <div class="parts-wrapper">
+                      <table class="table table-sm table-bordered parts-table">
+                        <thead>
+                          <tr>
+                            <th>Part</th>
+                            <th>Qty</th>
+                            <th>Rate</th>
+                            <th>Wastage</th>
+                            <th>Total</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+
+                      <button type="button" class="btn btn-sm btn-outline-primary add-part"> + Add Part </button>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -182,102 +212,59 @@
       }
     });
 
-    // 🔹 Barcode scanning flow
-    $(document).on('blur', '.product-code', function () {
-      const row = $(this).closest('tr');
-      const barcode = $(this).val().trim();
-      if (!barcode) return;
+    $(document).on('click', '.toggle-new', function () {
+      let wrapper = $(this).closest('.product-wrapper');
+      let select  = wrapper.find('.product-select');
+      let input   = wrapper.find('.new-product-input');
 
-      $.ajax({
-        url: '/get-product-by-code/' + encodeURIComponent(barcode),
-        method: 'GET',
-        success: function (res) {
-          if (!res || !res.success) {
-            alert(res.message || 'Product not found');
-            row.find('.product-code').val('').focus();
-            row.find('.product-select').val('').trigger('change.select2');
-            row.find('.variation-select').html('<option value="">Select Variation</option>')
-               .prop('disabled', false)
-               .trigger('change');
-            return;
-          }
+      let select2 = select.next('.select2-container');
 
-          const $productSelect = row.find('.product-select');
-          const $variationSelect = row.find('.variation-select');
-
-          if (res.type === 'variation') {
-            const variation = res.variation;
-
-            // ✅ Set product
-            $productSelect.val(variation.product_id).trigger('change.select2');
-
-            // ✅ Directly set variation
-            $variationSelect.html(`<option value="${variation.id}" selected>${variation.sku}</option>`)
-                            .prop('disabled', false)
-                            .trigger('change');
-
-            // ✅ Update barcode fields
-            row.find('.product-code').val(variation.barcode);
-            row.find('input[name*="[barcode]"]').val(variation.barcode);
-
-            // ✅ Focus Qty field
-            row.find('.quantity').focus();
-          }
-
-          if (res.type === 'product') {
-            const product = res.product;
-
-            // ✅ Only select if it exists in dropdown
-            if ($productSelect.find(`option[value="${product.id}"]`).length) {
-              $productSelect.val(product.id).trigger('change.select2');
-
-              // ✅ Update barcode fields
-              row.find('.product-code').val(product.barcode);
-              row.find('input[name*="[barcode]"]').val(product.barcode);
-
-              // ✅ Load variations normally
-              loadVariations(row, product.id);
-
-              // focus on variation after loading
-              setTimeout(() => {
-                $variationSelect.select2('open');
-              }, 300);
-            } else {
-              alert("Product found but not in dropdown list.");
-              row.find('.product-code').val('').focus();
-              row.find('.product-select').val('').trigger('change.select2');
-              row.find('.variation-select').html('<option value="">Select Variation</option>')
-                 .prop('disabled', false)
-                 .trigger('change');
-            }
-          }
-        },
-        error: function () {
-          alert('Error fetching product details.');
-        }
-      });
-    });
-
-    // 🔹 POS: Auto-add row when user presses Enter on Qty
-    $(document).on('keypress', '.quantity', function (e) {
-      if (e.which === 13) { // Enter key
-        e.preventDefault();
-        const row = $(this).closest('tr');
-        const qty = $(this).val().trim();
-
-        if (qty !== '') {
-          // Add new row
-          addNewRow();
-
-          // Focus on new row's barcode
-          const $newRow = $('#Purchase1Table tbody tr').last();
-          $newRow.find('.product-code').focus();
-        } else {
-          alert("Please enter quantity first.");
-          $(this).focus();
-        }
+      if (input.is(':visible')) {
+        input.hide().val('');
+        select.show();
+        select2.show();
+        select.val('').trigger('change');
+        $(this).text('+ New');
+      } else {
+        select.val('').trigger('change');
+        select.hide();
+        select2.hide();
+        input.show().focus();
+        $(this).text('Cancel');
       }
     });
+
+    $(document).on('click', '.toggle-parts', function () {
+      let itemRow = $(this).closest('tr');
+      let partsRow = itemRow.next('.parts-row');
+      partsRow.toggle();
+    });
+
+    $(document).on('click', '.add-part', function () {
+      let partsRow = $(this).closest('.parts-row');
+      let partsTable = partsRow.find('.parts-table tbody');
+      let itemIndex = partsRow.prev('.item-row').data('item-index'); // ✅ gets numeric index
+      addPartRow(partsTable, itemIndex);
+    });
+
+    $(document).on('click', '.remove-part', function () {
+      $(this).closest('tr').remove();
+    });
+
+    $(document).on('input', '.part-qty, .part-rate, .part-wastage', function () {
+      let row = $(this).closest('tr');
+
+      let qty = parseFloat(row.find('.part-qty').val()) || 0;
+      let rate = parseFloat(row.find('.part-rate').val()) || 0;
+      let wastage = parseFloat(row.find('.part-wastage').val()) || 0;
+
+      let total = (qty + wastage) * rate;
+      row.find('.part-total').val(total.toFixed(2));
+
+      recalcItemTotal(row);
+    });
+
+
   });
 
   // 🔹 Keep all your existing functions exactly as they are
@@ -288,18 +275,36 @@
     const itemId = selectedOption.value;
     const unitId = selectedOption.getAttribute('data-unit-id');
 
-    const barcode = selectedOption.getAttribute('data-barcode');
-
     const idMatch = selectElement.id.match(/\d+$/);
     if (!idMatch) return;
 
     const index = idMatch[0];
 
-    document.getElementById(`item_cod${index}`).value = barcode;
-    document.getElementById(`barcode${index}`).value = barcode;
-
     const unitSelector = $(`#unit${index}`);
     unitSelector.val(String(unitId)).trigger('change.select2');
+  }
+
+  function addPartRow(partsTable, itemIndex) {
+    let partIndex = partsTable.find('tr').length;
+
+    let row = `
+      <tr style="background:#efefef">
+        <td>
+          <select name="items[${itemIndex}][parts][${partIndex}][product_id]" class="form-control select2-js">
+            <option value="">Select Part</option>
+            ${products.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+          </select>
+        </td>
+        <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][qty]" class="form-control part-qty" step="any"></td>
+        <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][rate]" class="form-control part-rate" step="any"></td>
+        <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][wastage]" class="form-control part-wastage" step="any"></td>
+        <td><input type="number" class="form-control part-total" disabled></td>
+        <td><button type="button" class="btn btn-sm btn-danger remove-part">×</button></td>
+      </tr>
+    `;
+
+    partsTable.append(row);
+    partsTable.find('.select2-js').select2({ width: '100%' });
   }
 
   function removeRow(button) {
@@ -313,7 +318,6 @@
 
   function addNewRow_btn() {
     addNewRow();
-    $('#item_cod' + (index - 1)).focus();
   }
 
   function addNewRow() {
@@ -321,17 +325,21 @@
     let rowIndex = index - 1;
 
     let newRow = `
-      <tr>
-        <td><input type="text" name="items[${rowIndex}][item_code]" id="item_cod${index}" class="form-control product-code"></td>
-
+      <tr class="item-row" data-item-index="${rowIndex}">
         <td>
-          <select name="items[${rowIndex}][item_id]" id="item_name${index}" class="form-control select2-js product-select" onchange="onItemNameChange(this)">
-            <option value="">Select Item</option>
-            ${products.map(product => 
-              `<option value="${product.id}" data-barcode="${product.barcode}" data-unit-id="${product.measurement_unit}">
-                ${product.name}
-              </option>`).join('')}
-          </select>
+          <div class="product-wrapper">
+            <select name="items[${rowIndex}][item_id]" id="item_name${index}" class="form-control select2-js product-select" onchange="onItemNameChange(this)">
+              <option value="">Select product</option>
+              ${products.map(p =>
+                `<option value="${p.id}" data-unit-id="${p.measurement_unit}">
+                  ${p.name}
+                </option>`).join('')}
+            </select>
+
+            <input type="text" name="items[${rowIndex}][temp_product_name]" class="form-control new-product-input mt-1" style="display:none" placeholder="Enter new product name">
+
+            <button type="button" class="btn btn-link p-0 toggle-new"> + Product </button>
+          </div>
         </td>
 
         <td>
@@ -355,11 +363,40 @@
         <td><input type="number" id="amount${index}" class="form-control" value="0" step="any" disabled></td>
         <td>
           <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
-          <input type="hidden" name="items[${rowIndex}][barcode]" id="barcode${index}">
+          <button type="button" class="btn btn-sm btn-primary toggle-parts"> <i class="fas fa-wrench"></i> </button>
         </td>
       </tr>
     `;
+
+    let partsRowHtml = `
+      <tr class="parts-row" style="display:none;background:#efefef">
+        <td colspan="7">
+          <div class="parts-wrapper">
+            <table class="table table-sm table-bordered parts-table">
+              <thead>
+                <tr>
+                  <th>Part</th>
+                  <th>Qty</th>
+                  <th>Rate</th>
+                  <th>Wastage</th>
+                  <th>Total</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+
+            <button type="button"
+                    class="btn btn-sm btn-outline-primary add-part">
+              + Add Part
+            </button>
+          </div>
+        </td>
+      </tr>`;
+
+
     table.append(newRow);
+    table.append(partsRowHtml);
     $('#itemCount').val(index);
     $(`#item_name${index}`).select2();
     $(`#unit${index}`).select2();
@@ -384,6 +421,18 @@
     $('#total_quantity').val(qty.toFixed(2));
     $('#total_quantity_show').val(qty.toFixed(2));
     netTotal();
+  }
+
+  function recalcItemTotal(partRow) {
+    let partsRow = partRow.closest('.parts-row');
+    let itemRow = partsRow.prev('tr');
+
+    let sum = 0;
+    partsRow.find('.part-total').each(function () {
+      sum += parseFloat($(this).val()) || 0;
+    });
+
+    itemRow.find('.item-total').val(sum.toFixed(2));
   }
 
   function netTotal() {
