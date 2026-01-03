@@ -5,7 +5,7 @@
 @section('content')
 <div class="row">
   <div class="col">
-    <form action="{{ route('purchase_invoices.store') }}" method="POST" enctype="multipart/form-data">
+    <form action="{{ route('purchase_invoices.store') }}" method="POST" onkeydown="return event.key != 'Enter';" enctype="multipart/form-data">
       @csrf
       @if ($errors->any())
         <div class="alert alert-danger">
