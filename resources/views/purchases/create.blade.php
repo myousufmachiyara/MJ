@@ -128,6 +128,7 @@
                         <thead>
                           <tr>
                             <th>Part</th>
+                            <th>Variation</th>
                             <th>Qty</th>
                             <th>Rate</th>
                             <th>Wastage</th>
@@ -264,7 +265,43 @@
       recalcItemTotal(row);
     });
 
+    $(document).on('change', '.part-product-select', function () {
+      let row = $(this).closest('tr');
+      let productId = $(this).val();
+      let variationSelect = row.find('.part-variation-select');
 
+      if (!productId) {
+        variationSelect
+          .html('<option value="">Select Variation</option>')
+          .prop('disabled', true)
+          .trigger('change');
+        return;
+      }
+
+      variationSelect.html('<option>Loading...</option>').prop('disabled', true);
+
+      $.get(`/product/${productId}/variations`, function (data) {
+        let options = '<option value="" disabled selected>Select Variation</option>';
+
+        if ((data.variation || []).length > 0) {
+          data.variation.forEach(v => {
+            options += `<option value="${v.id}">${v.sku}</option>`;
+          });
+          variationSelect.prop('disabled', false);
+        } else {
+          options = '<option value="" disabled selected>No Variations</option>';
+          variationSelect.prop('disabled', true);
+        }
+
+        variationSelect.html(options);
+
+        if (variationSelect.hasClass('select2-hidden-accessible')) {
+          variationSelect.select2('destroy');
+        }
+
+        variationSelect.select2({ width: '100%', dropdownAutoWidth: true });
+      });
+    });
   });
 
   // 🔹 Keep all your existing functions exactly as they are
@@ -294,6 +331,11 @@
             <option value="">Select Part</option>
             ${products.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
           </select>
+        </td>
+        <td>
+        <select name="items[${itemIndex}][parts][${partIndex}][variation_id]" class="form-control select2-js part-variation-select" disabled>
+          <option value="">Select Variation</option>
+        </select>
         </td>
         <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][qty]" class="form-control part-qty" step="any"></td>
         <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][rate]" class="form-control part-rate" step="any"></td>
@@ -376,6 +418,7 @@
               <thead>
                 <tr>
                   <th>Part</th>
+                  <th>Variation</th>
                   <th>Qty</th>
                   <th>Rate</th>
                   <th>Wastage</th>
