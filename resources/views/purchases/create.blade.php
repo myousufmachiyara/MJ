@@ -327,7 +327,7 @@
     let row = `
       <tr style="background:#efefef">
         <td>
-          <select name="items[${itemIndex}][parts][${partIndex}][product_id]" class="form-control select2-js">
+          <select name="items[${itemIndex}][parts][${partIndex}][product_id]" class="form-control part-product-select select2-js">
             <option value="">Select Part</option>
             ${products.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
           </select>
