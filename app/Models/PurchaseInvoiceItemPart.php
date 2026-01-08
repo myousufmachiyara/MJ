@@ -11,6 +11,7 @@ class PurchaseInvoiceItemPart extends Model
     protected $fillable = [
         'purchase_invoice_item_id',
         'part_product_id',
+        'variation_id',
         'qty',
         'wastage_qty',
         'rate',
@@ -30,6 +31,11 @@ class PurchaseInvoiceItemPart extends Model
     public function product()
     {
         return $this->belongsTo(Product::class,'part_product_id');
+    }
+
+    public function variation()
+    {
+        return $this->belongsTo(ProductVariation::class, 'variation_id');
     }
 
     /* =======================

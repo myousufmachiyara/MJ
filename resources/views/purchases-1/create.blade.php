@@ -69,42 +69,54 @@
             <table class="table table-bordered" id="purchaseTable">
               <thead>
                 <tr>
-                  <th>Item Name</th>
-                  <th>Variation</th>
-                  <th>Quantity</th>
-                  <th>Unit</th>
-                  <th>Price</th>
-                  <th>Amount</th>
-                  <th>Action</th>
+                  <th width="12%" rowspan="2">Item</th>
+                  <th width="12%" rowspan="2">Variation</th>
+                  <th width="8%" rowspan="2">Purity</th>
+                  <th width="10%" rowspan="2">Gross Wt.</th>
+                  <th width="10%" rowspan="2">Purity Wt.</th>
+                  <th width="10%" rowspan="2">Unit</th>
+                  <th width="15%" colspan="2" class="text-center">Making</th>
+                  <th width="10%" rowspan="2">Metal Val</th>
+                  <th width="10%" rowspan="2">Taxable Amt</th>
+                  <th width="10%" rowspan="2">VAT %</th>
+                  <th width="10%" rowspan="2">VAT Amt</th>
+                  <th width="10%" rowspan="2">Gross Val Incl. VAT</th>
+                  <th width="7%" rowspan="2">Action</th>
+                </tr>
+
+                <tr>
+                  <th>Rate</th>
+                  <th>Value</th>
                 </tr>
               </thead>
+
               <tbody id="Purchase1Table">
                 <tr class="item-row" data-item-index="0">
                   <td>
-                      <div class="product-wrapper">
-                        <select name="items[0][item_id]" id="item_name1" class="form-control select2-js product-select" onchange="onItemNameChange(this)">
-                          <option value="">Select product</option>
-                          @foreach($products as $p)
-                            <option value="{{ $p->id }}" data-unit-id="{{ $p->measurement_unit }}">
-                              {{ $p->name }}
-                            </option>
-                          @endforeach
-                        </select>
+                    <div class="product-wrapper">
+                      <select name="items[0][item_id]" id="item_name1" class="form-control select2-js product-select" onchange="onItemNameChange(this)">
+                        <option value="">Select product</option>
+                        @foreach($products as $p)
+                          <option value="{{ $p->id }}" data-unit-id="{{ $p->measurement_unit }}">
+                            {{ $p->name }}
+                          </option>
+                        @endforeach
+                      </select>
 
-                        <input type="text" name="items[0][temp_product_name]" class="form-control new-product-input mt-1" style="display:none" placeholder="Enter new product name">
+                      <input type="text" name="items[0][temp_product_name]" class="form-control new-product-input mt-1" style="display:none" placeholder="Enter new product name">
 
-                        <button type="button" class="btn btn-link p-0 toggle-new"> + Product </button>
-                      </div>
-                    </td>
+                      <button type="button" class="btn btn-link p-0 toggle-new"> + Product </button>
+                    </div>
+                  </td>
 
                   <td>
                     <select name="items[0][variation_id]" class="form-control select2-js variation-select">
                       <option value="">Select Variation</option>
                     </select>
-                  </td>                  
-
-                  <td><input type="number" name="items[0][quantity]" id="pur_qty1" class="form-control quantity" value="0" step="any" onchange="rowTotal(1)"></td>
-
+                  </td>
+                  <td><input type="number" class="form-control" value="0" step="any"></td>                  
+                  <td><input type="number" class="form-control" value="0" step="any"></td>
+                  <td><input type="number" class="form-control" value="0" step="any"></td>
                   <td>
                     <select name="items[0][unit]" id="unit1" class="form-control" required>
                       <option value="">-- Select --</option>
@@ -113,6 +125,11 @@
                       @endforeach
                     </select>
                   </td>
+                  <td><input type="number" class="form-control" value="0" step="any"></td>
+                  <td><input type="number" class="form-control" value="0" step="any"></td>
+                  <td><input type="number" class="form-control" value="0" step="any"></td>
+                  <td><input type="number" class="form-control" value="0" step="any"></td>
+                  <td><input type="number" name="items[0][quantity]" id="pur_qty1" class="form-control quantity" value="0" step="any" onchange="rowTotal(1)"></td>
 
                   <td><input type="number" name="items[0][price]" id="pur_price1" class="form-control" value="0" step="any" onchange="rowTotal(1)"></td>
                   <td><input type="number" id="amount1" class="form-control" value="0" step="any" disabled></td>

@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $now = now();
+        $userId = 1; // ID for created_by / updated_by
 
         // 🔑 Create Super Admin User
         $admin = User::firstOrCreate(
@@ -102,60 +103,63 @@ class DatabaseSeeder extends Seeder
         $superAdmin->syncPermissions(Permission::all());
 
         // ---------------------
-        // 1️⃣ Heads of Accounts
-        // ---------------------        
+        // HEADS OF ACCOUNTS
+        // ---------------------
         HeadOfAccounts::insert([
-            ['id' => 1, 'name' => 'Assets'],
-            ['id' => 2, 'name' => 'Liabilities'],
-            ['id' => 3, 'name' => 'Expenses'],
-            ['id' => 4, 'name' => 'Revenue'],
-            ['id' => 5, 'name' => 'Equity'],
+            ['id' => 1, 'name' => 'Assets', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 2, 'name' => 'Liabilities', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 3, 'name' => 'Equity', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 4, 'name' => 'Revenue', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 5, 'name' => 'Expenses', 'created_at' => $now, 'updated_at' => $now],
         ]);
 
         // ---------------------
-        // 2️⃣ Sub Heads
+        // SUB HEADS
         // ---------------------
         SubHeadOfAccounts::insert([
-            ['id' => 1, 'hoa_id' => 1, 'name' => "Current Assets"],      
-            ['id' => 2, 'hoa_id' => 1, 'name' => "Inventory"],           
-            ['id' => 3, 'hoa_id' => 2, 'name' => "Current Liabilities"], 
-            ['id' => 4, 'hoa_id' => 2, 'name' => "Long-Term Liabilities"], 
-            ['id' => 5, 'hoa_id' => 4, 'name' => "Sales"],               
-            ['id' => 6, 'hoa_id' => 3, 'name' => "Expenses"],            
-            ['id' => 7, 'hoa_id' => 5, 'name' => "Equity"],              
+            ['id' => 1, 'hoa_id' => 1, 'name' => 'Cash', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 2, 'hoa_id' => 1, 'name' => 'Bank', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 3, 'hoa_id' => 1, 'name' => 'Accounts Receivable', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 4, 'hoa_id' => 1, 'name' => 'Inventory', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 5, 'hoa_id' => 2, 'name' => 'Accounts Payable', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 6, 'hoa_id' => 2, 'name' => 'Loans', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 7, 'hoa_id' => 3, 'name' => 'Owner Capital', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 8, 'hoa_id' => 4, 'name' => 'Sales', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 9, 'hoa_id' => 5, 'name' => 'Purchases', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 10,'hoa_id' => 5, 'name' => 'Salaries', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 11,'hoa_id' => 5, 'name' => 'Rent', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 12,'hoa_id' => 5, 'name' => 'Utilities', 'created_at' => $now, 'updated_at' => $now],
         ]);
 
         // ---------------------
-        // 3️⃣ Chart of Accounts
+        // CHART OF ACCOUNTS
         // ---------------------
-        ChartOfAccounts::insert([
-            // Assets
-            ['id'=>1, 'shoa_id'=>1, 'account_code'=>'101001','name'=>"Cash", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Asset",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-            ['id'=>2, 'shoa_id'=>1, 'account_code'=>'101002','name'=>"Bank", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Asset",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-            ['id'=>3, 'shoa_id'=>1, 'account_code'=>'101003','name'=>"Accounts Receivable", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Customer Accounts",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-            ['id'=>5, 'shoa_id'=>2, 'account_code'=>'102001','name'=>"Raw Material Inventory", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Inventory",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-            ['id'=>7, 'shoa_id'=>2, 'account_code'=>'102002','name'=>"WIP Inventory", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Work-in-Progress Inventory",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-            ['id'=>8, 'shoa_id'=>2, 'account_code'=>'102003','name'=>"Finished Goods Inventory", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Finished Goods Inventory",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
+        $coaData = [
+            ['account_code' => 'A001', 'name' => 'Cash in Hand', 'account_type' => 'cash', 'shoa_id' => 1, 'receivables' => 0, 'payables' => 0],
+            ['account_code' => 'A002', 'name' => 'Bank ABC', 'account_type' => 'bank', 'shoa_id' => 2, 'receivables' => 0, 'payables' => 0],
+            ['account_code' => 'A003', 'name' => 'Customer A', 'account_type' => 'customer', 'shoa_id' => 3, 'receivables' => 1000, 'payables' => 0],
+            ['account_code' => 'A004', 'name' => 'Inventory - Raw Material', 'account_type' => 'asset', 'shoa_id' => 4, 'receivables' => 0, 'payables' => 0],
+            ['account_code' => 'L001', 'name' => 'Vendor X', 'account_type' => 'vendor', 'shoa_id' => 5, 'receivables' => 0, 'payables' => 500],
+            ['account_code' => 'L002', 'name' => 'Bank Loan', 'account_type' => 'liability', 'shoa_id' => 6, 'receivables' => 0, 'payables' => 10000],
+            ['account_code' => 'E001', 'name' => 'Owner Capital', 'account_type' => 'equity', 'shoa_id' => 7, 'receivables' => 0, 'payables' => 0],
+            ['account_code' => 'R001', 'name' => 'Sales Income', 'account_type' => 'revenue', 'shoa_id' => 8, 'receivables' => 0, 'payables' => 0],
+            ['account_code' => 'EX001', 'name' => 'Purchase of Goods', 'account_type' => 'expenses', 'shoa_id' => 9, 'receivables' => 0, 'payables' => 0],
+            ['account_code' => 'EX002', 'name' => 'Salary Expense', 'account_type' => 'expenses', 'shoa_id' => 10, 'receivables' => 0, 'payables' => 0],
+            ['account_code' => 'EX003', 'name' => 'Rent Expense', 'account_type' => 'expenses', 'shoa_id' => 11, 'receivables' => 0, 'payables' => 0],
+            ['account_code' => 'EX004', 'name' => 'Utility Expense', 'account_type' => 'expenses', 'shoa_id' => 12, 'receivables' => 0, 'payables' => 0],
+        ];
 
-            // Liabilities
-            ['id'=>4, 'shoa_id'=>3, 'account_code'=>'201001','name'=>"Accounts Payable", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Supplier Accounts",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-            ['id'=>9, 'shoa_id'=>4, 'account_code'=>'202001','name'=>"Long-Term Loans", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Long-Term Liabilities",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-
-            // Expenses
-            ['id'=>6, 'shoa_id'=>6, 'account_code'=>'301001','name'=>"Expense Account", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Expense",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-            ['id'=>10,'shoa_id'=>6,'account_code'=>'301002','name'=>"Raw Material Expense", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Raw Material Cost",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-            ['id'=>11,'shoa_id'=>6,'account_code'=>'301003','name'=>"Labor / Wages Expense", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Labor Cost",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-            ['id'=>12,'shoa_id'=>6,'account_code'=>'301004','name'=>"Production Overheads", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Overhead Cost",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-
-            // Revenue
-            ['id'=>13,'shoa_id'=>5,'account_code'=>'401001','name'=>"Sales", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Production Sales",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-            ['id'=>14,'shoa_id'=>5,'account_code'=>'401002','name'=>"Other Income", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Other Income",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-
-            // Equity
-            ['id'=>15,'shoa_id'=>7,'account_code'=>'501001','name'=>"Equity", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Owner Equity",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-            ['id'=>16,'shoa_id'=>7,'account_code'=>'501002','name'=>"Capital", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Capital Account",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-            ['id'=>17,'shoa_id'=>7,'account_code'=>'501003','name'=>"Retained Earnings", 'receivables'=>0,'payables'=>0,'opening_date'=>'2025-01-01','remarks'=>"Retained Earnings",'address'=>"",'phone_no'=>"",'created_by'=>1,'updated_by'=>1,'created_at'=>$now,'updated_at'=>$now],
-        ]);
+        foreach ($coaData as $data) {
+            ChartOfAccounts::create(array_merge($data, [
+                'opening_date' => $now,
+                'credit_limit' => 0,
+                'remarks' => null,
+                'address' => null,
+                'phone_no' => null,
+                'created_by' => $userId,
+                'updated_by' => $userId,
+            ]));
+        }
 
 
         // 📏 Measurement Units

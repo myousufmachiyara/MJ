@@ -65,6 +65,7 @@ class PurchaseInvoiceController extends Controller
             // Parts
             'items.*.parts' => 'nullable|array',
             'items.*.parts.*.product_id' => 'required|exists:products,id',
+            'items.*.parts.*.variation_id' => 'nullable|exists:product_variations,id',
             'items.*.parts.*.qty' => 'required|numeric|min:0.01',
             'items.*.parts.*.rate' => 'required|numeric|min:0',
             'items.*.parts.*.wastage' => 'nullable|numeric|min:0',
@@ -115,6 +116,7 @@ class PurchaseInvoiceController extends Controller
                     foreach ($item['parts'] as $part) {
                         $invoiceItem->parts()->create([
                             'part_product_id' => $part['product_id'],
+                            'variation_id'     => $part['variation_id'] ?? null,
                             'qty' => $part['qty'],
                             'wastage_qty' => $part['wastage'] ?? 0,
                             'rate' => $part['rate'],
@@ -306,7 +308,12 @@ class PurchaseInvoiceController extends Controller
 
     public function print($id)
     {
-        $invoice = PurchaseInvoice::with(['vendor', 'items.parts.product'])->findOrFail($id);
+        $invoice = PurchaseInvoice::with([
+            'vendor',
+            'items.product.measurementUnit',
+            'items.parts.product.measurementUnit',
+            'items.parts.variation.attributeValues.attribute'
+        ])->findOrFail($id);
 
         $pdf = new \TCPDF();
         $pdf->setPrintHeader(false);
@@ -315,62 +322,55 @@ class PurchaseInvoiceController extends Controller
         $pdf->AddPage();
         $pdf->SetFont('helvetica', '', 10);
 
-        // --- Company Header with Logo Left, Info Right ---
+        /* ================= HEADER ================= */
         $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoHtml = file_exists($logoPath)
+            ? '<img src="'.$logoPath.'" width="85">'
+            : '';
 
-        $logoHtml = '';
-        if (file_exists($logoPath)) {
-            // The Image tag in HTML
-            $logoHtml = '<img src="'.$logoPath.'" width="80" style="vertical-align:middle;">';
-        }
+        $pdf->writeHTML('
+            <table width="100%" cellpadding="3">
+                <tr>
+                    <td width="40%">'.$logoHtml.'</td>
+                    <td width="60%" style="text-align:right;font-size:10px;">
+                        <strong>MUSFIRA JEWELRY L.L.C</strong><br>
+                        Office 202-201-932, Insurance Building, Al Rigga, Dubai – U.A.E<br>
+                        TRN No: 10490
+                    </td>
+                </tr>
+            </table>
+            <hr>
+        ', true, false, false, false);
 
-        $headerHtml = '
-        <table width="100%" cellpadding="5">
-            <tr>
-                <td width="40%" style="text-align:left;">
-                    '.$logoHtml.'
-                </td>
-                <td width="60%" style="text-align:right; font-size:10px;">
-                    <strong>MUSFIRA JEWELRY L.L.C</strong><br>
-                    Office 202-201-932, Insurance Building, Al Rigga, Dubai – U.A.E<br>
-                    TRN No: 10490
-                </td>
-            </tr>
-        </table>
-        <hr>
-        ';
-
-        $pdf->writeHTML($headerHtml, true, false, false, false, '');
-
-        // --- Invoice Title ---
+        /* ================= TITLE ================= */
         $pdf->Ln(2);
-        $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->Cell(0, 6, 'TAX INVOICE', 0, 1, 'C');
+        $pdf->SetFont('helvetica','B',12);
+        $pdf->Cell(0,6,'TAX INVOICE',0,1,'C');
 
-        // --- Vendor + Invoice Info ---
-        $pdf->Ln(2);
-        $infoHtml = '
-        <table cellpadding="3" style="font-size:10px;" width="100%">
-            <tr>
-                <td width="65%">
-                    <b>To,</b><br>
-                    M/S. ' . ($invoice->vendor->name ?? '-') . '<br>
-                    TRN: ' . ($invoice->vendor->trn ?? '-') . '
-                </td>
-                <td width="35%">
-                    <table border="1" cellpadding="3">
-                        <tr><td><b>Date</b></td><td>' . \Carbon\Carbon::parse($invoice->invoice_date)->format('d.m.Y') . '</td></tr>
-                        <tr><td><b>Invoice No</b></td><td>' . $invoice->id . '</td></tr>
-                    </table>
-                </td>
-            </tr>
-        </table>';
-        $pdf->writeHTML($infoHtml, true, false, false, false, '');
+        /* ================= VENDOR INFO ================= */
+        $pdf->SetFont('helvetica','',10);
+        $pdf->writeHTML('
+            <table cellpadding="3" width="100%">
+                <tr>
+                    <td width="65%">
+                        <b>To,</b><br>
+                        M/S. '.($invoice->vendor->name ?? '-').'<br>
+                        TRN: '.($invoice->vendor->trn ?? '-').'
+                    </td>
+                    <td width="35%">
+                        <table border="1" cellpadding="3">
+                            <tr><td><b>Date</b></td><td>'.\Carbon\Carbon::parse($invoice->invoice_date)->format('d.m.Y').'</td></tr>
+                            <tr><td><b>Invoice No</b></td><td>'.$invoice->id.'</td></tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        ', true, false, false, false);
 
-        // --- Items Table ---
+        /* ================= ITEMS TABLE ================= */
         $html = '
-        <table border="1" cellpadding="4" style="text-align:center;font-size:10px;" width="100%">
-            <tr style="font-weight:bold; background-color:#f5f5f5;">
+        <table border="1" cellpadding="4" width="100%" style="font-size:10px;text-align:center">
+            <tr style="font-weight:bold;background:#f5f5f5">
                 <th width="5%">#</th>
                 <th width="45%">Description</th>
                 <th width="15%">Qty</th>
@@ -378,122 +378,103 @@ class PurchaseInvoiceController extends Controller
                 <th width="15%">Amount</th>
             </tr>';
 
-        $count = 0;
-        $totalAmount = 0;
+        $sr = 0;
+        $grandTotal = 0;
 
         foreach ($invoice->items as $item) {
-            $count++;
+            $sr++;
             $itemTotal = ($item->quantity ?? 0) * ($item->rate ?? 0);
-            $totalAmount += $itemTotal;
+            $grandTotal += $itemTotal;
 
-            // Determine unit name
-            if ($item->product) {
-                $unitName = $item->product->measurementUnit->name ?? '-';
-            } elseif (!empty($item->unit)) {
-                // Lookup from MeasurementUnit table
-                $unitModel = MeasurementUnit::find($item->unit);
-                $unitName = $unitModel->shortcode ?? '-';
-            } else {
-                $unitName = '-';
-            }
+            $unit = $item->product
+                ? ($item->product->measurementUnit->shortcode ?? '-')
+                : '-';
 
             $html .= '
             <tr>
-                <td>'.$count.'</td>
-                <td style="text-align:left;">'.($item->product ? $item->product->name : ($item->temp_product_name ?? '-')).'</td>
-                <td>'.$item->quantity.' '.$unitName.'</td>
+                <td>'.$sr.'</td>
+                <td style="text-align:left">'.($item->product->name ?? $item->temp_product_name).'</td>
+                <td>'.$item->quantity.' '.$unit.'</td>
                 <td>'.number_format($item->rate,2).'</td>
                 <td>'.number_format($itemTotal,2).'</td>
             </tr>';
 
-            // --- Include Parts if any ---
-            if($item->parts && $item->parts->count() > 0){
-                foreach($item->parts as $part){
-                    $partTotal = ($part->qty + $part->wastage) * $part->rate;
+            /* ================= PARTS (WITH VARIATION) ================= */
+            foreach ($item->parts ?? [] as $part) {
 
-                    // Part unit
-                    if ($part->product) {
-                        $partUnit = $part->product->measurementUnit->shortcode ?? '-';
-                    } elseif (!empty($part->unit)) {
-                        $partUnitModel = MeasurementUnit::find($part->unit);
-                        $partUnit = $partUnitModel->shortcode ?? '-';
-                    } else {
-                        $partUnit = '-';
-                    }
+                $partTotal = ($part->qty + $part->wastage) * $part->rate;
+                $partUnit = $part->product->measurementUnit->shortcode ?? '-';
 
-                    $html .= '
-                    <tr style="font-size:9px;background-color:#efefef">
-                        <td></td>
-                        <td style="text-align:left;"> - '.$part->product->name.'</td>
-                        <td>'.$part->qty.' '.$partUnit.'</td>
-                        <td>'.$part->rate.'</td>
-                        <td>'.number_format($partTotal,2).'</td>
-                    </tr>';
+                // ✅ Build variation text
+                $variationText = '';
+                if ($part->variation && $part->variation->attributeValues->count()) {
+                    $variationText = ' (' .
+                        $part->variation->attributeValues
+                            ->map(fn($av) => $av->attribute->name.': '.$av->value)
+                            ->implode(', ')
+                        . ')';
                 }
+
+                $html .= '
+                <tr style="font-size:9px;background-color:#efefef">
+                    <td></td>
+                    <td style="text-align:left">
+                        '.($part->product->name ?? 'Part').$variationText.'
+                    </td>                   
+                    <td>'.$part->qty.' '.$partUnit.'</td>
+                    <td>'.number_format($part->rate,2).'</td>
+                    <td>'.number_format($partTotal,2).'</td>
+                </tr>';
             }
         }
 
         $html .= '
-        <tr>
-            <td colspan="4" align="right"><b>Total</b></td>
-            <td><b>'.number_format($totalAmount,2).'</b></td>
-        </tr>
+            <tr>
+                <td colspan="4" align="right"><b>Total</b></td>
+                <td><b>'.number_format($grandTotal,2).'</b></td>
+            </tr>
         </table>';
 
-        $pdf->writeHTML($html, true, false, false, false, '');
+        $pdf->writeHTML($html, true, false, false, false);
 
-       // --- Charges & Net Amount (aligned right, narrower) ---
-        $pdf->Ln(3);
+        /* ================= TOTAL SUMMARY ================= */
         $conv = $invoice->convance_charges ?? 0;
         $labour = $invoice->labour_charges ?? 0;
         $discount = $invoice->bill_discount ?? 0;
-        $net = $totalAmount + $conv + $labour - $discount;
+        $net = $grandTotal + $conv + $labour - $discount;
 
+        $pdf->Ln(3);
         $pdf->SetFont('helvetica','B',10);
 
-        // Define widths
-        $labelWidth = 50;  // label column
-        $valueWidth = 30;  // value column
+        foreach ([
+            'Convance Charges' => $conv,
+            'Labour Charges'   => $labour,
+            'Discount'        => $discount,
+            'Net Amount'      => $net
+        ] as $label => $value) {
 
-        // Get right margin
-        $margins = $pdf->getMargins();
-        $startX = $pdf->getPageWidth() - $labelWidth - $valueWidth - $margins['right'];
-        $pdf->SetX($startX);
+            $pdf->SetX($pdf->getPageWidth() - 90);
+            $pdf->Cell(50,6,$label,1,0);
+            $pdf->Cell(30,6,number_format($value,2),1,1,'R');
+        }
 
-        $pdf->Cell($labelWidth, 6, 'Convance Charges', 1, 0, 'L');
-        $pdf->Cell($valueWidth, 6, number_format($conv,2), 1, 1, 'R');
-
-        $pdf->SetX($startX);
-        $pdf->Cell($labelWidth, 6, 'Labour Charges', 1, 0, 'L');
-        $pdf->Cell($valueWidth, 6, number_format($labour,2), 1, 1, 'R');
-
-        $pdf->SetX($startX);
-        $pdf->Cell($labelWidth, 6, 'Discount', 1, 0, 'L');
-        $pdf->Cell($valueWidth, 6, number_format($discount,2), 1, 1, 'R');
-
-        $pdf->SetX($startX);
-        $pdf->Cell($labelWidth, 6, 'Net Amount', 1, 0, 'L');
-        $pdf->Cell($valueWidth, 6, number_format($net,2), 1, 1, 'R');
-
-        // --- Terms / Conditions Paragraph ---
+        /* ================= TERMS ================= */
+        $pdf->Ln(5);
         $pdf->SetFont('helvetica','',10);
-        $pdf->Ln(5); // small spacing before paragraph
-        $terms = '
-        <p style="font-size:9px; line-height:12px">
+        $pdf->writeHTML('<p>
             Goods sold on credit, if not paid when due, or in case of law suit arising there from, the purchaser agrees to pay the seller all expense of recovery, collection, etc., including attorney fees, legal expense and/or recovery-agent charges. GOODS ONCE SOLD CANNOT BE RETURNED OR EXCHANGED. Any dispute, difference, controversy or claim arising out of or in connection with this sale, including (but not limited to) any issue regarding its existence, validity, interpretation, performance, discharge and other applicable remedies, shall be subject to the exclusive jurisdiction of Dubai Courts.
-        </p>
-        ';
-        $pdf->writeHTML($terms, true, false, false, false, '');
+        </p>', true, false, false, false);
 
+        /* ================= SIGNATURE ================= */
         // Footer Signature Lines
         $pdf->SetFont('helvetica', 'B', 12);
+        /* ================= SIGNATURE ================= */
         $pdf->Ln(20);
         $lineWidth = 60;
         $yPosition = $pdf->GetY();
 
         $pdf->Line(28, $yPosition, 20 + $lineWidth, $yPosition);
         $pdf->Line(130, $yPosition, 120 + $lineWidth, $yPosition);
-        $pdf->Ln(5);
 
         $pdf->SetXY(23, $yPosition);
         $pdf->Cell($lineWidth, 10, "Receiver's Signature", 0, 0, 'C');
