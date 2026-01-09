@@ -31,125 +31,125 @@ class PurchaseInvoice1Controller extends Controller
         return view('purchases-1.create', compact( 'vendors'));
     }
 
-public function store(Request $request)
-{
-    Log::info('PurchaseInvoice_1 store started', [
-        'user_id' => auth()->id(),
-        'payload' => $request->all(),
-    ]);
-
-    $request->validate([
-        'invoice_date' => 'required|date',
-        'vendor_id'    => 'required|exists:chart_of_accounts,id',
-        'remarks'      => 'nullable|string',
-        'net_amount'   => 'required|numeric|min:0',
-        'payment_method' => 'required|in:cash,credit,cheque,material',
-
-        'cheque_no'     => 'required_if:payment_method,cheque|nullable|string|max:50',
-        'cheque_date'   => 'required_if:payment_method,cheque|nullable|date',
-        'bank_name'     => 'required_if:payment_method,cheque|nullable|string|max:100',
-        'cheque_amount' => 'required_if:payment_method,cheque|nullable|numeric|min:0',
-
-        'material_weight' => 'required_if:payment_method,material|nullable|numeric|min:0',
-        'material_purity' => 'required_if:payment_method,material|nullable|numeric|min:0',
-        'material_value'  => 'required_if:payment_method,material|nullable|numeric|min:0',
-        'making_charges'  => 'required_if:payment_method,material|nullable|numeric|min:0',
-
-        'items' => 'required|array|min:1',
-        'items.*.item_description'=> 'required|string|max:255',
-        'items.*.purity'          => 'nullable|numeric|min:0',
-        'items.*.gross_weight'    => 'required|numeric|min:0',
-        'items.*.purity_weight'   => 'required|numeric|min:0',
-        'items.*.making_rate'    => 'nullable|numeric|min:0',
-        'items.*.metal_value'     => 'nullable|numeric|min:0',
-        'items.*.taxable_amount'  => 'required|numeric|min:0',
-        'items.*.vat_percent'      => 'nullable|numeric|min:0',
-    ]);
-
-    DB::beginTransaction();
-
-    try {
-
-        /* ---------- Invoice No ---------- */
-        $lastInvoice = PurchaseInvoice_1::withTrashed()->latest('id')->first();
-        $nextNumber  = $lastInvoice ? intval($lastInvoice->invoice_no) + 1 : 1;
-        $invoiceNo   = str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
-
-        Log::info('Invoice number generated', ['invoice_no' => $invoiceNo]);
-
-        /* ---------- Create Invoice ---------- */
-        $invoice = PurchaseInvoice_1::create([
-            'invoice_no'     => $invoiceNo,
-            'vendor_id'      => $request->vendor_id,
-            'invoice_date'   => $request->invoice_date,
-            'remarks'        => $request->remarks,
-            'net_amount'     => $request->net_amount,
-            'payment_method' => $request->payment_method,
-
-            'cheque_no'     => $request->cheque_no,
-            'cheque_date'   => $request->cheque_date,
-            'bank_name'     => $request->bank_name,
-            'cheque_amount' => $request->cheque_amount,
-
-            'material_weight' => $request->material_weight,
-            'material_purity' => $request->material_purity,
-            'material_value'  => $request->material_value,
-            'making_charges'  => $request->making_charges,
-
-            'created_by' => auth()->id(),
-        ]);
-
-        Log::info('Purchase invoice created', ['invoice_id' => $invoice->id]);
-
-        /* ---------- Items ---------- */
-        foreach ($request->items as $index => $item) {
-
-            $invoice->items()->create([
-                'item_description'     => $item['item_description'],
-                'purity'          => $item['purity'] ?? 0,
-                'gross_weight'    => $item['gross_weight'],
-                'purity_weight'   => $item['purity_weight'],
-                'making_value'    => $item['making_value'] ?? 0,
-                'metal_value'     => $item['metal_value'] ?? 0,
-                'taxable_amount'  => $item['taxable_amount'],
-                'vat_amount'      => $item['vat_amount'] ?? 0,
-            ]);
-
-            Log::info('Invoice item added', [
-                'invoice_id' => $invoice->id,
-                'row' => $index + 1,
-                'description' => $item['item_description'],
-            ]);
-        }
-
-        DB::commit();
-
-        Log::info('PurchaseInvoice_1 stored successfully', [
-            'invoice_id' => $invoice->id,
-            'net_amount' => $invoice->net_amount,
-        ]);
-
-        return redirect()
-            ->route('purchase_invoices_1.index')
-            ->with('success', 'Purchase Invoice created successfully.');
-
-    } catch (\Throwable $e) {
-
-        DB::rollBack();
-
-        Log::error('PurchaseInvoice_1 store failed', [
+    public function store(Request $request)
+    {
+        Log::info('PurchaseInvoice_1 store started', [
             'user_id' => auth()->id(),
-            'message' => $e->getMessage(),
-            'file'    => $e->getFile(),
-            'line'    => $e->getLine(),
-            'trace'   => $e->getTraceAsString(),
+            'payload' => $request->all(),
         ]);
 
-        return back()
-            ->withInput()
-            ->withErrors(['error' => 'Failed to create purchase invoice. Check logs for details.']);
+        $request->validate([
+            'invoice_date' => 'required|date',
+            'vendor_id'    => 'required|exists:chart_of_accounts,id',
+            'remarks'      => 'nullable|string',
+            'net_amount'   => 'required|numeric|min:0',
+            'payment_method' => 'required|in:cash,credit,cheque,material',
+
+            'cheque_no'     => 'required_if:payment_method,cheque|nullable|string|max:50',
+            'cheque_date'   => 'required_if:payment_method,cheque|nullable|date',
+            'bank_name'     => 'required_if:payment_method,cheque|nullable|string|max:100',
+            'cheque_amount' => 'required_if:payment_method,cheque|nullable|numeric|min:0',
+
+            'material_weight' => 'required_if:payment_method,material|nullable|numeric|min:0',
+            'material_purity' => 'required_if:payment_method,material|nullable|numeric|min:0',
+            'material_value'  => 'required_if:payment_method,material|nullable|numeric|min:0',
+            'making_charges'  => 'required_if:payment_method,material|nullable|numeric|min:0',
+
+            'items' => 'required|array|min:1',
+            'items.*.item_description'=> 'required|string|max:255',
+            'items.*.purity'          => 'nullable|numeric|min:0',
+            'items.*.gross_weight'    => 'required|numeric|min:0',
+            'items.*.purity_weight'   => 'required|numeric|min:0',
+            'items.*.making_rate'    => 'nullable|numeric|min:0',
+            'items.*.metal_value'     => 'nullable|numeric|min:0',
+            'items.*.taxable_amount'  => 'required|numeric|min:0',
+            'items.*.vat_percent'      => 'nullable|numeric|min:0',
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+
+            /* ---------- Invoice No ---------- */
+            $lastInvoice = PurchaseInvoice_1::withTrashed()->latest('id')->first();
+            $nextNumber  = $lastInvoice ? intval($lastInvoice->invoice_no) + 1 : 1;
+            $invoiceNo   = str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
+
+            Log::info('Invoice number generated', ['invoice_no' => $invoiceNo]);
+
+            /* ---------- Create Invoice ---------- */
+            $invoice = PurchaseInvoice_1::create([
+                'invoice_no'     => $invoiceNo,
+                'vendor_id'      => $request->vendor_id,
+                'invoice_date'   => $request->invoice_date,
+                'remarks'        => $request->remarks,
+                'net_amount'     => $request->net_amount,
+                'payment_method' => $request->payment_method,
+
+                'cheque_no'     => $request->cheque_no,
+                'cheque_date'   => $request->cheque_date,
+                'bank_name'     => $request->bank_name,
+                'cheque_amount' => $request->cheque_amount,
+
+                'material_weight' => $request->material_weight,
+                'material_purity' => $request->material_purity,
+                'material_value'  => $request->material_value,
+                'making_charges'  => $request->making_charges,
+
+                'created_by' => auth()->id(),
+            ]);
+
+            Log::info('Purchase invoice created', ['invoice_id' => $invoice->id]);
+
+            /* ---------- Items ---------- */
+            foreach ($request->items as $index => $item) {
+
+                $invoice->items()->create([
+                    'item_description'     => $item['item_description'],
+                    'purity'          => $item['purity'] ?? 0,
+                    'gross_weight'    => $item['gross_weight'],
+                    'purity_weight'   => $item['purity_weight'],
+                    'making_value'    => $item['making_value'] ?? 0,
+                    'metal_value'     => $item['metal_value'] ?? 0,
+                    'taxable_amount'  => $item['taxable_amount'],
+                    'vat_amount'      => $item['vat_amount'] ?? 0,
+                ]);
+
+                Log::info('Invoice item added', [
+                    'invoice_id' => $invoice->id,
+                    'row' => $index + 1,
+                    'description' => $item['item_description'],
+                ]);
+            }
+
+            DB::commit();
+
+            Log::info('PurchaseInvoice_1 stored successfully', [
+                'invoice_id' => $invoice->id,
+                'net_amount' => $invoice->net_amount,
+            ]);
+
+            return redirect()
+                ->route('purchase_invoices_1.index')
+                ->with('success', 'Purchase Invoice created successfully.');
+
+        } catch (\Throwable $e) {
+
+            DB::rollBack();
+
+            Log::error('PurchaseInvoice_1 store failed', [
+                'user_id' => auth()->id(),
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
+
+            return back()
+                ->withInput()
+                ->withErrors(['error' => 'Failed to create purchase invoice. Check logs for details.']);
+        }
     }
-}
 
     public function edit($id)
     {
@@ -390,12 +390,91 @@ public function store(Request $request)
         $pdf->writeHTML($html, true, false, false, false);
 
 
+        /* ================= PAYMENT TERMS ================= */
+        $paymentHtml = '
+        <table width="100%" cellpadding="4" style="font-size:9px;margin-top:8px;">
+            <tr>
+                <!-- LEFT : PAYMENT TERMS -->
+                <td width="50%" valign="top">
+                    <table border="1" cellpadding="4" width="100%">
+                        <tr style="background-color:#f5f5f5;">
+                            <td colspan="2"><b>Payment Terms</b></td>
+                        </tr>
+                        <tr>
+                            <td width="40%"><b>Payment Method</b></td>
+                            <td width="60%">'.ucfirst($invoice->payment_method).'</td>
+                        </tr>
+        ';
+
+        if ($invoice->payment_method === 'cheque') {
+            $paymentHtml .= '
+                <tr>
+                    <td><b>Cheque No</b></td>
+                    <td>'.$invoice->cheque_no.'</td>
+                </tr>
+                <tr>
+                    <td><b>Cheque Date</b></td>
+                    <td>'.\Carbon\Carbon::parse($invoice->cheque_date)->format('d.m.Y').'</td>
+                </tr>
+                <tr>
+                    <td><b>Bank Name</b></td>
+                    <td>'.$invoice->bank_name.'</td>
+                </tr>
+                <tr>
+                    <td><b>Cheque Amount</b></td>
+                    <td>'.number_format($invoice->cheque_amount,2).'</td>
+                </tr>
+            ';
+        }
+
+        if ($invoice->payment_method === 'material') {
+            $paymentHtml .= '
+                <tr>
+                    <td><b>Raw Metal Weight</b></td>
+                    <td>'.number_format($invoice->material_weight,2).'</td>
+                </tr>
+                <tr>
+                    <td><b>Raw Metal Purity</b></td>
+                    <td>'.number_format($invoice->material_purity,2).'</td>
+                </tr>
+                <tr>
+                    <td><b>Metal Adjustment</b></td>
+                    <td>'.number_format($invoice->material_value,2).'</td>
+                </tr>
+                <tr>
+                    <td><b>Making Charges</b></td>
+                    <td>'.number_format($invoice->making_charges,2).'</td>
+                </tr>
+            ';
+        }
+
+        $paymentHtml .= '
+            </table>
+                </td>
+
+                    <!-- RIGHT : CURRENCY CONVERSION PLACEHOLDER -->
+                    <td width="30%" valign="top">
+                        <table border="1" cellpadding="4" width="100%">
+                            <tr style="background-color:#f5f5f5;">
+                                <td><b>Currency Conversion</b></td>
+                            </tr>
+                            <tr>
+                                <td height="20">&nbsp;</td>
+                            </tr>
+                        </table>
+                    </td>
+            </tr>
+        </table>';
+
+        $pdf->Ln(3);
+        $pdf->writeHTML($paymentHtml, true, false, false, false);
+
+
         /* ================= TERMS ================= */
         $pdf->Ln(5);
-        $pdf->SetFont('helvetica','',9);
+        $pdf->SetFont('helvetica','',10);
         $pdf->writeHTML('<p>
-            Goods once sold cannot be returned or exchanged. Any dispute arising out of this invoice
-            shall be subject to the exclusive jurisdiction of Dubai Courts.
+            Goods sold on credit, if not paid when due, or in case of law suit arising there from, the purchaser agrees to pay the seller all expense of recovery, collection, etc., including attorney fees, legal expense and/or recovery-agent charges. GOODS ONCE SOLD CANNOT BE RETURNED OR EXCHANGED. Any dispute, difference, controversy or claim arising out of or in connection with this sale, including (but not limited to) any issue regarding its existence, validity, interpretation, performance, discharge and other applicable remedies, shall be subject to the exclusive jurisdiction of Dubai Courts.
         </p>', true, false, false, false);
 
         /* ================= SIGNATURE ================= */
