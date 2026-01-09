@@ -80,13 +80,13 @@
                   <td><input type="number" name="items[0][purity_weight]" step="any" value="0" class="form-control purity-weight"></td>
 
                   <td><input type="number" name="items[0][making_rate]"  step="any" value="0" class="form-control making-rate"></td>
-                  <td><input type="number" name="items[0][making_value]" step="any" value="0" class="form-control making-value"></td>
+                  <td><input type="number" name="items[0][making_value]" step="any" class="form-control making-value" readonly></td>
 
                   <td><input type="number" name="items[0][metal_value]" step="any" value="0" class="form-control metal-value"></td>
                   <td><input type="number" name="items[0][taxable_amount]" step="any" value="0" class="form-control taxable-amount"></td>
 
-                  <td><input type="number" class="form-control vat-percent" step="any" value="0"></td>
-                  <td><input type="number" name="items[0][vat_percent]" step="any" value="0" class="form-control vat_percent"></td>
+                  <td><input type="number" name="items[0][vat_percent]" class="form-control vat-percent" step="any" value="0"></td>
+                  <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
 
                   <td><input type="number" class="form-control item-total" readonly></td>
 
@@ -225,13 +225,13 @@
       <td><input type="number" name="items[${index}][purity_weight]" step="any" value="0" class="form-control purity-weight"></td>
 
       <td><input type="number" name="items[${index}][making_rate]" step="any" value="0" class="form-control making-rate" ></td>
-      <td><input type="number" name="items[${index}][making_value]" step="any" value="0" class="form-control making-value"></td>
+      <td><input type="number" name="items[${index}][making_value]" step="any" class="form-control making-value" readonly></td>
 
       <td><input type="number" name="items[${index}][metal_value]" step="any" value="0" class="form-control metal-value"></td>
       <td><input type="number" name="items[${index}][taxable_amount]" step="any" value="0" class="form-control taxable-amount"></td>
 
-      <td><input type="number" class="form-control vat-percent" step="any" value="0"></td>
-      <td><input type="number" name="items[${index}][vat_percent]" step="any" value="0" class="form-control vat_percent"></td>
+      <td><input type="number" name="items[${index}][vat_percent]" class="form-control vat-percent" step="any" value="0"></td>
+      <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
 
       <td><input type="number" class="form-control item-total" readonly></td>
 

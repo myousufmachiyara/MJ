@@ -14,10 +14,10 @@ class PurchaseInvoice_1_Item extends Model
         'purity',
         'gross_weight',
         'purity_weight',
-        'making_value',
+        'making_rate',
         'metal_value',
         'taxable_amount',
-        'vat_amount',
+        'vat_percent',
     ];
 
     /* ================= RELATIONS ================= */
