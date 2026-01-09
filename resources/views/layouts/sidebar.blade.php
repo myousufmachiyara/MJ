@@ -95,12 +95,15 @@
           @endif
 
           {{-- Purchase Invoices --}}
-          @if(auth()->user()->can('purchase_invoices.index') || auth()->user()->can('purchase_return.index'))
+          @if(auth()->user()->can('purchase_invoices.index') || auth()->user()->can('purchase_invoices_1.index') || auth()->user()->can('purchase_return.index'))
           <li class="nav-parent">
             <a class="nav-link" href="#"><i class="fa fa-shopping-cart"></i> <span>Purchase</span></a>
             <ul class="nav nav-children">
               @can('purchase_orders.index')
                 <li><a class="nav-link" href="{{ route('purchase_orders.index') }}">Orders</a></li>
+              @endcan
+              @can('purchase_invoices_1.index')
+              <li><a class="nav-link" href="{{ route('purchase_invoices_1.index') }}">Invoices 1</a></li>
               @endcan
               @can('purchase_invoices.index')
               <li><a class="nav-link" href="{{ route('purchase_invoices.index') }}">Invoices</a></li>
@@ -108,6 +111,7 @@
               @can('purchase_return.index')
               <li><a class="nav-link" href="{{ route('purchase_return.index') }}">Returns</a></li>
               @endcan
+
             </ul>
           </li>
           @endif

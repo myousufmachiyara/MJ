@@ -32,6 +32,7 @@ use App\Http\Controllers\{
     ProductionReturnController,
     ProductSubcategoryController,
     MarketRateController,
+    PurchaseInvoice1Controller,
 };
 
 Auth::routes();
@@ -84,6 +85,7 @@ Route::middleware(['auth'])->group(function () {
 
         // Purchases
         'purchase_invoices' => ['controller' => PurchaseInvoiceController::class, 'permission' => 'purchase_invoices'],
+        'purchase_invoices_1' => ['controller' => PurchaseInvoice1Controller::class, 'permission' => 'purchase_invoices_1'],
         'purchase_return' => ['controller' => PurchaseReturnController::class, 'permission' => 'purchase_return'],
 
         // Sales

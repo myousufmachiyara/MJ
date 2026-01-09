@@ -5,8 +5,9 @@
 @section('content')
 <div class="row">
   <div class="col">
-    <form action="{{ route('purchase_invoices.store') }}" method="POST" onkeydown="return event.key != 'Enter';" enctype="multipart/form-data">
+    <form action="{{ route('purchase_invoices_1.store') }}" method="POST" enctype="multipart/form-data">
       @csrf
+
       @if ($errors->any())
         <div class="alert alert-danger">
           <ul class="mb-0">
@@ -16,20 +17,22 @@
           </ul>
         </div>
       @endif
+
       <section class="card">
-        <header class="card-header d-flex justify-content-between align-items-center">
+        <header class="card-header">
           <h2 class="card-title">New Purchase Invoice</h2>
         </header>
 
         <div class="card-body">
-          <div class="row">
 
-            <div class="col-md-2 mb-3">
+          {{-- HEADER --}}
+          <div class="row mb-3">
+            <div class="col-md-2">
               <label>Invoice Date</label>
-              <input type="date" name="invoice_date" class="form-control" value="{{ date('Y-m-d') }}" required>
+              <input type="date" name="invoice_date" class="form-control" value="{{ date('Y-m-d') }}">
             </div>
 
-            <div class="col-md-2 mb-3">
+            <div class="col-md-3">
               <label>Vendor</label>
               <select name="vendor_id" class="form-control select2-js" required>
                 <option value="">Select Vendor</option>
@@ -39,51 +42,29 @@
               </select>
             </div>
 
-            <div class="col-md-2 mb-3">
-              <label>Payment Terms</label>
-              <input type="text" name="payment_terms" class="form-control">
-            </div>
-
-            <div class="col-md-1 mb-3">
-              <label>Bill #</label>
-              <input type="text" name="bill_no" class="form-control">
-            </div>
-
-            <div class="col-md-2 mb-3">
-              <label>Ref.</label>
-              <input type="text" name="ref_no" class="form-control">
-            </div>
-
-            <div class="col-md-3 mb-3">
-              <label>Attachments</label>
-              <input type="file" name="attachments[]" class="form-control" multiple accept=".pdf,.jpg,.jpeg,.png,.zip">
-            </div>
-
-            <div class="col-md-4 mb-3">
+            <div class="col-md-4">
               <label>Remarks</label>
-              <textarea name="remarks" class="form-control" rows="3"></textarea>
+              <textarea name="remarks" class="form-control"></textarea>
             </div>
           </div>
 
-          <div class="table-responsive mb-3">
-            <table class="table table-bordered" id="purchaseTable">
+          {{-- TABLE --}}
+          <div class="table-responsive">
+            <table class="table table-bordered">
               <thead>
                 <tr>
-                  <th width="12%" rowspan="2">Item</th>
-                  <th width="12%" rowspan="2">Variation</th>
-                  <th width="8%" rowspan="2">Purity</th>
-                  <th width="10%" rowspan="2">Gross Wt.</th>
-                  <th width="10%" rowspan="2">Purity Wt.</th>
-                  <th width="10%" rowspan="2">Unit</th>
-                  <th width="15%" colspan="2" class="text-center">Making</th>
-                  <th width="10%" rowspan="2">Metal Val</th>
-                  <th width="10%" rowspan="2">Taxable Amt</th>
-                  <th width="10%" rowspan="2">VAT %</th>
-                  <th width="10%" rowspan="2">VAT Amt</th>
-                  <th width="10%" rowspan="2">Gross Val Incl. VAT</th>
-                  <th width="7%" rowspan="2">Action</th>
+                  <th width="15%" rowspan="2">Item Description</th>
+                  <th rowspan="2">Purity</th>
+                  <th rowspan="2">Gross Wt</th>
+                  <th rowspan="2">Purity Wt</th>
+                  <th colspan="2" class="text-center">Making</th>
+                  <th rowspan="2">Metal Val</th>
+                  <th rowspan="2">Taxable</th>
+                  <th rowspan="2">VAT %</th>
+                  <th rowspan="2">VAT Amt</th>
+                  <th rowspan="2">Gross Total</th>
+                  <th rowspan="2">Action</th>
                 </tr>
-
                 <tr>
                   <th>Rate</th>
                   <th>Value</th>
@@ -91,115 +72,134 @@
               </thead>
 
               <tbody id="Purchase1Table">
-                <tr class="item-row" data-item-index="0">
+                <tr>
+                  <td><input type="text" name="items[0][item_description]" class="form-control" required></td>
+                  <td><input type="number" name="items[0][purity]" step="any" value="0" class="form-control"></td>
+
+                  <td><input type="number" name="items[0][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>
+                  <td><input type="number" name="items[0][purity_weight]" step="any" value="0" class="form-control purity-weight"></td>
+
+                  <td><input type="number" name="items[0][making_rate]"  step="any" value="0" class="form-control making-rate"></td>
+                  <td><input type="number" name="items[0][making_value]" step="any" value="0" class="form-control making-value"></td>
+
+                  <td><input type="number" name="items[0][metal_value]" step="any" value="0" class="form-control metal-value"></td>
+                  <td><input type="number" name="items[0][taxable_amount]" step="any" value="0" class="form-control taxable-amount"></td>
+
+                  <td><input type="number" class="form-control vat-percent" step="any" value="0"></td>
+                  <td><input type="number" name="items[0][vat_percent]" step="any" value="0" class="form-control vat_percent"></td>
+
+                  <td><input type="number" class="form-control item-total" readonly></td>
+
                   <td>
-                    <div class="product-wrapper">
-                      <select name="items[0][item_id]" id="item_name1" class="form-control select2-js product-select" onchange="onItemNameChange(this)">
-                        <option value="">Select product</option>
-                        @foreach($products as $p)
-                          <option value="{{ $p->id }}" data-unit-id="{{ $p->measurement_unit }}">
-                            {{ $p->name }}
-                          </option>
-                        @endforeach
-                      </select>
-
-                      <input type="text" name="items[0][temp_product_name]" class="form-control new-product-input mt-1" style="display:none" placeholder="Enter new product name">
-
-                      <button type="button" class="btn btn-link p-0 toggle-new"> + Product </button>
-                    </div>
-                  </td>
-
-                  <td>
-                    <select name="items[0][variation_id]" class="form-control select2-js variation-select">
-                      <option value="">Select Variation</option>
-                    </select>
-                  </td>
-                  <td><input type="number" class="form-control" value="0" step="any"></td>                  
-                  <td><input type="number" class="form-control" value="0" step="any"></td>
-                  <td><input type="number" class="form-control" value="0" step="any"></td>
-                  <td>
-                    <select name="items[0][unit]" id="unit1" class="form-control" required>
-                      <option value="">-- Select --</option>
-                      @foreach ($units as $unit)
-                        <option value="{{ $unit->id }}">{{ $unit->name }} ({{ $unit->shortcode }})</option>
-                      @endforeach
-                    </select>
-                  </td>
-                  <td><input type="number" class="form-control" value="0" step="any"></td>
-                  <td><input type="number" class="form-control" value="0" step="any"></td>
-                  <td><input type="number" class="form-control" value="0" step="any"></td>
-                  <td><input type="number" class="form-control" value="0" step="any"></td>
-                  <td><input type="number" name="items[0][quantity]" id="pur_qty1" class="form-control quantity" value="0" step="any" onchange="rowTotal(1)"></td>
-
-                  <td><input type="number" name="items[0][price]" id="pur_price1" class="form-control" value="0" step="any" onchange="rowTotal(1)"></td>
-                  <td><input type="number" id="amount1" class="form-control" value="0" step="any" disabled></td>
-                  <td>
-                    <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
-                    <button type="button" class="btn btn-sm btn-primary toggle-parts"> <i class="fas fa-wrench"></i> </button>
-                  </td>
-                </tr>
-                <tr class="parts-row" style="display:none;background:#efefef">
-                  <td colspan="7">
-                    <div class="parts-wrapper">
-                      <table class="table table-sm table-bordered parts-table">
-                        <thead>
-                          <tr>
-                            <th>Part</th>
-                            <th>Variation</th>
-                            <th>Qty</th>
-                            <th>Rate</th>
-                            <th>Wastage</th>
-                            <th>Total</th>
-                            <th></th>
-                          </tr>
-                        </thead>
-                        <tbody></tbody>
-                      </table>
-
-                      <button type="button" class="btn btn-sm btn-outline-primary add-part"> + Add Part </button>
-                    </div>
+                    <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">
+                      <i class="fas fa-times"></i>
+                    </button>
                   </td>
                 </tr>
               </tbody>
             </table>
-            <button type="button" class="btn btn-outline-primary" onclick="addNewRow_btn()"><i class="fas fa-plus"></i> Add Item</button>
+
+            <button type="button" class="btn btn-outline-primary" onclick="addNewRow()">Add Item</button>
           </div>
 
-          <div class="row mb-3">
+          {{-- SUMMARY --}}
+          <div class="row mt-5 mb-3">
             <div class="col-md-2">
-              <label>Total Amount</label>
-              <input type="text" id="totalAmount" class="form-control" disabled>
-              <input type="hidden" name="total_amount" id="total_amount_show">
+              <label>Total Gross Wt</label>
+              <input type="text" id="sum_gross_weight" class="form-control" readonly>
             </div>
             <div class="col-md-2">
-              <label>Total Quantity</label>
-              <input type="text" id="total_quantity" class="form-control" disabled>
-              <input type="hidden" name="total_quantity" id="total_quantity_show">
+              <label>Total Purity Wt</label>
+              <input type="text" id="sum_purity_weight" class="form-control" readonly>
             </div>
             <div class="col-md-2">
-              <label>Convance Charges</label>
-              <input type="number" name="convance_charges" id="convance_charges" class="form-control" value="0" onchange="netTotal()">
+              <label>Total Making</label>
+              <input type="text" id="sum_making_value" class="form-control" readonly>
             </div>
             <div class="col-md-2">
-              <label>Labour Charges</label>
-              <input type="number" name="labour_charges" id="labour_charges" class="form-control" value="0" onchange="netTotal()">
+              <label>Total Metal</label>
+              <input type="text" id="sum_metal_value" class="form-control" readonly>
             </div>
             <div class="col-md-2">
-              <label>Bill Discount</label>
-              <input type="number" name="bill_discount" id="bill_discount" class="form-control" value="0" onchange="netTotal()">
+              <label>Total VAT</label>
+              <input type="text" id="sum_vat_amount" class="form-control" readonly>
             </div>
-          </div>
-
-          <div class="row">
-            <div class="col text-end">
-              <h4>Net Amount: <strong class="text-danger">PKR <span id="netTotal">0.00</span></strong></h4>
+            <div class="col-md-2">
+              <label>Net Amount</label>
+              <input type="text" id="net_amount_display" class="form-control text-danger fw-bold" readonly>
               <input type="hidden" name="net_amount" id="net_amount">
             </div>
           </div>
+
+          {{-- PAYMENT METHOD --}}
+          <hr>
+
+          <div class="row mb-3">
+            <div class="col-md-3">
+              <label class="fw-bold">Payment Method</label>
+              <select name="payment_method" id="payment_method" class="form-control" required>
+                <option value="">Select Payment Method</option>
+                <option value="cash">Cash</option>
+                <option value="credit">Credit</option>
+                <option value="cheque">Cheque</option>
+                <option value="material">Material + Making Cost</option>
+              </select>
+            </div>
+          </div>
+
+          {{-- CHEQUE DETAILS --}}
+          <div class="row mb-3 d-none" id="cheque_fields">
+            <div class="col-md-3">
+              <label>Cheque No</label>
+              <input type="text" name="cheque_no" class="form-control">
+            </div>
+
+            <div class="col-md-3">
+              <label>Cheque Date</label>
+              <input type="date" name="cheque_date" class="form-control">
+            </div>
+
+            <div class="col-md-3">
+              <label>Bank Name</label>
+              <input type="text" name="bank_name" class="form-control">
+            </div>
+
+            <div class="col-md-3">
+              <label>Cheque Amount</label>
+              <input type="number" step="any" name="cheque_amount" class="form-control">
+            </div>
+          </div>
+
+          {{-- MATERIAL + MAKING COST --}}
+          <div class="row mb-3 d-none" id="material_fields">
+            <div class="col-md-3">
+              <label>Raw Metal Weight Given</label>
+              <input type="number" step="any" name="material_weight" class="form-control">
+            </div>
+
+            <div class="col-md-3">
+              <label>Raw Metal Purity</label>
+              <input type="number" step="any" name="material_purity" class="form-control">
+            </div>
+
+            <div class="col-md-3">
+              <label>Metal Adjustment Value</label>
+              <input type="number" step="any" name="material_value" class="form-control">
+            </div>
+
+            <div class="col-md-3">
+              <label>Making Charges Payable</label>
+              <input type="number" step="any" name="making_charges" class="form-control">
+            </div>
+          </div>
+
+
         </div>
 
         <footer class="card-footer text-end">
-          <button type="submit" class="btn btn-success"> <i class="fas fa-save"></i> Save Invoice</button>
+          <button type="submit" class="btn btn-success">
+            <i class="fas fa-save"></i> Save Invoice
+          </button>
         </footer>
       </section>
     </form>
@@ -207,339 +207,89 @@
 </div>
 
 <script>
-  var products = @json($products);
-  var index = 2;
+  let index = 1;
 
   $(document).ready(function () {
-    $('.select2-js').select2({ width: '100%', dropdownAutoWidth: true });
-
-    // 🔹 Manual Product selection flow
-    $(document).on('change', '.product-select', function () {
-      const row = $(this).closest('tr');
-      const productId = $(this).val();
-      const preselectVariationId = $(this).data('preselectVariationId') || null;
-      $(this).removeData('preselectVariationId');
-
-      if (productId) {
-        loadVariations(row, productId, preselectVariationId);
-      } else {
-        row.find('.variation-select')
-          .html('<option value="">Select Variation</option>')
-          .prop('disabled', false)
-          .trigger('change');
-      }
-    });
-
-    $(document).on('click', '.toggle-new', function () {
-      let wrapper = $(this).closest('.product-wrapper');
-      let select  = wrapper.find('.product-select');
-      let input   = wrapper.find('.new-product-input');
-
-      let select2 = select.next('.select2-container');
-
-      if (input.is(':visible')) {
-        input.hide().val('');
-        select.show();
-        select2.show();
-        select.val('').trigger('change');
-        $(this).text('+ New');
-      } else {
-        select.val('').trigger('change');
-        select.hide();
-        select2.hide();
-        input.show().focus();
-        $(this).text('Cancel');
-      }
-    });
-
-    $(document).on('click', '.toggle-parts', function () {
-      let itemRow = $(this).closest('tr');
-      let partsRow = itemRow.next('.parts-row');
-      partsRow.toggle();
-    });
-
-    $(document).on('click', '.add-part', function () {
-      let partsRow = $(this).closest('.parts-row');
-      let partsTable = partsRow.find('.parts-table tbody');
-      let itemIndex = partsRow.prev('.item-row').data('item-index'); // ✅ gets numeric index
-      addPartRow(partsTable, itemIndex);
-    });
-
-    $(document).on('click', '.remove-part', function () {
-      $(this).closest('tr').remove();
-    });
-
-    $(document).on('input', '.part-qty, .part-rate, .part-wastage', function () {
-      let row = $(this).closest('tr');
-
-      let qty = parseFloat(row.find('.part-qty').val()) || 0;
-      let rate = parseFloat(row.find('.part-rate').val()) || 0;
-      let wastage = parseFloat(row.find('.part-wastage').val()) || 0;
-
-      let total = (qty + wastage) * rate;
-      row.find('.part-total').val(total.toFixed(2));
-
-      recalcItemTotal(row);
-    });
-
-    $(document).on('change', '.part-product-select', function () {
-
-      let row = $(this).closest('tr');
-      let productId = $(this).val();
-      let variationSelect = row.find('.part-variation-select');
-
-      if (!productId) {
-        variationSelect.html('<option value="">Select Variation</option>')
-          .prop('disabled', true)
-          .trigger('change');
-        return;
-      }
-
-      variationSelect.prop('disabled', true).html('<option>Loading...</option>');
-
-      $.get(`/product/${productId}/variations`, function (data) {
-
-        let variations = data.variation || data.variations || [];
-        let options = '<option value="">Select Variation</option>';
-
-        if (variations.length) {
-          variations.forEach(v => {
-            options += `<option value="${v.id}">${v.sku}</option>`;
-          });
-          variationSelect.prop('disabled', false);
-        }
-
-        variationSelect.html(options).trigger('change');
-      });
+    $('.select2-js').select2({
+      width: '100%'
     });
   });
 
-  // 🔹 Keep all your existing functions exactly as they are
-  function onItemNameChange(selectElement) {
-    const row = selectElement.closest('tr');
-    const selectedOption = selectElement.options[selectElement.selectedIndex];
-
-    const itemId = selectedOption.value;
-    const unitId = selectedOption.getAttribute('data-unit-id');
-
-    const idMatch = selectElement.id.match(/\d+$/);
-    if (!idMatch) return;
-
-    const index = idMatch[0];
-
-    const unitSelector = $(`#unit${index}`);
-    unitSelector.val(String(unitId)).trigger('change.select2');
-  }
-
-  function addPartRow(partsTable, itemIndex) {
-    let partIndex = partsTable.find('tr').length;
-
-    let row = `
-      <tr style="background:#efefef">
-        <td>
-          <select name="items[${itemIndex}][parts][${partIndex}][product_id]"
-                  class="form-control part-product-select">
-            <option value="">Select Part</option>
-            ${products.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-          </select>
-        </td>
-
-        <td>
-          <select name="items[${itemIndex}][parts][${partIndex}][variation_id]"
-                  class="form-control part-variation-select" disabled>
-            <option value="">Select Variation</option>
-          </select>
-        </td>
-
-        <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][qty]" class="form-control part-qty"></td>
-        <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][rate]" class="form-control part-rate"></td>
-        <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][wastage]" class="form-control part-wastage"></td>
-        <td><input type="number" class="form-control part-total" disabled></td>
-        <td><button type="button" class="btn btn-sm btn-danger remove-part">×</button></td>
-      </tr>
-    `;
-
-    partsTable.append(row);
-
-    // ✅ initialize select2 AFTER append
-    partsTable.find('select').select2({ width: '100%' });
-  }
-
-  function removeRow(button) {
-    let rows = $('#Purchase1Table tr').length;
-    if (rows > 1) {
-      $(button).closest('tr').remove();
-      $('#itemCount').val(--rows);
-      tableTotal();
-    }
-  }
-
-  function addNewRow_btn() {
-    addNewRow();
-  }
-
   function addNewRow() {
-    let table = $('#Purchase1Table');
-    let rowIndex = index - 1;
+    let row = `
+    <tr>
+      <td><input type="text" name="items[${index}][item_description]" class="form-control"></td>
+      <td><input type="number" name="items[${index}][purity]" step="any" value="0" class="form-control"></td>
 
-    let newRow = `
-      <tr class="item-row" data-item-index="${rowIndex}">
-        <td>
-          <div class="product-wrapper">
-            <select name="items[${rowIndex}][item_id]" id="item_name${index}" class="form-control select2-js product-select" onchange="onItemNameChange(this)">
-              <option value="">Select product</option>
-              ${products.map(p =>
-                `<option value="${p.id}" data-unit-id="${p.measurement_unit}">
-                  ${p.name}
-                </option>`).join('')}
-            </select>
+      <td><input type="number" name="items[${index}][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>
+      <td><input type="number" name="items[${index}][purity_weight]" step="any" value="0" class="form-control purity-weight"></td>
 
-            <input type="text" name="items[${rowIndex}][temp_product_name]" class="form-control new-product-input mt-1" style="display:none" placeholder="Enter new product name">
+      <td><input type="number" name="items[${index}][making_rate]" step="any" value="0" class="form-control making-rate" ></td>
+      <td><input type="number" name="items[${index}][making_value]" step="any" value="0" class="form-control making-value"></td>
 
-            <button type="button" class="btn btn-link p-0 toggle-new"> + Product </button>
-          </div>
-        </td>
+      <td><input type="number" name="items[${index}][metal_value]" step="any" value="0" class="form-control metal-value"></td>
+      <td><input type="number" name="items[${index}][taxable_amount]" step="any" value="0" class="form-control taxable-amount"></td>
 
-        <td>
-          <select name="items[${rowIndex}][variation_id]" class="form-control select2-js variation-select">
-            <option value="">Select Variation</option>
-          </select>
-        </td>
+      <td><input type="number" class="form-control vat-percent" step="any" value="0"></td>
+      <td><input type="number" name="items[${index}][vat_percent]" step="any" value="0" class="form-control vat_percent"></td>
 
-        <td><input type="number" name="items[${rowIndex}][quantity]" id="pur_qty${index}" class="form-control quantity" value="0" step="any" onchange="rowTotal(${index})"></td>
+      <td><input type="number" class="form-control item-total" readonly></td>
 
-        <td>
-          <select name="items[${rowIndex}][unit]" id="unit${index}" class="form-control" required>
-            <option value="">-- Select --</option>
-            @foreach ($units as $unit)
-              <option value="{{ $unit->id }}">{{ $unit->name }} ({{ $unit->shortcode }})</option>
-            @endforeach
-          </select>
-        </td>
-
-        <td><input type="number" name="items[${rowIndex}][price]" id="pur_price${index}" class="form-control" value="0" step="any" onchange="rowTotal(${index})"></td>
-        <td><input type="number" id="amount${index}" class="form-control" value="0" step="any" disabled></td>
-        <td>
-          <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
-          <button type="button" class="btn btn-sm btn-primary toggle-parts"> <i class="fas fa-wrench"></i> </button>
-        </td>
-      </tr>
-    `;
-
-    let partsRowHtml = `
-      <tr class="parts-row" style="display:none;background:#efefef">
-        <td colspan="7">
-          <div class="parts-wrapper">
-            <table class="table table-sm table-bordered parts-table">
-              <thead>
-                <tr>
-                  <th>Part</th>
-                  <th>Variation</th>
-                  <th>Qty</th>
-                  <th>Rate</th>
-                  <th>Wastage</th>
-                  <th>Total</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-
-            <button type="button"
-                    class="btn btn-sm btn-outline-primary add-part">
-              + Add Part
-            </button>
-          </div>
-        </td>
-      </tr>`;
-
-
-    table.append(newRow);
-    table.append(partsRowHtml);
-    $('#itemCount').val(index);
-    $(`#item_name${index}`).select2();
-    $(`#unit${index}`).select2();
+      <td>
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">
+          <i class="fas fa-times"></i>
+        </button>
+      </td>
+    </tr>`;
+    $('#Purchase1Table').append(row);
     index++;
   }
 
-  function rowTotal(row) {
-    let quantity = parseFloat($('#pur_qty' + row).val()) || 0;
-    let price = parseFloat($('#pur_price' + row).val()) || 0;
-    $('#amount' + row).val((quantity * price).toFixed(2));
-    tableTotal();
+  function removeRow(btn) {
+    if ($('#Purchase1Table tr').length > 1) {
+      $(btn).closest('tr').remove();
+      calculateTotals();
+    }
   }
 
-  function tableTotal() {
-    let total = 0, qty = 0;
-    $('#Purchase1Table tr').each(function () {
-      total += parseFloat($(this).find('input[id^="amount"]').val()) || 0;
-      qty += parseFloat($(this).find('input[name="quantity[]"]').val()) || 0;
-    });
-    $('#totalAmount').val(total.toFixed(2));
-    $('#total_amount_show').val(total.toFixed(2));
-    $('#total_quantity').val(qty.toFixed(2));
-    $('#total_quantity_show').val(qty.toFixed(2));
-    netTotal();
+  $(document).on('input', '.gross-weight,.purity-weight,.making-value,.metal-value,.taxable-amount,.vat_percent', calculateTotals);
+
+  function calculateTotals() {
+    let gross=0,purity=0,making=0,metal=0,vat=0,net=0;
+
+    $('.gross-weight').each((i,e)=>gross+=+e.value||0);
+    $('.purity-weight').each((i,e)=>purity+=+e.value||0);
+    $('.making-value').each((i,e)=>making+=+e.value||0);
+    $('.metal-value').each((i,e)=>metal+=+e.value||0);
+    $('.vat_percent').each((i,e)=>vat+=+e.value||0);
+    $('.taxable-amount').each((i,e)=>net+=+e.value||0);
+
+    net += vat;
+
+    $('#sum_gross_weight').val(gross.toFixed(2));
+    $('#sum_purity_weight').val(purity.toFixed(2));
+    $('#sum_making_value').val(making.toFixed(2));
+    $('#sum_metal_value').val(metal.toFixed(2));
+    $('#sum_vat_amount').val(vat.toFixed(2));
+    $('#net_amount_display').val(net.toFixed(2));
+    $('#net_amount').val(net.toFixed(2));
   }
 
-  function recalcItemTotal(partRow) {
-    let partsRow = partRow.closest('.parts-row');
-    let itemRow = partsRow.prev('tr');
+  $('#payment_method').on('change', function () {
+    let method = $(this).val();
 
-    let sum = 0;
-    partsRow.find('.part-total').each(function () {
-      sum += parseFloat($(this).val()) || 0;
-    });
+    // Hide all conditional sections
+    $('#cheque_fields').addClass('d-none');
+    $('#material_fields').addClass('d-none');
 
-    itemRow.find('.item-total').val(sum.toFixed(2));
-  }
+    if (method === 'cheque') {
+      $('#cheque_fields').removeClass('d-none');
+    }
 
-  function netTotal() {
-    let total = parseFloat($('#totalAmount').val()) || 0;
-    let conv = parseFloat($('#convance_charges').val()) || 0;
-    let labour = parseFloat($('#labour_charges').val()) || 0;
-    let discount = parseFloat($('#bill_discount').val()) || 0;
-    let net = (total + conv + labour - discount).toFixed(2);
-    $('#netTotal').text(formatNumberWithCommas(net));
-    $('#net_amount').val(net);
-  }
-
-  function formatNumberWithCommas(x) {
-    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  }
-
-  // 🔹 Load Variations
-  function loadVariations(row, productId, preselectVariationId = null) {
-    const $variationSelect = row.find('.variation-select');
-    $variationSelect.html('<option>Loading...</option>').prop('disabled', true);
-
-    $.get(`/product/${productId}/variations`, function (data) {
-      let options = '<option value="" disabled selected>Select Variation</option>';
-
-      if ((data.variation || []).length > 0) {
-        data.variation.forEach(v => {
-          options += `<option value="${v.id}">${v.sku}</option>`;
-        });
-        $variationSelect.prop('disabled', false);
-      } else {
-        // ✅ Only placeholder, stays disabled
-        options = '<option value="" disabled selected>No Variations Available</option>';
-        $variationSelect.prop('disabled', true);
-      }
-
-      $variationSelect.html(options);
-
-      if ($variationSelect.hasClass('select2-hidden-accessible')) {
-        $variationSelect.select2('destroy');
-      }
-      $variationSelect.select2({ width: '100%', dropdownAutoWidth: true });
-
-      if (preselectVariationId) {
-        $variationSelect.val(String(preselectVariationId)).trigger('change');
-      }
-    });
-  }
+    if (method === 'material') {
+      $('#material_fields').removeClass('d-none');
+    }
+  });
 
 </script>
-
 @endsection
