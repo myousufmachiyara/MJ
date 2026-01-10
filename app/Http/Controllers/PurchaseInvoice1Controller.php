@@ -411,9 +411,9 @@ class PurchaseInvoice1Controller extends Controller
         $pdf->writeHTML($html, true, false, false, false);
 
         /* ================= PAYMENT + CURRENCY ================= */
-        $usdAmount = $invoice->currency === 'USD' ? $invoice->net_amount : null;
-        $exchangeRate = $invoice->exchange_rate;
-        $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
+        $usdAmount    = $invoice->currency === 'USD' ? $invoice->net_amount : null;
+        $exchangeRate = $invoice->exchange_rate ?? 0;
+        $aedAmount    = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
 
         $paymentHtml = '
         <table width="100%" cellpadding="4" style="font-size:9px;margin-top:8px;">
@@ -434,7 +434,7 @@ class PurchaseInvoice1Controller extends Controller
                 <tr><td><b>Cheque No</b></td><td>'.$invoice->cheque_no.'</td></tr>
                 <tr><td><b>Cheque Date</b></td><td>'.\Carbon\Carbon::parse($invoice->cheque_date)->format('d.m.Y').'</td></tr>
                 <tr><td><b>Bank Name</b></td><td>'.$invoice->bank_name.'</td></tr>
-                <tr><td><b>Cheque Amount</b></td><td>'.number_format($invoice->cheque_amount,2).'</td></tr>
+                <tr><td><b>Cheque Amount</b></td><td>'.number_format($invoice->cheque_amount,2).' AED</td></tr>
             ';
         }
 
@@ -463,7 +463,7 @@ class PurchaseInvoice1Controller extends Controller
 
         if ($invoice->currency === 'USD') {
             $paymentHtml .= '
-                <tr><td><b>Currency</b></td><td>USD → AED</td></tr>
+                <tr><td><b>Currency</b></td><td>'.$invoice->currency.'</td></tr>
                 <tr><td><b>Exchange Rate</b></td><td>1 USD = '.number_format($exchangeRate,4).' AED</td></tr>
                 <tr><td><b>Total USD</b></td><td>'.number_format($usdAmount,2).' USD</td></tr>
                 <tr style="font-weight:bold;"><td><b>Total AED</b></td><td>'.number_format($aedAmount,2).' AED</td></tr>
