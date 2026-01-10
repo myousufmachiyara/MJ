@@ -50,6 +50,9 @@ class PurchaseInvoice1Controller extends Controller
             'bank_name'     => 'required_if:payment_method,cheque|nullable|string|max:100',
             'cheque_amount' => 'required_if:payment_method,cheque|nullable|numeric|min:0',
 
+            'currency'       => 'required|in:AED,USD',
+            'exchange_rate'  => 'required_if:currency,USD|nullable|numeric|min:0',
+
             'material_weight' => 'required_if:payment_method,material|nullable|numeric|min:0',
             'material_purity' => 'required_if:payment_method,material|nullable|numeric|min:0',
             'material_value'  => 'required_if:payment_method,material|nullable|numeric|min:0',
@@ -77,13 +80,26 @@ class PurchaseInvoice1Controller extends Controller
 
             Log::info('Invoice number generated', ['invoice_no' => $invoiceNo]);
 
+            $netAmount = $request->net_amount;
+            $exchangeRate = null;
+            $netAmountAed = $netAmount;
+
+            if ($request->currency === 'USD') {
+                $exchangeRate = $request->exchange_rate;
+                $netAmountAed = $netAmount * $exchangeRate;
+            }
             /* ---------- Create Invoice ---------- */
             $invoice = PurchaseInvoice_1::create([
                 'invoice_no'     => $invoiceNo,
                 'vendor_id'      => $request->vendor_id,
                 'invoice_date'   => $request->invoice_date,
                 'remarks'        => $request->remarks,
-                'net_amount'     => $request->net_amount,
+
+                'currency'       => $request->currency,
+                'exchange_rate'  => $exchangeRate,
+                'net_amount'     => $netAmount,          // original currency
+                'net_amount_aed' => $netAmountAed,        // converted (if USD)
+
                 'payment_method' => $request->payment_method,
 
                 'cheque_no'     => $request->cheque_no,
@@ -98,6 +114,7 @@ class PurchaseInvoice1Controller extends Controller
 
                 'created_by' => auth()->id(),
             ]);
+
 
             Log::info('Purchase invoice created', ['invoice_id' => $invoice->id]);
 
@@ -394,15 +411,13 @@ class PurchaseInvoice1Controller extends Controller
         $pdf->writeHTML($html, true, false, false, false);
 
         /* ================= PAYMENT + CURRENCY ================= */
-
-        $usdAmount     = $invoice->net_amount;
-        $exchangeRate  = 3.6725; // AED rate
-        $aedAmount     = $usdAmount * $exchangeRate;
+        $usdAmount = $invoice->currency === 'USD' ? $invoice->net_amount : null;
+        $exchangeRate = $invoice->exchange_rate;
+        $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
 
         $paymentHtml = '
         <table width="100%" cellpadding="4" style="font-size:9px;margin-top:8px;">
             <tr>
-
                 <!-- LEFT : PAYMENT TERMS -->
                 <td width="60%" valign="top">
                     <table border="1" cellpadding="4" width="100%">
@@ -412,8 +427,7 @@ class PurchaseInvoice1Controller extends Controller
                         <tr>
                             <td width="40%"><b>Payment Method</b></td>
                             <td width="60%">'.ucfirst($invoice->payment_method).'</td>
-                        </tr>
-        ';
+                        </tr>';
 
         if ($invoice->payment_method === 'cheque') {
             $paymentHtml .= '
@@ -445,32 +459,30 @@ class PurchaseInvoice1Controller extends Controller
                     <table border="1" cellpadding="4" width="100%">
                         <tr style="background-color:#f5f5f5;">
                             <td colspan="2"><b>Currency Conversion</b></td>
-                        </tr>
-                        <tr>
-                            <td><b>Currency</b></td>
-                            <td>USD → AED</td>
-                        </tr>
-                        <tr>
-                            <td><b>Exchange Rate</b></td>
-                            <td>1 USD = '.number_format($exchangeRate,4).'</td>
-                        </tr>
-                        <tr>
-                            <td><b>Total USD</b></td>
-                            <td>'.number_format($usdAmount,2).'</td>
-                        </tr>
-                        <tr style="font-weight:bold;">
-                            <td><b>Total AED</b></td>
-                            <td>'.number_format($aedAmount,2).'</td>
-                        </tr>
+                        </tr>';
+
+        if ($invoice->currency === 'USD') {
+            $paymentHtml .= '
+                <tr><td><b>Currency</b></td><td>USD → AED</td></tr>
+                <tr><td><b>Exchange Rate</b></td><td>1 USD = '.number_format($exchangeRate,4).' AED</td></tr>
+                <tr><td><b>Total USD</b></td><td>'.number_format($usdAmount,2).' USD</td></tr>
+                <tr style="font-weight:bold;"><td><b>Total AED</b></td><td>'.number_format($aedAmount,2).' AED</td></tr>
+            ';
+        } else {
+            $paymentHtml .= '
+                <tr><td><b>Currency</b></td><td>AED</td></tr>
+                <tr><td><b>Total</b></td><td>'.number_format($aedAmount,2).' AED</td></tr>
+            ';
+        }
+
+        $paymentHtml .= '
                     </table>
                 </td>
-
             </tr>
         </table>';
 
         $pdf->Ln(3);
         $pdf->writeHTML($paymentHtml, true, false, false, false);
-
 
 
         /* ================= TERMS ================= */

@@ -193,6 +193,40 @@
             </div>
           </div>
 
+          <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0">Currency</h6>
+            </div>
+
+            <div class="card-body">
+                <div class="row">
+
+                    <div class="col-md-4">
+                        <label class="form-label">Invoice Currency</label>
+                        <select name="currency" id="currency" class="form-control">
+                            <option value="AED" selected>AED – Dirhams</option>
+                            <option value="USD">USD – Dollars</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4" id="exchangeRateBox" style="display:none;">
+                        <label class="form-label">USD → AED Rate</label>
+                        <input type="number" step="0.000001" name="exchange_rate"
+                              id="exchange_rate"
+                              class="form-control"
+                              placeholder="e.g. 3.6725">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Converted Total (AED)</label>
+                        <input type="text" id="converted_total"
+                              class="form-control"
+                              readonly>
+                    </div>
+
+                </div>
+            </div>
+        </div>
 
         </div>
 
@@ -209,6 +243,33 @@
 <script>
   let index = 1;
 
+  const currencySelect = document.getElementById('currency');
+  const rateBox = document.getElementById('exchangeRateBox');
+  const rateInput = document.getElementById('exchange_rate');
+  const convertedTotal = document.getElementById('converted_total');
+
+  function updateConversion() {
+    let netTotal = parseFloat(document.getElementById('net_amount').value || 0);
+    let rate = parseFloat(rateInput.value || 0);
+
+    if (currencySelect.value === 'USD' && rate > 0) {
+        convertedTotal.value = (netTotal * rate).toFixed(2);
+    } else {
+        convertedTotal.value = netTotal.toFixed(2);
+    }
+  }
+
+  currencySelect.addEventListener('change', function () {
+    if (this.value === 'USD') {
+      rateBox.style.display = 'block';
+    } else {
+      rateBox.style.display = 'none';
+      rateInput.value = '';
+    }
+    updateConversion();
+  });
+
+  rateInput.addEventListener('input', updateConversion);
   $(document).ready(function () {
     $('.select2-js').select2({
       width: '100%'
