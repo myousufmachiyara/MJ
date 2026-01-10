@@ -59,7 +59,7 @@
                   <th rowspan="2">Purity Wt</th>
                   <th colspan="2" class="text-center">Making</th>
                   <th rowspan="2">Metal Val</th>
-                  <th rowspan="2">Taxable</th>
+                  <th rowspan="2">Taxable (MC)</th>
                   <th rowspan="2">VAT %</th>
                   <th rowspan="2">VAT Amt</th>
                   <th rowspan="2">Gross Total</th>
