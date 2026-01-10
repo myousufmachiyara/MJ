@@ -268,8 +268,12 @@ class PurchaseInvoice1Controller extends Controller
         $pdf = new \TCPDF();
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
+        $pdf->SetCreator('Your App');
+        $pdf->SetAuthor('Your Company');
+        $pdf->SetTitle('PUR-' . $invoice->invoice_no);
         $pdf->SetMargins(10, 10, 10);
         $pdf->AddPage();
+        $pdf->setCellPadding(1.5);
         $pdf->SetFont('helvetica', '', 10);
 
         /* ================= HEADER ================= */
@@ -337,7 +341,7 @@ class PurchaseInvoice1Controller extends Controller
                     <th width="8%" rowspan="2">Metal Val.</th>
                     <th width="8%" rowspan="2">Taxable</th>
                     <th width="6%" rowspan="2">VAT %</th>
-                    <th width="10%" rowspan="2">VAT Amt.</th>
+                    <th width="9%" rowspan="2">VAT Amt.</th>
                     <th width="10%" rowspan="2">Gross Total</th>
                 </tr>
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
@@ -372,7 +376,7 @@ class PurchaseInvoice1Controller extends Controller
                     <td width="8%">'.number_format($item->metal_value,2).'</td>
                     <td width="8%">'.number_format($item->taxable_amount,2).'</td>
                     <td width="6%">'.number_format($vatPercent,2).'</td>
-                    <td width="10%">'.number_format($item->vat_amount,2).'</td>
+                    <td width="9%">'.number_format($item->vat_amount,2).'</td>
                     <td width="10%">'.number_format($rowTotal,2).'</td>
                 </tr>
             ';
@@ -389,13 +393,18 @@ class PurchaseInvoice1Controller extends Controller
 
         $pdf->writeHTML($html, true, false, false, false);
 
+        /* ================= PAYMENT + CURRENCY ================= */
 
-        /* ================= PAYMENT TERMS ================= */
+        $usdAmount     = $invoice->net_amount;
+        $exchangeRate  = 3.6725; // AED rate
+        $aedAmount     = $usdAmount * $exchangeRate;
+
         $paymentHtml = '
         <table width="100%" cellpadding="4" style="font-size:9px;margin-top:8px;">
             <tr>
+
                 <!-- LEFT : PAYMENT TERMS -->
-                <td width="50%" valign="top">
+                <td width="60%" valign="top">
                     <table border="1" cellpadding="4" width="100%">
                         <tr style="background-color:#f5f5f5;">
                             <td colspan="2"><b>Payment Terms</b></td>
@@ -408,66 +417,60 @@ class PurchaseInvoice1Controller extends Controller
 
         if ($invoice->payment_method === 'cheque') {
             $paymentHtml .= '
-                <tr>
-                    <td><b>Cheque No</b></td>
-                    <td>'.$invoice->cheque_no.'</td>
-                </tr>
-                <tr>
-                    <td><b>Cheque Date</b></td>
-                    <td>'.\Carbon\Carbon::parse($invoice->cheque_date)->format('d.m.Y').'</td>
-                </tr>
-                <tr>
-                    <td><b>Bank Name</b></td>
-                    <td>'.$invoice->bank_name.'</td>
-                </tr>
-                <tr>
-                    <td><b>Cheque Amount</b></td>
-                    <td>'.number_format($invoice->cheque_amount,2).'</td>
-                </tr>
+                <tr><td><b>Cheque No</b></td><td>'.$invoice->cheque_no.'</td></tr>
+                <tr><td><b>Cheque Date</b></td><td>'.\Carbon\Carbon::parse($invoice->cheque_date)->format('d.m.Y').'</td></tr>
+                <tr><td><b>Bank Name</b></td><td>'.$invoice->bank_name.'</td></tr>
+                <tr><td><b>Cheque Amount</b></td><td>'.number_format($invoice->cheque_amount,2).'</td></tr>
             ';
         }
 
         if ($invoice->payment_method === 'material') {
             $paymentHtml .= '
-                <tr>
-                    <td><b>Raw Metal Weight</b></td>
-                    <td>'.number_format($invoice->material_weight,2).'</td>
-                </tr>
-                <tr>
-                    <td><b>Raw Metal Purity</b></td>
-                    <td>'.number_format($invoice->material_purity,2).'</td>
-                </tr>
-                <tr>
-                    <td><b>Metal Adjustment</b></td>
-                    <td>'.number_format($invoice->material_value,2).'</td>
-                </tr>
-                <tr>
-                    <td><b>Making Charges</b></td>
-                    <td>'.number_format($invoice->making_charges,2).'</td>
-                </tr>
+                <tr><td><b>Raw Metal Weight</b></td><td>'.number_format($invoice->material_weight,2).'</td></tr>
+                <tr><td><b>Raw Metal Purity</b></td><td>'.number_format($invoice->material_purity,2).'</td></tr>
+                <tr><td><b>Metal Adjustment</b></td><td>'.number_format($invoice->material_value,2).'</td></tr>
+                <tr><td><b>Making Charges</b></td><td>'.number_format($invoice->making_charges,2).'</td></tr>
             ';
         }
 
         $paymentHtml .= '
-            </table>
+                    </table>
                 </td>
 
-                    <!-- RIGHT : CURRENCY CONVERSION PLACEHOLDER -->
-                    <td width="30%" valign="top">
-                        <table border="1" cellpadding="4" width="100%">
-                            <tr style="background-color:#f5f5f5;">
-                                <td><b>Currency Conversion</b></td>
-                            </tr>
-                            <tr>
-                                <td height="20">&nbsp;</td>
-                            </tr>
-                        </table>
-                    </td>
+                <!-- SPACER -->
+                <td width="10%"></td>
+
+                <!-- RIGHT : CURRENCY CONVERSION -->
+                <td width="30%" valign="top">
+                    <table border="1" cellpadding="4" width="100%">
+                        <tr style="background-color:#f5f5f5;">
+                            <td colspan="2"><b>Currency Conversion</b></td>
+                        </tr>
+                        <tr>
+                            <td><b>Currency</b></td>
+                            <td>USD → AED</td>
+                        </tr>
+                        <tr>
+                            <td><b>Exchange Rate</b></td>
+                            <td>1 USD = '.number_format($exchangeRate,4).'</td>
+                        </tr>
+                        <tr>
+                            <td><b>Total USD</b></td>
+                            <td>'.number_format($usdAmount,2).'</td>
+                        </tr>
+                        <tr style="font-weight:bold;">
+                            <td><b>Total AED</b></td>
+                            <td>'.number_format($aedAmount,2).'</td>
+                        </tr>
+                    </table>
+                </td>
+
             </tr>
         </table>';
 
         $pdf->Ln(3);
         $pdf->writeHTML($paymentHtml, true, false, false, false);
+
 
 
         /* ================= TERMS ================= */
