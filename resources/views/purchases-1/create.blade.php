@@ -142,7 +142,7 @@
                 <option value="cash">Cash</option>
                 <option value="credit">Credit</option>
                 <option value="cheque">Cheque</option>
-                <option value="material">Metal + Making Cost</option>
+                <option value="material+making cost">Metal + Making Cost</option>
               </select>
             </div>
           </div>

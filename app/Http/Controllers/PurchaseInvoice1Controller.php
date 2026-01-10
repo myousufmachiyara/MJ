@@ -316,7 +316,7 @@ class PurchaseInvoice1Controller extends Controller
         /* ================= TITLE ================= */
         $pdf->Ln(2);
         $pdf->SetFont('helvetica','B',12);
-        $pdf->Cell(0,6,'TAX INVOICE',0,1,'C');
+        $pdf->Cell(0,6,'TAX INVOICE (PURCHASE)',0,1,'C');
 
         /* ================= VENDOR INFO ================= */
         $pdf->SetFont('helvetica','',10);
