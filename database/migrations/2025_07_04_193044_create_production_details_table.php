@@ -16,7 +16,6 @@ return new class extends Migration
             $table->unsignedBigInteger('production_id');
             $table->unsignedBigInteger('product_id');
             $table->unsignedBigInteger('variation_id')->nullable();
-            $table->unsignedBigInteger('invoice_id')->nullable();
             $table->decimal('rate', 15, 2);
             $table->decimal('qty', 15, 2);
             $table->string('unit');
@@ -24,7 +23,6 @@ return new class extends Migration
 
             $table->foreign('production_id')->references('id')->on('productions')->onDelete('cascade');
             $table->foreign('product_id')->references('id')->on('products')->onDelete('cascade');
-            $table->foreign('invoice_id')->references('id')->on('purchase_invoices')->onDelete('cascade');
         });
     }
 

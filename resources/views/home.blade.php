@@ -78,7 +78,7 @@
 			</section>
 		</div>
 	</div>
-	<div class="row">
+	<!-- <div class="row">
 		<div class="col-12 col-md-6 mb-3 d-flex">
 			<section class="card flex-fill">
 				<header class="card-header">
@@ -103,7 +103,7 @@
 				</div>
 			</section>
 		</div>
-	</div>
+	</div> -->
 	<!-- <div class="tabs mt-3">
 		<ul class="nav nav-tabs">
 			<li class="nav-item">

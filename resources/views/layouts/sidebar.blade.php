@@ -102,9 +102,6 @@
               @can('purchase_orders.index')
                 <li><a class="nav-link" href="{{ route('purchase_orders.index') }}">Orders</a></li>
               @endcan
-              @can('purchase_invoices_1.index')
-              <li><a class="nav-link" href="{{ route('purchase_invoices_1.index') }}">Invoices 1</a></li>
-              @endcan
               @can('purchase_invoices.index')
               <li><a class="nav-link" href="{{ route('purchase_invoices.index') }}">Invoices</a></li>
               @endcan

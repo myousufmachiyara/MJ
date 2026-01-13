@@ -2,22 +2,39 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class PurchaseInvoiceItem extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'purchase_invoice_id',
-        'item_id',
-        'temp_product_name',
-        'item_type',
+        'item_name',
+        'product_id',
         'variation_id',
-        'quantity',
-        'unit',
-        'rate',
+        'item_description',
+        'gross_weight',
+        'purity',
+        'purity_weight',
+        'making_rate',
+        'making_value',
+        'material_value',
+        'metal_value',
+        'taxable_amount',
+        'vat_percent',
+        'vat_amount',
+        'item_total',
+        'metal_type',
+        'gold_rate',
+        'silver_rate',
+        'other_metal_rate',
         'remarks',
+        'attachment',
     ];
 
+    /* ================= RELATIONS ================= */
     public function invoice()
     {
         return $this->belongsTo(PurchaseInvoice::class, 'purchase_invoice_id');
@@ -25,22 +42,11 @@ class PurchaseInvoiceItem extends Model
 
     public function product()
     {
-        return $this->belongsTo(Product::class, 'item_id');
-    }
-
-    public function variation()
-    {
-        return $this->belongsTo(ProductVariation::class, 'variation_id');
-    }
-
-    public function measurementUnit()
-    {
-        return $this->belongsTo(MeasurementUnit::class, 'unit');
+        return $this->belongsTo(\App\Models\Product::class, 'product_id');
     }
 
     public function parts()
     {
-        return $this->hasMany(PurchaseInvoiceItemPart::class, 'purchase_invoice_item_id');
+        return $this->hasMany(PurchaseInvoiceItemPart::class);
     }
 }
-

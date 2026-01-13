@@ -6849,9 +6849,9 @@ html.sidebar-light:not(.dark) ul.nav-main li .nav-children li a:hover, html.side
 
 .btn.btn-sm {
 	font-size: 12.8px;
-	font-size: 0.8rem;
+	font-size: 0.6rem;
 	padding: 4.8px 10.4px;
-	padding: 0.3rem 0.65rem;
+	padding: 0.2rem 0.5rem;
 }
 
 .btn.btn-lg {

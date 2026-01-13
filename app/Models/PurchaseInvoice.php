@@ -2,40 +2,52 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PurchaseInvoice extends Model
 {
-    use SoftDeletes;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'invoice_no',
         'vendor_id',
         'invoice_date',
-        'payment_terms',
-        'bill_no',
-        'ref_no',
         'remarks',
-        'convance_charges',
-        'labour_charges',
-        'bill_discount',
-        'created_by'
+        'currency',
+        'exchange_rate',
+        'net_amount',
+        'net_amount_aed',
+        'payment_method',
+        'cheque_no',
+        'cheque_date',
+        'bank_name',
+        'cheque_amount',
+        'material_weight',
+        'material_purity',
+        'material_value',
+        'making_charges',
+        'gold_rate',
+        'silver_rate',
+        'other_metal_rate',
+        'created_by',
     ];
 
-    public function items()
-    {
-        return $this->hasMany(PurchaseInvoiceItem::class,'purchase_invoice_id');
-    }
-
+    /* ================= RELATIONS ================= */
     public function vendor()
     {
-        return $this->belongsTo(ChartOfAccounts::class, 'vendor_id');
+        return $this->belongsTo(\App\Models\ChartOfAccount::class, 'vendor_id');
     }
 
     public function creator()
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(\App\Models\User::class, 'created_by');
+    }
+
+    public function items()
+    {
+        return $this->hasMany(PurchaseInvoiceItem::class);
     }
 
     public function attachments()
@@ -43,4 +55,3 @@ class PurchaseInvoice extends Model
         return $this->hasMany(PurchaseInvoiceAttachment::class);
     }
 }
-

@@ -14,7 +14,7 @@
 
       <header class="card-header d-flex justify-content-between align-items-center">
         <h2 class="card-title">All Purchase Invoices</h2>
-        <a href="{{ route('purchase_invoices_1.create') }}" class="btn btn-primary">
+        <a href="{{ route('purchase_invoices.create') }}" class="btn btn-primary">
           <i class="fas fa-plus"></i> Purchase Invoice
         </a>
       </header>
