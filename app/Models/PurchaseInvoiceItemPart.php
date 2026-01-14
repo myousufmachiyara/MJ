@@ -17,14 +17,9 @@ class PurchaseInvoiceItemPart extends Model
         'rate',
         'wastage',
         'total',
-        'metal_weight',
-        'metal_rate',
-        'metal_value',
         'part_description',
     ];
 
-
-    /* ================= RELATIONS ================= */
     public function item()
     {
         return $this->belongsTo(PurchaseInvoiceItem::class, 'purchase_invoice_item_id');
@@ -32,6 +27,12 @@ class PurchaseInvoiceItemPart extends Model
 
     public function product()
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id');
+        return $this->belongsTo(Product::class);
+    }
+
+    public function variation()
+    {
+        return $this->belongsTo(ProductVariation::class);
     }
 }
+

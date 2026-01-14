@@ -11,30 +11,39 @@ class PurchaseInvoiceItem extends Model
 
     protected $fillable = [
         'purchase_invoice_id',
+
+        // Product
         'item_name',
         'product_id',
         'variation_id',
         'item_description',
+
+        // Weights & purity
         'gross_weight',
         'purity',
         'purity_weight',
+        'col_995',
+
+        // Making
         'making_rate',
         'making_value',
-        'material_value',
+
+        // Metal
+        'metal_type',
         'metal_value',
+
+        // Tax
         'taxable_amount',
         'vat_percent',
         'vat_amount',
+
+        // Total
         'item_total',
-        'metal_type',
-        'gold_rate',
-        'silver_rate',
-        'other_metal_rate',
+
+        // Meta
         'remarks',
-        'attachment',
     ];
 
-    /* ================= RELATIONS ================= */
     public function invoice()
     {
         return $this->belongsTo(PurchaseInvoice::class, 'purchase_invoice_id');
@@ -42,11 +51,17 @@ class PurchaseInvoiceItem extends Model
 
     public function product()
     {
-        return $this->belongsTo(\App\Models\Product::class, 'product_id');
+        return $this->belongsTo(Product::class);
+    }
+
+    public function variation()
+    {
+        return $this->belongsTo(ProductVariation::class);
     }
 
     public function parts()
     {
-        return $this->hasMany(PurchaseInvoiceItemPart::class);
+        return $this->hasMany(PurchaseInvoiceItemPart::class, 'purchase_invoice_item_id');
     }
 }
+

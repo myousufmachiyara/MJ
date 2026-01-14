@@ -13,6 +13,7 @@ class ChartOfAccounts extends Model
     protected $fillable = [
         'shoa_id',
         'name',
+        'trn',
         'account_code',
         'account_type',
         'receivables',
@@ -21,7 +22,7 @@ class ChartOfAccounts extends Model
         'opening_date',
         'remarks',
         'address',
-        'phone_no',
+        'contact_no',
         'created_by',
         'updated_by',
     ];

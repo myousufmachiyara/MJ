@@ -16,18 +16,19 @@ return new class extends Migration
 
             /* ================= BASIC ================= */
             $table->string('invoice_no', 20)->unique();
-            $table->foreignId('vendor_id')->constrained('chart_of_accounts');
+            $table->unsignedBigInteger('vendor_id');
             $table->date('invoice_date');
             $table->text('remarks')->nullable();
 
             /* ================= CURRENCY ================= */
-            $table->enum('currency', ['AED','USD'])->default('AED'); // AED | USD
-            $table->decimal('exchange_rate', 15, 6)->nullable(); // USD → AED
-            $table->decimal('net_amount', 18, 2);          // original currency
-            $table->decimal('net_amount_aed', 18, 2);      // always stored in AED
+            $table->enum('currency', ['AED', 'USD'])->default('AED');
+            $table->decimal('exchange_rate', 15, 6)->nullable(); // e.g., 3.6725
+            $table->decimal('net_amount', 18, 2);               // original currency amount
+            $table->decimal('net_amount_aed', 18, 2)->default(0);
 
             /* ================= PAYMENT ================= */
-            $table->enum('payment_method', ['cash','credit','cheque','material+making cost'])->nullable();
+            $table->enum('payment_method', ['cash', 'credit', 'cheque', 'material+making cost'])->nullable();
+            $table->string('payment_term')->nullable(); // Matches your $fillable 'payment_term'
 
             /* ================= CHEQUE ================= */
             $table->string('cheque_no', 50)->nullable();
@@ -41,15 +42,24 @@ return new class extends Migration
             $table->decimal('material_value', 18, 2)->nullable();
             $table->decimal('making_charges', 18, 2)->nullable();
 
-            /* ================= METAL RATES ================= */
-            $table->decimal('gold_rate', 18, 2)->nullable();
-            $table->decimal('silver_rate', 18, 2)->nullable();
-            $table->decimal('other_metal_rate', 18, 2)->nullable(); // optional
+            /* ================= METAL RATES (FIXED) ================= */
+            // Gold Rates
+            $table->decimal('gold_rate_aed', 18, 4)->nullable();
+            $table->decimal('gold_rate_usd', 18, 4)->nullable();
+            
+            // Other Metal / Silver Rates (renamed to match controller 'metal_rate' logic)
+            $table->decimal('metal_rate_aed', 18, 4)->nullable();
+            $table->decimal('metal_rate_usd', 18, 4)->nullable();
 
             /* ================= META ================= */
-            $table->foreignId('created_by')->constrained('users');
+            $table->unsignedBigInteger('created_by');
+            $table->string('received_by')->nullable(); // Added to match your model
             $table->timestamps();
             $table->softDeletes();
+
+            /* ================= FOREIGN KEYS ================= */
+            $table->foreign('vendor_id')->references('id')->on('chart_of_accounts')->onDelete('cascade');
+            $table->foreign('created_by')->references('id')->on('users')->onDelete('cascade');
         });
     }
 

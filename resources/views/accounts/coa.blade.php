@@ -47,7 +47,7 @@
                                     <th>A/C Name</th>
                                     <th>SubHead</th>
                                     <th>A/C Type</th>
-                                    <th>Phone</th>
+                                    <th>Contact</th>
                                     <th>Date</th>
                                     <th>Remarks</th>
                                     <th>Action</th>
@@ -61,7 +61,7 @@
                                     <td><strong>{{ $item->name }}</strong></td>
                                     <td>{{ $item->subHeadOfAccount->name }}</td>
                                     <td><strong>{{ $item->account_type }}</strong></td>
-                                    <td>{{ $item->phone_no }}</td>
+                                    <td>{{ $item->contact_no }}</td>
                                     <td>{{ \Carbon\Carbon::parse($item->opening_date)->format('d-m-y') }}</td>
                                     <td>{{ $item->remarks }}</td>
                                     <td>
@@ -99,6 +99,10 @@
                                 <div class="col-lg-6 mb-2">
                                     <label>Account Name<span style="color: red;"><strong>*</strong></span></label>
                                     <input type="text" class="form-control" placeholder="Account Name" name="name" required>
+                                </div>
+                                <div class="col-lg-6 mb-2">
+                                    <label>TRN<span style="color: red;"><strong>*</strong></span></label>
+                                    <input type="text" class="form-control" placeholder="TRN" name="trn">
                                 </div>
                                 <div class="col-lg-6 mb-2">
                                     <label>Account Type</label>
@@ -147,8 +151,8 @@
                                     <textarea class="form-control" rows="2" placeholder="Address" name="address"></textarea>
                                 </div>
                                 <div class="col-lg-6 mb-2">
-                                    <label>Phone No.</label>
-                                    <input type="text" class="form-control"  placeholder="Phone No." name="phone_no" >
+                                    <label>Contact No.</label>
+                                    <input type="text" class="form-control"  placeholder="Contact No." name="contact_no" >
                                 </div>
                             </div>
                         </div>
@@ -181,6 +185,10 @@
                                 <div class="col-lg-6 mb-2">
                                     <label>Account Name<span style="color: red;"><strong>*</strong></span></label>
                                     <input type="text" class="form-control" placeholder="Account Name" name="name" required>
+                                </div>
+                                <div class="col-lg-6 mb-2">
+                                    <label>TRN<span style="color: red;"><strong>*</strong></span></label>
+                                    <input type="text" class="form-control" placeholder="TRN" name="trn">
                                 </div>
                                 <div class="col-lg-6 mb-2">
                                     <label>Account Type</label>
@@ -228,8 +236,8 @@
                                     <textarea class="form-control" rows="2" placeholder="Address" name="address"></textarea>
                                 </div>
                                 <div class="col-lg-6 mb-2">
-                                    <label>Phone No.</label>
-                                    <input type="text" class="form-control" placeholder="Phone No." name="phone_no" >
+                                    <label>Contact No.</label>
+                                    <input type="text" class="form-control" placeholder="Contact No." name="contact_no" >
                                 </div>
                             </div>
                         </div>
@@ -262,7 +270,8 @@
                     $('[name="opening_date"]').val(data.opening_date);
                     $('[name="remarks"]').val(data.remarks);
                     $('[name="address"]').val(data.address);
-                    $('[name="phone_no"]').val(data.phone_no);
+                    $('[name="contact_no"]').val(data.contact_no);
+                    $('[name="trn"]').val(data.trn);
 
                     $.magnificPopup.open({
                         items: { src: '#editModal' },

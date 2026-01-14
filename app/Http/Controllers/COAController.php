@@ -39,6 +39,7 @@ class COAController extends Controller
                     'max:255',
                     Rule::unique('chart_of_accounts')->whereNull('deleted_at'),
                 ],
+                'trn' => 'nullable|string',
                 'account_type' => 'nullable|string|max:255',
                 'receivables' => 'required|numeric',
                 'payables' => 'required|numeric',
@@ -46,7 +47,7 @@ class COAController extends Controller
                 'opening_date' => 'required|date',
                 'remarks' => 'nullable|string|max:800',
                 'address' => 'nullable|string|max:250',
-                'phone_no' => 'nullable|string|max:250',
+                'contact_no' => 'nullable|string|max:250',
             ]);
 
             $subHead = SubHeadOfAccounts::findOrFail($request->shoa_id);
@@ -74,6 +75,7 @@ class COAController extends Controller
                 'shoa_id' => $request->shoa_id,
                 'account_code' => $accountCode,
                 'name' => $request->name,
+                'trn' => $request->trn,
                 'account_type' => $request->account_type,
                 'receivables' => $request->receivables,
                 'payables' => $request->payables,
@@ -81,7 +83,7 @@ class COAController extends Controller
                 'opening_date' => $request->opening_date,
                 'remarks' => $request->remarks,
                 'address' => $request->address,
-                'phone_no' => $request->phone_no,
+                'contact_no' => $request->contact_no,
                 'created_by' => auth()->id(),
                 'updated_by' => auth()->id(),
             ]);
@@ -113,6 +115,7 @@ class COAController extends Controller
             $request->validate([
                 'shoa_id' => 'required|exists:sub_head_of_accounts,id',
                 'name' => 'required|string|max:255|unique:chart_of_accounts,name,' . $id,
+                'trn' => 'nullable|string',
                 'account_type' => 'nullable|string|max:255',
                 'receivables' => 'required|numeric',
                 'payables' => 'required|numeric',
@@ -120,7 +123,7 @@ class COAController extends Controller
                 'opening_date' => 'required|date',
                 'remarks' => 'nullable|string|max:800',
                 'address' => 'nullable|string|max:250',
-                'phone_no' => 'nullable|string|max:250',
+                'contact_no' => 'nullable|string|max:250',
             ]);
 
             $account = ChartOfAccounts::findOrFail($id);
@@ -129,6 +132,7 @@ class COAController extends Controller
             $account->update([
                 'shoa_id'      => $request->shoa_id,
                 'name'         => $request->name,
+                'trn'          => $request->trn,
                 'account_type' => $request->account_type,
                 'receivables'  => $request->receivables,
                 'payables'     => $request->payables,
@@ -136,7 +140,7 @@ class COAController extends Controller
                 'opening_date' => $request->opening_date,
                 'remarks'      => $request->remarks,
                 'address'      => $request->address,
-                'phone_no'     => $request->phone_no,
+                'contact_no'     => $request->contact_no,
                 'updated_by'   => auth()->id(), // ✅ log who updated
             ]);
 

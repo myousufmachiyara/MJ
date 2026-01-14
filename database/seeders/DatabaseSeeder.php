@@ -63,7 +63,6 @@ class DatabaseSeeder extends Seeder
 
             // Purchases
             'purchase_invoices',
-            'purchase_invoices_1',
             'purchase_return',
 
             // Sales
@@ -78,7 +77,6 @@ class DatabaseSeeder extends Seeder
             'production',
             'production_receiving',
             'production_return',
-
         ];
 
         $actions = ['index', 'create', 'edit', 'delete', 'print'];
@@ -152,11 +150,12 @@ class DatabaseSeeder extends Seeder
 
         foreach ($coaData as $data) {
             ChartOfAccounts::create(array_merge($data, [
+                'trn' => null,
                 'opening_date' => $now,
                 'credit_limit' => 0,
                 'remarks' => null,
                 'address' => null,
-                'phone_no' => null,
+                'contact_no' => null,
                 'created_by' => $userId,
                 'updated_by' => $userId,
             ]));
