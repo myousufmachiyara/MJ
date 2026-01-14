@@ -84,7 +84,7 @@ class myPDF extends TCPDF
         $Trillion = $Thousand * $Billion;
     
         if ($number == 0) {
-            return "Zero Rupees Only";
+            return "AED Zero Only";
         }
     
         $isNegative = $number < 0;
@@ -121,7 +121,7 @@ class myPDF extends TCPDF
             $result .= $this->convertDigitGroup($number);
         }
     
-        $result = trim($result) . " Rupees Only";
+        $result = "AED " .trim($result) . " Only";
     
         return $isNegative ? "Negative " . $result : $result;
     }

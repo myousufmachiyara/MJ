@@ -202,37 +202,7 @@ class PurchaseInvoiceController extends Controller
             'items.parts.variation.attributeValues.attribute'
         ])->findOrFail($id);
 
-        // --- INTERNAL HELPER FOR AMOUNT TO WORDS ---
-        $amountToWords = function($number) use (&$amountToWords) {
-            $dictionary  = [
-                0 => 'zero', 1 => 'one', 2 => 'two', 3 => 'three', 4 => 'four', 5 => 'five', 6 => 'six', 7 => 'seven', 8 => 'eight', 9 => 'nine', 10 => 'ten',
-                11 => 'eleven', 12 => 'twelve', 13 => 'thirteen', 14 => 'fourteen', 15 => 'fifteen', 16 => 'sixteen', 17 => 'seventeen', 18 => 'eighteen', 19 => 'nineteen',
-                20 => 'twenty', 30 => 'thirty', 40 => 'forty', 50 => 'fifty', 60 => 'sixty', 70 => 'seventy', 80 => 'eighty', 90 => 'ninety',
-                100 => 'hundred', 1000 => 'thousand', 1000000 => 'million'
-            ];
-            if (!is_numeric($number)) return false;
-            $number = round($number, 2);
-            $arr = explode('.', $number);
-            $integer = (int)$arr[0];
-            $fraction = isset($arr[1]) ? (int)$arr[1] : 0;
-            $string = '';
-            if ($integer < 21) { $string = $dictionary[$integer]; }
-            elseif ($integer < 100) {
-                $tens = ((int)($integer / 10)) * 10; $units = $integer % 10;
-                $string = $dictionary[$tens] . ($units ? '-' . $dictionary[$units] : '');
-            } elseif ($integer < 1000) {
-                $hundreds = (int)($integer / 100); $remainder = $integer % 100;
-                $string = $dictionary[$hundreds] . ' ' . $dictionary[100] . ($remainder ? ' and ' . $amountToWords($remainder) : '');
-            } else {
-                $baseUnit = pow(1000, floor(log($integer, 1000)));
-                $numBaseUnits = (int)($integer / $baseUnit); $remainder = $integer % $baseUnit;
-                $string = $amountToWords($numBaseUnits) . ' ' . $dictionary[$baseUnit] . ($remainder ? ($remainder < 100 ? ' and ' : ', ') . $amountToWords($remainder) : '');
-            }
-            if ($fraction > 0) { $string .= " and " . $amountToWords($fraction) . " fils"; }
-            return $string;
-        };
-
-        $pdf = new \TCPDF();
+        $pdf = new MyPDF();
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
         $pdf->SetCreator('Your App');
@@ -390,7 +360,7 @@ class PurchaseInvoiceController extends Controller
 
         /* ================= SUMMARY SECTION ================= */
         $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
-        $wordsText = strtoupper($amountToWords($aedAmount));
+        $wordsText=$pdf->convertCurrencyToWords($aedAmount);
 
         $summaryHtml = '
         <table width="100%" cellpadding="0" border="0" style="margin-top:10px;">
@@ -445,7 +415,7 @@ class PurchaseInvoiceController extends Controller
         /* ================= AMOUNT IN WORDS ================= */
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', 'B', 9);
-        $pdf->Cell(0, 5, "Amount in Words (AED): " . $wordsText . " ONLY", 0, 1, 'L');
+        $pdf->Cell(0, 5, "Amount in Words (AED): " . $wordsText , 0, 1, 'L');
 
         /* ================= TERMS & CONDITIONS ================= */
         $pdf->Ln(2);
