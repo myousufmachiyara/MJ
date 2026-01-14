@@ -311,283 +311,311 @@
 
 <script>
   $(document).ready(function () {
-      const products = @json($products);
+    const products = @json($products);
 
-      // Initialize Select2
-      $('.select2-js').select2({ width: '100%' });
+    // Initialize Select2
+    $('.select2-js').select2({ width: '100%' });
 
-      const currencySelect = $('#currency');
-      const rateBox = $('#exchangeRateBox');
-      const rateInput = $('#exchange_rate');
-      const convertedTotal = $('#converted_total');
+    const currencySelect = $('#currency');
+    const rateBox = $('#exchangeRateBox');
+    const rateInput = $('#exchange_rate');
+    const convertedTotal = $('#converted_total');
 
-      // ================= ROW MANAGEMENT =================
-      function updateRowIndexes() {
-          $('#PurchaseTable tr.item-row').each(function(i) {
-              $(this).attr('data-item-index', i);
-              // Update main row inputs
-              $(this).find('input, select').each(function() {
-                  const name = $(this).attr('name');
-                  if(name) {
-                      const newName = name.replace(/items\[\d+\]/, `items[${i}]`);
-                      $(this).attr('name', newName);
-                  }
-              });
-              // Update corresponding parts row inputs
-              const partsRow = $(this).next('.parts-row');
-              partsRow.find('input, select').each(function() {
-                  const name = $(this).attr('name');
-                  if(name) {
-                      const newName = name.replace(/items\[\d+\]/, `items[${i}]`);
-                      $(this).attr('name', newName);
-                  }
-              });
-          });
+    // ================= ROW MANAGEMENT =================
+    function updateRowIndexes() {
+        $('#PurchaseTable tr.item-row').each(function(i) {
+            $(this).attr('data-item-index', i);
+            // Update main row inputs
+            $(this).find('input, select').each(function() {
+                const name = $(this).attr('name');
+                if(name) {
+                    const newName = name.replace(/items\[\d+\]/, `items[${i}]`);
+                    $(this).attr('name', newName);
+                }
+            });
+            // Update corresponding parts row inputs
+            const partsRow = $(this).next('.parts-row');
+            partsRow.find('input, select').each(function() {
+                const name = $(this).attr('name');
+                if(name) {
+                    const newName = name.replace(/items\[\d+\]/, `items[${i}]`);
+                    $(this).attr('name', newName);
+                }
+            });
+        });
+    }
+
+    window.addNewRow = function() {
+        const nextIndex = $('#PurchaseTable tr.item-row').length;
+        const rowHtml = `
+        <tr class="item-row" data-item-index="${nextIndex}">
+            <td>
+                <div class="product-wrapper">
+                    <input type="text" name="items[${nextIndex}][item_name]" class="form-control item-name-input" placeholder="Enter product name">
+                    <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
+                </div>
+            </td>
+            <td><input type="text" name="items[${nextIndex}][item_description]" class="form-control" required></td>
+            <td>
+                <select name="items[${nextIndex}][purity]" class="form-control purity">
+                    <option value="0.916">22K (92%)</option>
+                    <option value="0.875">21K (88%)</option>
+                    <option value="0.750">18K (75%)</option>
+                </select>
+            </td>
+            <td><input type="number" name="items[${nextIndex}][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>
+            <td><input type="number" name="items[${nextIndex}][purity_weight]" step="any" value="0" class="form-control purity-weight" readonly></td>
+            <td><input type="number" name="items[${nextIndex}][995]" step="any" value="0" class="form-control col-995" readonly></td>
+            <td><input type="number" name="items[${nextIndex}][making_rate]" step="any" value="0" class="form-control making-rate"></td>
+            <td><input type="number" name="items[${nextIndex}][making_value]" step="any" class="form-control making-value" readonly></td>
+            <td>
+                <select name="items[${nextIndex}][metal_type]" class="form-control metal-type">
+                    <option value="gold">Gold</option>
+                    <option value="metal">Metal</option>
+                </select>
+            </td>
+            <td><input type="number" name="items[${nextIndex}][metal_value]" step="any" value="0" class="form-control metal-value" readonly></td>
+            <td><input type="number" name="items[${nextIndex}][taxable_amount]" step="any" value="0" class="form-control taxable-amount" readonly></td>
+            <td><input type="number" name="items[${nextIndex}][vat_percent]" class="form-control vat-percent" step="any" value="0"></td>
+            <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
+            <td><input type="number" class="form-control item-total" readonly></td>
+            <td>
+                <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
+                <button type="button" class="btn btn-sm btn-primary toggle-parts"><i class="fas fa-wrench"></i></button>
+            </td>
+        </tr>
+        <tr class="parts-row" style="display:none;background:#efefef">
+            <td colspan="15">
+                <div class="parts-wrapper">
+                  <table class="table table-sm table-bordered parts-table">
+                      <thead>
+                          <tr>
+                              <th>Part</th>
+                              <th>Variation</th>
+                              <th>Qty</th>
+                              <th>Rate</th>
+                              <th>Wastage</th>
+                              <th>Total</th>
+                              <th></th>
+                          </tr>
+                      </thead>
+                      <tbody></tbody>
+                  </table>
+                  <button type="button" class="btn btn-sm btn-outline-primary add-part">+ Add Part</button>
+                </div>
+            </td>
+        </tr>`;
+
+        $('#PurchaseTable').append(rowHtml);
+    };
+
+    window.removeRow = function(btn) {
+        const row = $(btn).closest('tr');
+        const partsRow = row.next('.parts-row');
+        if ($('#PurchaseTable tr.item-row').length > 1) {
+            partsRow.remove();
+            row.remove();
+            updateRowIndexes();
+            calculateTotals();
+        }
+    };
+
+    // ================= EVENT DELEGATION (Fixes Dynamic Row Bugs) =================
+    $(document).on('click', '.toggle-parts', function() {
+        $(this).closest('tr').next('.parts-row').toggle();
+    });
+
+    $(document).on('click', '.add-part', function() {
+        const partsTable = $(this).siblings('table').find('tbody');
+        const itemIndex = $(this).closest('.parts-row').prev('.item-row').data('item-index');
+        let partIndex = partsTable.find('tr').length;
+
+        let row = `
+        <tr>
+            <td>
+                <select name="items[${itemIndex}][parts][${partIndex}][product_id]" class="form-control select2-js part-product-select">
+                    <option value="">Select Part</option>
+                    ${products.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                </select>
+            </td>
+            <td>
+                <select name="items[${itemIndex}][parts][${partIndex}][variation_id]" class="form-control select2-js part-variation-select">
+                    <option value="">Select Variation</option>
+                </select>
+            </td>
+            <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][qty]" step="any" value="0" class="form-control part-qty"></td>
+            <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][rate]" step="any" value="0" class="form-control part-rate"></td>
+            <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][wastage]" step="any" value="0" class="form-control part-wastage"></td>
+            <td><input type="number" class="form-control part-total" readonly></td>
+            <td><button type="button" class="btn btn-sm btn-danger remove-part">×</button></td>
+        </tr>`;
+
+        partsTable.append(row);
+        partsTable.find('.select2-js').select2({ width: '100%' });
+    });
+
+    $(document).on('click', '.remove-part', function() { $(this).closest('tr').remove(); });
+
+    $(document).on('input', '.part-qty, .part-rate, .part-wastage', function() {
+        const row = $(this).closest('tr');
+        const qty = parseFloat(row.find('.part-qty').val()) || 0;
+        const rate = parseFloat(row.find('.part-rate').val()) || 0;
+        const wastage = parseFloat(row.find('.part-wastage').val()) || 0;
+        row.find('.part-total').val(((qty + wastage) * rate).toFixed(2));
+    });
+
+    // Product/Variation Selection logic
+    $(document).on('click', '.toggle-product', function () {
+        const wrapper = $(this).closest('.product-wrapper');
+        const row = wrapper.closest('tr');
+        const rowIndex = row.data('item-index');
+        wrapper.empty().append(`
+            <select name="items[${rowIndex}][product_id]" class="form-control select2-js product-select mb-2">
+                <option value="">Select Product</option>
+                ${products.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+            </select>
+            <select name="items[${rowIndex}][variation_id]" class="form-control select2-js variation-select" style="display:none;">
+                <option value="">Select Variation</option>
+            </select>
+            <button type="button" class="btn btn-link p-0 revert-to-name mt-1"> Write Name </button>
+        `).find('.select2-js').select2({ width: '100%' });
+    });
+
+    $(document).on('click', '.revert-to-name', function () {
+        const wrapper = $(this).closest('.product-wrapper');
+        const rowIndex = wrapper.closest('tr').data('item-index');
+        wrapper.empty().append(`
+            <input type="text" name="items[${rowIndex}][item_name]" class="form-control item-name-input" placeholder="Product Name">
+            <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
+        `);
+    });
+
+    $(document).on('change', '.product-select', function() {
+        const variationSelect = $(this).closest('.product-wrapper').find('.variation-select');
+        const productId = $(this).val();
+        if(productId) {
+            variationSelect.show().html('<option value="">Loading...</option>');
+            $.get(`/product/${productId}/variations`, function(data) {
+                let options = '<option value="">Select Variation</option>';
+                (data.variation || []).forEach(v => options += `<option value="${v.id}">${v.sku}</option>`);
+                variationSelect.html(options).select2({ width: '100%' });
+            });
+        }
+    });
+
+    // ================= CALCULATIONS =================
+    $(document).on('input change', '.gross-weight, .purity, .making-rate, .vat-percent, .metal-type, #gold_rate_aed, #metal_rate_aed, #gold_rate_usd, #metal_rate_usd', function() {
+        const row = $(this).closest('tr.item-row');
+        if(row.length) calculateRow(row);
+        calculateTotals();
+    });
+
+    function calculateRow(row) {
+        const purity = parseFloat(row.find('.purity').val()) || 0;
+        const gross = parseFloat(row.find('.gross-weight').val()) || 0;
+        const makingRate = parseFloat(row.find('.making-rate').val()) || 0;
+        const vatPercent = parseFloat(row.find('.vat-percent').val()) || 0;
+        
+        const metalType = row.find('.metal-type').val();
+        const currency = currencySelect.val();
+        let rate = 0;
+        if(metalType === 'gold') rate = parseFloat(currency === 'USD' ? $('#gold_rate_usd').val() : $('#gold_rate_aed').val()) || 0;
+        else rate = parseFloat(currency === 'USD' ? $('#metal_rate_usd').val() : $('#metal_rate_aed').val()) || 0;
+
+        const purityWt = gross * purity;
+        const col995 = purityWt / 0.995;
+        const makingValue = makingRate * gross;
+        const metalValue = purityWt * rate;
+        const taxableAmount = makingValue + metalValue;
+        const vatAmount = taxableAmount * vatPercent / 100;
+        const itemTotal = taxableAmount + vatAmount;
+
+        row.find('.purity-weight').val(purityWt.toFixed(3));
+        row.find('.col-995').val(col995.toFixed(3));
+        row.find('.making-value').val(makingValue.toFixed(2));
+        row.find('.metal-value').val(metalValue.toFixed(2));
+        row.find('.taxable-amount').val(taxableAmount.toFixed(2));
+        row.find('.vat-amount').val(vatAmount.toFixed(2));
+        row.find('.item-total').val(itemTotal.toFixed(2));
+    }
+
+    function calculateTotals() {
+        let sumGross = 0, sumPurity = 0, sum995 = 0, sumMaking = 0, sumMetal = 0, sumVAT = 0, netAmount = 0;
+        
+        $('#PurchaseTable tr.item-row').each(function () {
+            sumGross  += parseFloat($(this).find('.gross-weight').val()) || 0;
+            sumPurity += parseFloat($(this).find('.purity-weight').val()) || 0;
+            sum995    += parseFloat($(this).find('.col-995').val()) || 0;
+            sumMaking += parseFloat($(this).find('.making-value').val()) || 0;
+            sumMetal  += parseFloat($(this).find('.metal-value').val()) || 0;
+            sumVAT    += parseFloat($(this).find('.vat-amount').val()) || 0;
+            netAmount += parseFloat($(this).find('.item-total').val()) || 0;
+        });
+
+        // Main Summary Fields
+        $('#sum_gross_weight').val(sumGross.toFixed(3));
+        $('#sum_purity_weight').val(sumPurity.toFixed(3));
+        $('#sum_995').val(sum995.toFixed(3));
+        $('#sum_making_value').val(sumMaking.toFixed(2));
+        $('#sum_metal_value').val(sumMetal.toFixed(2));
+        $('#sum_vat_amount').val(sumVAT.toFixed(2));
+        $('#net_amount_display').val(netAmount.toFixed(2));
+        $('#net_amount').val(netAmount.toFixed(2));
+
+        // ================= NEW: MATERIAL + MAKING CALCULATION =================
+        if ($('#payment_method').val() === 'material+making cost') {
+            const currentGoldRate = parseFloat($('#gold_rate_aed').val()) || 0;
+            
+            // 1. Raw Metal Weight = Total of 995 column
+            $('input[name="material_weight"]').val(sum995.toFixed(3));
+            
+            // 2. Raw Metal Purity = Total Purity Wt
+            $('input[name="material_purity"]').val(sumPurity.toFixed(3));
+            
+            // 3. Metal Adjustment Value = Total Purity Wt * Metal Rate (Gold AED)
+            const adjValue = sumPurity * currentGoldRate;
+            $('input[name="material_value"]').val(adjValue.toFixed(2));
+            
+            // 4. Making Charges Payable = Net Amount
+            $('input[name="making_charges"]').val(netAmount.toFixed(2));
+        }
+        // ======================================================================
+
+        updateConversion();
+    }
+
+    function updateConversion() {
+        const netTotal = parseFloat($('#net_amount').val() || 0);
+        const rate = parseFloat(rateInput.val() || 0);
+        if(currencySelect.val() === 'USD' && rate > 0) convertedTotal.val((netTotal * rate).toFixed(2));
+        else convertedTotal.val(netTotal.toFixed(2));
+    }
+
+    currencySelect.on('change', function() {
+        if(this.value === 'USD') rateBox.show();
+        else { rateBox.hide(); rateInput.val(''); }
+        updateConversion();
+        // Recalculate rows because the metal rates (AED/USD) might change
+        $('#PurchaseTable tr.item-row').each(function() { calculateRow($(this)); });
+        calculateTotals();
+    });
+
+    rateInput.on('input', updateConversion);
+
+    // Payment Toggle Logic
+    $('#payment_method').on('change', function() {
+      const val = $(this).val();
+      $('#cheque_fields, #material_fields, #received_by_box').addClass('d-none');
+      
+      if(val === 'cheque') {
+        $('#cheque_fields,#received_by_box').removeClass('d-none');
+      } else if(val === 'cash') {
+        $('#received_by_box').removeClass('d-none');
+      } else if(val === 'material+making cost') {
+        $('#material_fields').removeClass('d-none');
+        calculateTotals(); // Trigger the auto-fill logic
       }
-
-      window.addNewRow = function() {
-          const nextIndex = $('#PurchaseTable tr.item-row').length;
-          const rowHtml = `
-          <tr class="item-row" data-item-index="${nextIndex}">
-              <td>
-                  <div class="product-wrapper">
-                      <input type="text" name="items[${nextIndex}][item_name]" class="form-control item-name-input" placeholder="Enter product name">
-                      <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
-                  </div>
-              </td>
-              <td><input type="text" name="items[${nextIndex}][item_description]" class="form-control" required></td>
-              <td>
-                  <select name="items[${nextIndex}][purity]" class="form-control purity">
-                      <option value="0.916">22K (92%)</option>
-                      <option value="0.875">21K (88%)</option>
-                      <option value="0.750">18K (75%)</option>
-                  </select>
-              </td>
-              <td><input type="number" name="items[${nextIndex}][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>
-              <td><input type="number" name="items[${nextIndex}][purity_weight]" step="any" value="0" class="form-control purity-weight" readonly></td>
-              <td><input type="number" name="items[${nextIndex}][995]" step="any" value="0" class="form-control col-995" readonly></td>
-              <td><input type="number" name="items[${nextIndex}][making_rate]" step="any" value="0" class="form-control making-rate"></td>
-              <td><input type="number" name="items[${nextIndex}][making_value]" step="any" class="form-control making-value" readonly></td>
-              <td>
-                  <select name="items[${nextIndex}][metal_type]" class="form-control metal-type">
-                      <option value="gold">Gold</option>
-                      <option value="metal">Metal</option>
-                  </select>
-              </td>
-              <td><input type="number" name="items[${nextIndex}][metal_value]" step="any" value="0" class="form-control metal-value" readonly></td>
-              <td><input type="number" name="items[${nextIndex}][taxable_amount]" step="any" value="0" class="form-control taxable-amount" readonly></td>
-              <td><input type="number" name="items[${nextIndex}][vat_percent]" class="form-control vat-percent" step="any" value="0"></td>
-              <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
-              <td><input type="number" class="form-control item-total" readonly></td>
-              <td>
-                  <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
-                  <button type="button" class="btn btn-sm btn-primary toggle-parts"><i class="fas fa-wrench"></i></button>
-              </td>
-          </tr>
-          <tr class="parts-row" style="display:none;background:#efefef">
-              <td colspan="15">
-                  <div class="parts-wrapper">
-                    <table class="table table-sm table-bordered parts-table">
-                        <thead>
-                            <tr>
-                                <th>Part</th>
-                                <th>Variation</th>
-                                <th>Qty</th>
-                                <th>Rate</th>
-                                <th>Wastage</th>
-                                <th>Total</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                    <button type="button" class="btn btn-sm btn-outline-primary add-part">+ Add Part</button>
-                  </div>
-              </td>
-          </tr>`;
-
-          $('#PurchaseTable').append(rowHtml);
-      };
-
-      window.removeRow = function(btn) {
-          const row = $(btn).closest('tr');
-          const partsRow = row.next('.parts-row');
-          if ($('#PurchaseTable tr.item-row').length > 1) {
-              partsRow.remove();
-              row.remove();
-              updateRowIndexes();
-              calculateTotals();
-          }
-      };
-
-      // ================= EVENT DELEGATION (Fixes Dynamic Row Bugs) =================
-      $(document).on('click', '.toggle-parts', function() {
-          $(this).closest('tr').next('.parts-row').toggle();
-      });
-
-      $(document).on('click', '.add-part', function() {
-          const partsTable = $(this).siblings('table').find('tbody');
-          const itemIndex = $(this).closest('.parts-row').prev('.item-row').data('item-index');
-          let partIndex = partsTable.find('tr').length;
-
-          let row = `
-          <tr>
-              <td>
-                  <select name="items[${itemIndex}][parts][${partIndex}][product_id]" class="form-control select2-js part-product-select">
-                      <option value="">Select Part</option>
-                      ${products.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-                  </select>
-              </td>
-              <td>
-                  <select name="items[${itemIndex}][parts][${partIndex}][variation_id]" class="form-control select2-js part-variation-select">
-                      <option value="">Select Variation</option>
-                  </select>
-              </td>
-              <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][qty]" step="any" value="0" class="form-control part-qty"></td>
-              <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][rate]" step="any" value="0" class="form-control part-rate"></td>
-              <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][wastage]" step="any" value="0" class="form-control part-wastage"></td>
-              <td><input type="number" class="form-control part-total" readonly></td>
-              <td><button type="button" class="btn btn-sm btn-danger remove-part">×</button></td>
-          </tr>`;
-
-          partsTable.append(row);
-          partsTable.find('.select2-js').select2({ width: '100%' });
-      });
-
-      $(document).on('click', '.remove-part', function() { $(this).closest('tr').remove(); });
-
-      $(document).on('input', '.part-qty, .part-rate, .part-wastage', function() {
-          const row = $(this).closest('tr');
-          const qty = parseFloat(row.find('.part-qty').val()) || 0;
-          const rate = parseFloat(row.find('.part-rate').val()) || 0;
-          const wastage = parseFloat(row.find('.part-wastage').val()) || 0;
-          row.find('.part-total').val(((qty + wastage) * rate).toFixed(2));
-      });
-
-      // Product/Variation Selection logic
-      $(document).on('click', '.toggle-product', function () {
-          const wrapper = $(this).closest('.product-wrapper');
-          const row = wrapper.closest('tr');
-          const rowIndex = row.data('item-index');
-          wrapper.empty().append(`
-              <select name="items[${rowIndex}][product_id]" class="form-control select2-js product-select mb-2">
-                  <option value="">Select Product</option>
-                  ${products.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-              </select>
-              <select name="items[${rowIndex}][variation_id]" class="form-control select2-js variation-select" style="display:none;">
-                  <option value="">Select Variation</option>
-              </select>
-              <button type="button" class="btn btn-link p-0 revert-to-name mt-1"> Write Name </button>
-          `).find('.select2-js').select2({ width: '100%' });
-      });
-
-      $(document).on('click', '.revert-to-name', function () {
-          const wrapper = $(this).closest('.product-wrapper');
-          const rowIndex = wrapper.closest('tr').data('item-index');
-          wrapper.empty().append(`
-              <input type="text" name="items[${rowIndex}][item_name]" class="form-control item-name-input" placeholder="Product Name">
-              <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
-          `);
-      });
-
-      $(document).on('change', '.product-select', function() {
-          const variationSelect = $(this).closest('.product-wrapper').find('.variation-select');
-          const productId = $(this).val();
-          if(productId) {
-              variationSelect.show().html('<option value="">Loading...</option>');
-              $.get(`/product/${productId}/variations`, function(data) {
-                  let options = '<option value="">Select Variation</option>';
-                  (data.variation || []).forEach(v => options += `<option value="${v.id}">${v.sku}</option>`);
-                  variationSelect.html(options).select2({ width: '100%' });
-              });
-          }
-      });
-
-      // ================= CALCULATIONS =================
-      $(document).on('input change', '.gross-weight, .purity, .making-rate, .vat-percent, .metal-type, #gold_rate_aed, #metal_rate_aed, #gold_rate_usd, #metal_rate_usd', function() {
-          const row = $(this).closest('tr.item-row');
-          if(row.length) calculateRow(row);
-          calculateTotals();
-      });
-
-      function calculateRow(row) {
-          const purity = parseFloat(row.find('.purity').val()) || 0;
-          const gross = parseFloat(row.find('.gross-weight').val()) || 0;
-          const makingRate = parseFloat(row.find('.making-rate').val()) || 0;
-          const vatPercent = parseFloat(row.find('.vat-percent').val()) || 0;
-          
-          const metalType = row.find('.metal-type').val();
-          const currency = currencySelect.val();
-          let rate = 0;
-          if(metalType === 'gold') rate = parseFloat(currency === 'USD' ? $('#gold_rate_usd').val() : $('#gold_rate_aed').val()) || 0;
-          else rate = parseFloat(currency === 'USD' ? $('#metal_rate_usd').val() : $('#metal_rate_aed').val()) || 0;
-
-          const purityWt = gross * purity;
-          const col995 = purityWt / 0.995;
-          const makingValue = makingRate * gross;
-          const metalValue = purityWt * rate;
-          const taxableAmount = makingValue + metalValue;
-          const vatAmount = taxableAmount * vatPercent / 100;
-          const itemTotal = taxableAmount + vatAmount;
-
-          row.find('.purity-weight').val(purityWt.toFixed(3));
-          row.find('.col-995').val(col995.toFixed(3));
-          row.find('.making-value').val(makingValue.toFixed(2));
-          row.find('.metal-value').val(metalValue.toFixed(2));
-          row.find('.taxable-amount').val(taxableAmount.toFixed(2));
-          row.find('.vat-amount').val(vatAmount.toFixed(2));
-          row.find('.item-total').val(itemTotal.toFixed(2));
-      }
-
-      function calculateTotals() {
-          let sumGross = 0, sumPurity = 0, sum995 = 0, sumMaking = 0, sumMetal = 0, sumVAT = 0, netAmount = 0;
-          $('#PurchaseTable tr.item-row').each(function () {
-              sumGross  += parseFloat($(this).find('.gross-weight').val()) || 0;
-              sumPurity += parseFloat($(this).find('.purity-weight').val()) || 0;
-              sum995    += parseFloat($(this).find('.col-995').val()) || 0;
-              sumMaking += parseFloat($(this).find('.making-value').val()) || 0;
-              sumMetal  += parseFloat($(this).find('.metal-value').val()) || 0;
-              sumVAT    += parseFloat($(this).find('.vat-amount').val()) || 0;
-              netAmount += parseFloat($(this).find('.item-total').val()) || 0;
-          });
-          $('#sum_gross_weight').val(sumGross.toFixed(3));
-          $('#sum_purity_weight').val(sumPurity.toFixed(3));
-          $('#sum_995').val(sum995.toFixed(3));
-          $('#sum_making_value').val(sumMaking.toFixed(2));
-          $('#sum_metal_value').val(sumMetal.toFixed(2));
-          $('#sum_vat_amount').val(sumVAT.toFixed(2));
-          $('#net_amount_display').val(netAmount.toFixed(2));
-          $('#net_amount').val(netAmount.toFixed(2));
-          updateConversion();
-      }
-
-      function updateConversion() {
-          const netTotal = parseFloat($('#net_amount').val() || 0);
-          const rate = parseFloat(rateInput.val() || 0);
-          if(currencySelect.val() === 'USD' && rate > 0) convertedTotal.val((netTotal * rate).toFixed(2));
-          else convertedTotal.val(netTotal.toFixed(2));
-      }
-
-      currencySelect.on('change', function() {
-          if(this.value === 'USD') rateBox.show();
-          else { rateBox.hide(); rateInput.val(''); }
-          updateConversion();
-          // Recalculate rows because the metal rates (AED/USD) might change
-          $('#PurchaseTable tr.item-row').each(function() { calculateRow($(this)); });
-          calculateTotals();
-      });
-
-      rateInput.on('input', updateConversion);
-
-      // Payment Toggle Logic
-      $('#payment_method').on('change', function() {
-          const val = $(this).val();
-          $('#cheque_fields, #material_fields, #received_by_box').addClass('d-none');
-          if(val === 'cheque') $('#cheque_fields,#received_by_box').removeClass('d-none');
-          else if(val === 'cash') $('#received_by_box').removeClass('d-none');
-          else if(val === 'material+making cost') $('#material_fields').removeClass('d-none');
-      }).trigger('change');
-
+    }).trigger('change');
   });
 </script>
 @endsection
