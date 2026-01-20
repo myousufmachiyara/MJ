@@ -452,7 +452,7 @@
                   </select>
               </td>
               <td><select name="items[${itemIndex}][parts][${partIndex}][variation_id]" class="form-control select2-js part-variation-select"><option value="">Select Variation</option></select></td>
-              <td><input type="text" name="items[${itemIndex}][parts][${partIndex}][description]" class="form-control"></td>
+              <td><input type="text" name="items[${itemIndex}][parts][${partIndex}][part_description]" class="form-control"></td>
               <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][qty]" step="any" value="0" class="form-control part-qty"></td>
               <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][rate]" step="any" value="0" class="form-control part-rate"></td>
               <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][stone]" step="any" value="0" class="form-control part-stone"></td>
