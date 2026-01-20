@@ -318,7 +318,7 @@ class PurchaseInvoiceController extends Controller
                 // Parts Header for clarity
                 $html .= '<tr style="background-color:#f9f9f9; font-style:italic; font-size:7px;">
                             <td width="3%"></td>
-                            <td colspan="13" width="97%"> &nbsp;&nbsp; Composition Parts:</td>
+                            <td colspan="13" width="97%"><b>Parts:</b></td>
                           </tr>';
 
                 foreach ($item->parts as $part) {
