@@ -54,8 +54,8 @@ class PurchaseInvoiceController extends Controller
             // ADDED: Validation for the missing rates
             'gold_rate_aed'  => 'nullable|numeric|min:0',
             'gold_rate_usd'  => 'nullable|numeric|min:0',
-            'metal_rate_aed' => 'nullable|numeric|min:0',
-            'metal_rate_usd' => 'nullable|numeric|min:0',
+            'diamond_rate_aed' => 'nullable|numeric|min:0',
+            'diamond_rate_usd' => 'nullable|numeric|min:0',
 
             // Cheque
             'bank_name'      => 'nullable|required_if:payment_method,cheque|string',
@@ -70,7 +70,7 @@ class PurchaseInvoiceController extends Controller
             'items.*.gross_weight' => 'required|numeric|min:0',
             'items.*.purity' => 'required|numeric|min:0|max:1',
             'items.*.making_rate' => 'required|numeric|min:0',
-            'items.*.metal_type' => 'required|in:gold,metal',
+            'items.*.material_type' => 'required|in:gold,diamond',
             'items.*.vat_percent' => 'required|numeric|min:0',
 
             // Parts
@@ -78,7 +78,7 @@ class PurchaseInvoiceController extends Controller
             'items.*.parts.*.product_id' => 'required|exists:products,id',
             'items.*.parts.*.qty' => 'required|numeric|min:0',
             'items.*.parts.*.rate' => 'required|numeric|min:0',
-            'items.*.parts.*.wastage' => 'nullable|numeric|min:0',
+            'items.*.parts.*.stone' => 'nullable|numeric|min:0',
             'items.*.parts.*.part_description' => 'nullable|string',
         ]);
 
@@ -90,9 +90,7 @@ class PurchaseInvoiceController extends Controller
             $nextNumber = $lastInvoice ? intval($lastInvoice->invoice_no) + 1 : 1;
             $invoiceNo = str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
 
-            $netAmountAed = $request->currency === 'USD'
-                ? round($request->net_amount * $request->exchange_rate, 2)
-                : $request->net_amount;
+            $netAmountAed = $request->currency === 'USD' ? round($request->net_amount * $request->exchange_rate, 2) : $request->net_amount;
 
             // 2. Create Invoice
             $invoice = PurchaseInvoice::create([
@@ -106,8 +104,8 @@ class PurchaseInvoiceController extends Controller
                 // ADDED: These lines ensure the rates are saved to the database
                 'gold_rate_aed'   => $request->gold_rate_aed,
                 'gold_rate_usd'   => $request->gold_rate_usd,
-                'metal_rate_aed'  => $request->metal_rate_aed,
-                'metal_rate_usd'  => $request->metal_rate_usd,
+                'diamond_rate_aed'  => $request->diamond_rate_aed,
+                'diamond_rate_usd'  => $request->diamond_rate_usd,
 
                 'net_amount'      => $request->net_amount,
                 'net_amount_aed'  => $netAmountAed,
@@ -130,12 +128,12 @@ class PurchaseInvoiceController extends Controller
                 $makingValue  = $itemData['gross_weight'] * $itemData['making_rate'];
 
                 // Logic to pick the correct rate for calculation
-                $metalRate = $itemData['metal_type'] === 'gold'
+                $metalRate = $itemData['material_type'] === 'gold'
                     ? ($request->currency === 'USD' ? $request->gold_rate_usd : $request->gold_rate_aed)
-                    : ($request->currency === 'USD' ? $request->metal_rate_usd : $request->metal_rate_aed);
+                    : ($request->currency === 'USD' ? $request->diamond_rate_usd : $request->diamond_rate_aed);
 
-                $metalValue = $purityWeight * ($metalRate ?? 0);
-                $taxable    = $makingValue + $metalValue;
+                $materialValue = $purityWeight * ($metalRate ?? 0);
+                $taxable    = $makingValue + $materialValue;
                 $vatAmount  = $taxable * ($itemData['vat_percent'] / 100);
                 $itemTotal  = $taxable + $vatAmount;
 
@@ -150,8 +148,8 @@ class PurchaseInvoiceController extends Controller
                     'col_995'          => $col995,
                     'making_rate'      => $itemData['making_rate'],
                     'making_value'     => $makingValue,
-                    'metal_type'       => $itemData['metal_type'],
-                    'metal_value'      => $metalValue,
+                    'material_type'    => $itemData['material_type'],
+                    'material_value'   => $materialValue,
                     'taxable_amount'   => $taxable,
                     'vat_percent'      => $itemData['vat_percent'],
                     'vat_amount'       => $vatAmount,
@@ -160,13 +158,13 @@ class PurchaseInvoiceController extends Controller
 
                 if (!empty($itemData['parts'])) {
                     foreach ($itemData['parts'] as $partData) {
-                        $partTotal = ($partData['qty'] * $partData['rate']) + ($partData['wastage'] ?? 0);
+                        $partTotal = ($partData['qty'] * $partData['rate']) + ($partData['stone'] ?? 0);
                         $invoiceItem->parts()->create([
                             'product_id'   => $partData['product_id'],
                             'variation_id' => $partData['variation_id'] ?? null,
                             'qty'          => $partData['qty'],
                             'rate'         => $partData['rate'],
-                            'wastage'      => $partData['wastage'] ?? 0,
+                            'stone'        => $partData['stone'] ?? 0,
                             'total'        => $partTotal,
                             'part_description' => $partData['part_description'] ?? null,
                         ]);
@@ -235,14 +233,14 @@ class PurchaseInvoiceController extends Controller
         $vendorHtml = '
         <table cellpadding="3" width="100%">
             <tr>
-                <td width="60%">
+                <td width="50%">
                     <b>To:</b><br>
                     '.($invoice->vendor->name ?? '-').'<br>
                     '.($invoice->vendor->address ?? '-').'<br>
                     Contact: '.($invoice->vendor->contact_no ?? '-').'<br>
                     TRN: '.($invoice->vendor->trn ?? '-').'
                 </td>
-                <td width="40%">
+                <td width="50%">
                     <table border="1" cellpadding="3" width="100%">
                         <tr><td width="45%"><b>Date</b></td><td width="55%">'.\Carbon\Carbon::parse($invoice->invoice_date)->format('d.m.Y').'</td></tr>
                         <tr><td><b>Invoice No</b></td><td>'.$invoice->invoice_no.'</td></tr>
@@ -251,8 +249,8 @@ class PurchaseInvoiceController extends Controller
                             <td>'.number_format($invoice->currency === 'USD' ? $invoice->gold_rate_usd : $invoice->gold_rate_aed, 2).'</td>
                         </tr>
                         <tr>
-                            <td><b>Metal Rate ('.$invoice->currency.')</b></td>
-                            <td>'.number_format($invoice->currency === 'USD' ? $invoice->metal_rate_usd : $invoice->metal_rate_aed, 2).'</td>
+                            <td><b>Diamond Rate ('.$invoice->currency.')</b></td>
+                            <td>'.number_format($invoice->currency === 'USD' ? $invoice->diamond_rate_usd : $invoice->diamond_rate_aed, 2).'</td>
                         </tr>
                     </table>
                 </td>
@@ -267,17 +265,17 @@ class PurchaseInvoiceController extends Controller
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
                     <th width="3%" rowspan="2">#</th>
                     <th width="10%" rowspan="2">Item Name</th>
-                    <th width="12%" rowspan="2">Description</th>
+                    <th width="10%" rowspan="2">Description</th>
                     <th width="6%" rowspan="2">Purity</th>
                     <th width="7%" rowspan="2">Gross Wt</th>
                     <th width="7%" rowspan="2">Purity Wt</th>
                     <th width="6%" rowspan="2">995</th>
                     <th width="14%" colspan="2">Making</th>
-                    <th width="6%" rowspan="2">Metal</th>
-                    <th width="7%" rowspan="2">Metal Val</th>
-                    <th width="7%" rowspan="2">Taxable</th>
+                    <th width="8%" rowspan="2">Material</th>
+                    <th width="7%" rowspan="2">Material Val</th>
+                    <th width="8%" rowspan="2">Taxable</th>
                     <th width="6%" rowspan="2">VAT %</th>
-                    <th width="9%" rowspan="2">Gross Total</th>
+                    <th width="8%" rowspan="2">Gross Total</th>
                 </tr>
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
                     <th width="7%">Rate</th>
@@ -301,18 +299,18 @@ class PurchaseInvoiceController extends Controller
                 <tr style="text-align:center; background-color: #ffffff;">
                     <td width="3%">'.($index + 1).'</td>
                     <td width="10%">'.$item->item_name.'</td>
-                    <td width="12%">'.$item->item_description.'</td>
+                    <td width="10%">'.$item->item_description.'</td>
                     <td width="6%">'.number_format($item->purity, 3).'</td>
                     <td width="7%">'.number_format($item->gross_weight, 3).'</td>
                     <td width="7%">'.number_format($item->purity_weight, 3).'</td>
                     <td width="6%">'.number_format($item->col_995 ?? 0, 3).'</td>
                     <td width="7%">'.number_format($item->making_rate ?? 0, 2).'</td>
                     <td width="7%">'.number_format($item->making_value, 2).'</td>
-                    <td width="6%">'.ucfirst($item->metal_type).'</td>
+                    <td width="8%">'.ucfirst($item->material_type).'</td>
                     <td width="7%">'.number_format($item->metal_value, 2).'</td>
-                    <td width="7%">'.number_format($item->taxable_amount, 2).'</td>
+                    <td width="8%">'.number_format($item->taxable_amount, 2).'</td>
                     <td width="6%">'.round($vatPercent, 0).'%</td>
-                    <td width="9%">'.number_format($rowTotal, 2).'</td>
+                    <td width="8%">'.number_format($rowTotal, 2).'</td>
                 </tr>';
 
             // --- PARTS SUB-ROWS ---
@@ -341,7 +339,7 @@ class PurchaseInvoiceController extends Controller
                         <td width="22%" colspan="2" style="text-align:left;">&nbsp;&nbsp;&nbsp;↳ '.($part->product->name ?? 'Part').$variationText.'</td>
                         <td width="13%" colspan="2" style="text-align:center;">Qty: '.$part->qty.' '.$partUnit.'</td>
                         <td width="13%" colspan="2" style="text-align:center;">Rate: '.number_format($part->rate, 2).'</td>
-                        <td width="13%" colspan="2" style="text-align:center;">Wastage: '.number_format($part->wastage ?? 0, 2).'</td>
+                        <td width="13%" colspan="2" style="text-align:center;">stone: '.number_format($part->stone ?? 0, 2).'</td>
                         <td width="36%" colspan="5" style="text-align:right; padding-right:10px;">Part Total: '.number_format($part->total, 2).' &nbsp;</td>
                     </tr>';
                 }

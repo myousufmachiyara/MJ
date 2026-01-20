@@ -29,8 +29,9 @@ class PurchaseInvoiceItem extends Model
         'making_value',
 
         // Metal
-        'metal_type',
-        'metal_value',
+        'material_rate',
+        'material_type',
+        'material_value',
 
         // Tax
         'taxable_amount',

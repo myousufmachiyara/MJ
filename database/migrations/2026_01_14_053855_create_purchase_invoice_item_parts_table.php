@@ -18,7 +18,7 @@ return new class extends Migration
             $table->foreignId('variation_id')->nullable();
             $table->decimal('qty', 15, 3)->default(0);
             $table->decimal('rate', 15, 2)->default(0);
-            $table->decimal('wastage', 15, 3)->default(0);
+            $table->decimal('stone', 15, 3)->default(0);
             $table->decimal('total', 15, 2)->default(0);
             $table->string('part_description')->nullable();
             $table->timestamps();

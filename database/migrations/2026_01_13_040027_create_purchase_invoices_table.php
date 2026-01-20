@@ -48,8 +48,8 @@ return new class extends Migration
             $table->decimal('gold_rate_usd', 18, 4)->nullable();
             
             // Other Metal / Silver Rates (renamed to match controller 'metal_rate' logic)
-            $table->decimal('metal_rate_aed', 18, 4)->nullable();
-            $table->decimal('metal_rate_usd', 18, 4)->nullable();
+            $table->decimal('diamond_rate_aed', 18, 4)->nullable();
+            $table->decimal('diamond_rate_usd', 18, 4)->nullable();
 
             /* ================= META ================= */
             $table->unsignedBigInteger('created_by');

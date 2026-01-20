@@ -15,7 +15,7 @@ class PurchaseInvoiceItemPart extends Model
         'variation_id',
         'qty',
         'rate',
-        'wastage',
+        'stone',
         'total',
         'part_description',
     ];

@@ -38,8 +38,8 @@ class PurchaseInvoice extends Model
         // header level rates
         'gold_rate_aed',
         'gold_rate_usd',
-        'metal_rate_aed',
-        'metal_rate_usd',
+        'diamond_rate_aed',
+        'diamond_rate_usd',
 
         'created_by',
     ];

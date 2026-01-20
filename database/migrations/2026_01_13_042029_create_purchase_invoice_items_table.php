@@ -29,9 +29,9 @@ return new class extends Migration
             $table->decimal('col_995', 15, 3)->default(0);
             $table->decimal('making_rate', 15, 2)->default(0);
             $table->decimal('making_value', 18, 2)->default(0); 
-            $table->decimal('material_value', 18, 2)->default(0); // material cost based on metal_rate
-            $table->string('metal_type'); // for custom descriptions
-            $table->decimal('metal_value', 18, 2)->default(0); // total value of metals
+            $table->decimal('material_rate', 18, 2)->default(0); // material cost based on metal_rate
+            $table->string('material_type'); // for custom descriptions
+            $table->decimal('material_value', 18, 2)->default(0); // total value of metals
             $table->decimal('taxable_amount', 18, 2)->default(0);
             $table->decimal('vat_percent', 5, 2)->default(0); 
             $table->decimal('vat_amount', 18, 2)->default(0); // optional, for direct VAT calculation
@@ -39,8 +39,7 @@ return new class extends Migration
 
             /* ================= METAL RATES PER ITEM ================= */
             $table->decimal('gold_rate', 18, 2)->nullable();
-            $table->decimal('silver_rate', 18, 2)->nullable();
-            $table->decimal('other_metal_rate', 18, 2)->nullable();
+            $table->decimal('diamond_rate', 18, 2)->nullable();
 
             /* ================= REMARKS & FILES ================= */
             $table->string('remarks')->nullable();
