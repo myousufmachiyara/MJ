@@ -319,6 +319,16 @@
 <script>
   $(document).ready(function () {
       const products = @json($products);
+
+      // Map the unit name specifically so it's easy to access in the loop
+      const productsWithUnits = products.map(p => {
+          return {
+              id: p.id,
+              name: p.name,
+              // Access the name column from the measurement_unit table
+              unit_name: p.measurement_unit ? p.measurement_unit.name : '' 
+          };
+      });
       const TROY_OUNCE_TO_GRAM = 31.1034768;
 
       $('#currency').on('change', function() {
@@ -435,7 +445,7 @@
 
       // ================= PARTS & PRODUCT LOGIC =================
       $(document).on('click', '.toggle-parts', function() {
-          $(this).closest('tr').next('.parts-row').toggle();
+        $(this).closest('tr').next('.parts-row').toggle();
       });
 
       $(document).on('click', '.add-part', function() {
@@ -446,14 +456,23 @@
           let row = `
           <tr>
               <td>
-                  <select name="items[${itemIndex}][parts][${partIndex}][product_id]" class="form-control select2-js part-product-select">
-                      <option value="">Select Part</option>
-                      ${products.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-                  </select>
+                <select name="items[${itemIndex}][parts][${partIndex}][product_id]" class="form-control select2-js part-product-select">
+                  <option value="">Select Part</option>
+                  ${products.map(p => `
+                    <option value="${p.id}" data-unit="${p.measurement_unit?.shortcode || ''}">
+                      ${p.name}
+                    </option>
+                  `).join('')}
+                </select>
               </td>
               <td><select name="items[${itemIndex}][parts][${partIndex}][variation_id]" class="form-control select2-js part-variation-select"><option value="">Select Variation</option></select></td>
               <td><input type="text" name="items[${itemIndex}][parts][${partIndex}][part_description]" class="form-control"></td>
-              <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][qty]" step="any" value="0" class="form-control part-qty"></td>
+              <td>
+                <div class="input-group">
+                  <input type="number" name="items[${itemIndex}][parts][${partIndex}][qty]" step="any" value="0" class="form-control part-qty">
+                  <input type="text" class="form-control part-unit-name" style="width:60px; flex:none;" readonly placeholder="Unit">
+                </div>
+              </td>          
               <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][rate]" step="any" value="0" class="form-control part-rate"></td>
               <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][stone]" step="any" value="0" class="form-control part-stone"></td>
               <td><input type="number" class="form-control part-total" readonly></td>
@@ -589,6 +608,25 @@
           else if(val === 'cash') $('#received_by_box').removeClass('d-none');
           else if(val === 'material+making cost') $('#material_fields').removeClass('d-none');
           calculateTotals();
+      });
+
+      $(document).on('change', '.part-product-select', function() {
+          // 1. Get the selected option
+          const selectedOption = $(this).find(':selected');
+          
+          // 2. Get the unit name from the data-unit attribute
+          const unitName = selectedOption.data('unit') || '';
+          
+          // 3. Find the unit input field in the same row and set its value
+          $(this).closest('tr').find('.part-unit-name').val(unitName);
+      });
+
+      // ================= REMOVE PART LOGIC =================
+      $(document).on('click', '.remove-part', function() {
+          const row = $(this).closest('tr');
+          const tableBody = row.closest('tbody');
+          
+          row.remove();
       });
   });
 </script>

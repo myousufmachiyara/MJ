@@ -26,9 +26,8 @@ class PurchaseInvoiceController extends Controller
     public function create()
     {
         $vendors = ChartOfAccounts::where('account_type', 'vendor')->get();
-        $products = Product::get();
-        $units = MeasurementUnit::all();
-        return view('purchase.create', compact('products', 'vendors','units'));
+        $products = Product::with('measurementUnit')->get();
+        return view('purchase.create', compact('products', 'vendors'));
     }
 
     public function store(Request $request)
@@ -318,11 +317,12 @@ class PurchaseInvoiceController extends Controller
                 // Parts Header for clarity
                 $html .= '<tr style="background-color:#f9f9f9; font-style:italic; font-size:7px;">
                             <td width="3%"></td>
-                            <td colspan="13" width="97%"><b>Parts:</b></td>
-                          </tr>';
+                            <td colspan="13" width="97%"><b>Parts Detail:</b></td>
+                        </tr>';
 
                 foreach ($item->parts as $part) {
-                    $partUnit = $part->product->measurementUnit->shortcode ?? '-';
+                    // Fetch the unit (e.g., Grams, Pcs, Cts)
+                    $partUnit = $part->product->measurementUnit->shortcode ?? ($part->product->measurementUnit->name ?? '-');
                     
                     $variationText = '';
                     if ($part->variation && $part->variation->attributeValues->count()) {
@@ -336,12 +336,14 @@ class PurchaseInvoiceController extends Controller
                     $html .= '
                     <tr style="font-size:7.5px; background-color:#fcfcfc;">
                         <td width="3%"></td>
-                        <td width="25%" colspan="2" style="text-align:left;">Item:'.($part->product->name ?? 'Part').$variationText.'</td>
+                        <td width="25%" colspan="2" style="text-align:left;">'.($part->product->name ?? 'Part').$variationText.'</td>
                         <td width="22%" colspan="2" style="text-align:left;">'.$part->part_description.'</td>
-                        <td width="10%" colspan="2" style="text-align:center;">Qty: '.$part->qty.' '.$partUnit.'</td>
+                        
+                        <td width="10%" colspan="2" style="text-align:center;">'.$part->qty.' <span style="color:#666;">'.$partUnit.'</span></td>
+                        
                         <td width="10%" colspan="2" style="text-align:center;">Rate: '.number_format($part->rate, 2).'</td>
-                        <td width="10%" colspan="2" style="text-align:center;">stone: '.number_format($part->stone ?? 0, 2).'</td>
-                        <td width="20%" colspan="3" style="text-align:right; padding-right:10px;">Part Total: '.number_format($part->total, 2).' &nbsp;</td>
+                        <td width="10%" colspan="2" style="text-align:center;">Stone: '.number_format($part->stone ?? 0, 2).'</td>
+                        <td width="20%" colspan="3" style="text-align:right; padding-right:10px;"><b>Total: '.number_format($part->total, 2).'</b></td>
                     </tr>';
                 }
             }
