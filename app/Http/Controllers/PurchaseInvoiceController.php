@@ -336,11 +336,12 @@ class PurchaseInvoiceController extends Controller
                     $html .= '
                     <tr style="font-size:7.5px; background-color:#fcfcfc;">
                         <td width="3%"></td>
-                        <td width="22%" colspan="2" style="text-align:left;">&nbsp;&nbsp;&nbsp;↳ '.($part->product->name ?? 'Part').$variationText.'</td>
+                        <td width="22%" colspan="2" style="text-align:left;">Item:'.($part->product->name ?? 'Part').$variationText.'</td>
+                        <td width="22%" colspan="2" style="text-align:left;">Description:'.$part->parts_description.'</td>
                         <td width="13%" colspan="2" style="text-align:center;">Qty: '.$part->qty.' '.$partUnit.'</td>
                         <td width="13%" colspan="2" style="text-align:center;">Rate: '.number_format($part->rate, 2).'</td>
                         <td width="13%" colspan="2" style="text-align:center;">stone: '.number_format($part->stone ?? 0, 2).'</td>
-                        <td width="36%" colspan="5" style="text-align:right; padding-right:10px;">Part Total: '.number_format($part->total, 2).' &nbsp;</td>
+                        <td width="36%" colspan="3" style="text-align:right; padding-right:10px;">Part Total: '.number_format($part->total, 2).' &nbsp;</td>
                     </tr>';
                 }
             }
