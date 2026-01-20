@@ -266,8 +266,8 @@ class PurchaseInvoiceController extends Controller
                     <th width="3%" rowspan="2">#</th>
                     <th width="10%" rowspan="2">Item Name</th>
                     <th width="10%" rowspan="2">Description</th>
-                    <th width="6%" rowspan="2">Purity</th>
                     <th width="7%" rowspan="2">Gross Wt</th>
+                    <th width="6%" rowspan="2">Purity</th>
                     <th width="7%" rowspan="2">Purity Wt</th>
                     <th width="6%" rowspan="2">995</th>
                     <th width="14%" colspan="2">Making</th>
@@ -300,8 +300,8 @@ class PurchaseInvoiceController extends Controller
                     <td width="3%">'.($index + 1).'</td>
                     <td width="10%">'.$item->item_name.'</td>
                     <td width="10%">'.$item->item_description.'</td>
-                    <td width="6%">'.number_format($item->purity, 3).'</td>
                     <td width="7%">'.number_format($item->gross_weight, 3).'</td>
+                    <td width="6%">'.number_format($item->purity, 3).'</td>
                     <td width="7%">'.number_format($item->purity_weight, 3).'</td>
                     <td width="6%">'.number_format($item->col_995 ?? 0, 3).'</td>
                     <td width="7%">'.number_format($item->making_rate ?? 0, 2).'</td>
