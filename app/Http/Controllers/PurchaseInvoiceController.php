@@ -380,7 +380,7 @@ class PurchaseInvoiceController extends Controller
         
         if(str_contains($invoice->payment_method, 'material')){
             $summaryHtml .= '
-                <tr><td>Metal Wt / Pur</td><td>'.number_format($invoice->material_weight,2).' / '.number_format($invoice->material_purity,3).'</td></tr>
+                <tr><td>Material Wt / Pur</td><td>'.number_format($invoice->material_weight,2).' / '.number_format($invoice->material_purity,3).'</td></tr>
                 <tr><td>Making Charges</td><td>'.number_format($invoice->making_charges,2).' AED</td></tr>';
         }
 
