@@ -306,7 +306,7 @@ class PurchaseInvoiceController extends Controller
                     <td width="7%">'.number_format($item->making_rate ?? 0, 2).'</td>
                     <td width="7%">'.number_format($item->making_value, 2).'</td>
                     <td width="8%">'.ucfirst($item->material_type).'</td>
-                    <td width="7%">'.number_format($item->metal_value, 2).'</td>
+                    <td width="7%">'.number_format($item->material_value, 2).'</td>
                     <td width="8%">'.number_format($item->taxable_amount, 2).'</td>
                     <td width="6%">'.round($vatPercent, 0).'%</td>
                     <td width="8%">'.number_format($rowTotal, 2).'</td>
