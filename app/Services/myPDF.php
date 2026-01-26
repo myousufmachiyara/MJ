@@ -76,93 +76,71 @@ class myPDF extends TCPDF
     }
     
     
-    
-    function convertCurrencyToWords($number) {
+    function convertCurrencyToWords($number, $currency = 'AED') {
         $Thousand = 1000;
         $Million = $Thousand * $Thousand;
         $Billion = $Thousand * $Million;
         $Trillion = $Thousand * $Billion;
-    
+
         if ($number == 0) {
-            return "AED Zero Only";
+            return $currency . " Zero Only";
         }
-    
+
         $isNegative = $number < 0;
         $number = abs($number);
-    
+
         $result = "";
-    
+
         // Trillions
         if ($number >= $Trillion) {
             $result .= $this->convertDigitGroup(floor($number / $Trillion)) . " Trillion ";
             $number %= $Trillion;
         }
-    
+
         // Billions
         if ($number >= $Billion) {
             $result .= $this->convertDigitGroup(floor($number / $Billion)) . " Billion ";
             $number %= $Billion;
         }
-    
+
         // Millions
         if ($number >= $Million) {
             $result .= $this->convertDigitGroup(floor($number / $Million)) . " Million ";
             $number %= $Million;
         }
-    
+
         // Thousands
         if ($number >= $Thousand) {
             $result .= $this->convertDigitGroup(floor($number / $Thousand)) . " Thousand ";
             $number %= $Thousand;
         }
-    
+
         // Hundreds and below
         if ($number > 0) {
             $result .= $this->convertDigitGroup($number);
         }
-    
-        $result = "AED " .trim($result) . " Only";
-    
+
+        // Dynamic Currency Label
+        $result = $currency . " " . trim($result) . " Only";
+
         return $isNegative ? "Negative " . $result : $result;
     }
-    
+
+    // Cleaned up helper for Digit Group
     function convertDigitGroup($number) {
         $hundreds = floor($number / 100);
         $remainder = $number % 100;
         $result = "";
-    
-        if ($number == 1) {  // Special case for "One"
-            return "One";
+
+        // Simplified logic: use the existing convertSingleDigit for 1-9
+        if ($number >= 1 && $number <= 9) {
+            return $this->convertSingleDigit($number);
         }
-        if ($number == 2) {  // Special case for "One"
-            return "Two";
-        }
-        if ($number == 3) {  // Special case for "One"
-            return "Three";
-        }
-        if ($number == 4) {  // Special case for "One"
-            return "Four";
-        }
-        if ($number == 5) {  // Special case for "One"
-            return "Five";
-        }
-        if ($number == 6) {  // Special case for "One"
-            return "Six";
-        }
-        if ($number == 7) {  // Special case for "One"
-            return "Seven";
-        }
-        if ($number == 8) {  // Special case for "One"
-            return "Eight";
-        }
-        if ($number == 9) {  // Special case for "One"
-            return "Nine";
-        }
-    
+
         if ($hundreds > 0) {
             $result .= $this->convertSingleDigit($hundreds) . " Hundred ";
         }
-    
+
         if ($remainder > 0) {
             if ($remainder < 20) {
                 $result .= $this->convertTens($remainder);
@@ -173,7 +151,7 @@ class myPDF extends TCPDF
                 }
             }
         }
-    
+
         return trim($result);
     }
     

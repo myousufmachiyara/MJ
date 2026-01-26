@@ -26,8 +26,9 @@ class PurchaseInvoiceController extends Controller
     public function create()
     {
         $vendors = ChartOfAccounts::where('account_type', 'vendor')->get();
+        $banks = ChartOfAccounts::where('account_type', 'bank')->get();
         $products = Product::with('measurementUnit')->get();
-        return view('purchase.create', compact('products', 'vendors'));
+        return view('purchase.create', compact('products', 'vendors', 'banks'));
     }
 
     public function store(Request $request)
@@ -49,6 +50,7 @@ class PurchaseInvoiceController extends Controller
             'exchange_rate'  => 'nullable|required_if:currency,USD|numeric|min:0',
             'net_amount'     => 'required|numeric|min:0',
             'payment_method' => 'required|in:credit,cash,cheque,material+making cost',
+            'payment_term'   => 'nullable|string',
 
             // ADDED: Validation for the missing rates
             'gold_rate_aed'  => 'nullable|numeric|min:0',
@@ -57,7 +59,7 @@ class PurchaseInvoiceController extends Controller
             'diamond_rate_usd' => 'nullable|numeric|min:0',
 
             // Cheque
-            'bank_name'      => 'nullable|required_if:payment_method,cheque|string',
+            'bank_name'      => 'nullable|required_if:payment_method,cheque|exists:chart_of_accounts,id',
             'cheque_no'      => 'nullable|required_if:payment_method,cheque|string',
             'cheque_date'    => 'nullable|required_if:payment_method,cheque|date',
             'cheque_amount'  => 'nullable|required_if:payment_method,cheque|numeric|min:0',
@@ -77,8 +79,12 @@ class PurchaseInvoiceController extends Controller
             'items.*.parts.*.product_id' => 'required|exists:products,id',
             'items.*.parts.*.qty' => 'required|numeric|min:0',
             'items.*.parts.*.rate' => 'required|numeric|min:0',
-            'items.*.parts.*.stone' => 'nullable|numeric|min:0',
+            'items.*.parts.*.stone_qty' => 'nullable|numeric|min:0',
+            'items.*.parts.*.stone_rate' => 'nullable|numeric|min:0',
             'items.*.parts.*.part_description' => 'nullable|string',
+
+            'material_given_by'  => 'nullable|required_if:payment_method,material+making cost|string',
+            'material_received_by'  => 'nullable|required_if:payment_method,material+making cost|string',
         ]);
 
         try {
@@ -109,6 +115,7 @@ class PurchaseInvoiceController extends Controller
                 'net_amount'      => $request->net_amount,
                 'net_amount_aed'  => $netAmountAed,
                 'payment_method'  => $request->payment_method,
+                'payment_term'    => $request->payment_term ?? null,
                 'bank_name'       => $request->bank_name,
                 'cheque_no'       => $request->cheque_no,
                 'cheque_date'     => $request->cheque_date,
@@ -116,6 +123,8 @@ class PurchaseInvoiceController extends Controller
                 'material_weight' => $request->material_weight,
                 'material_purity' => $request->material_purity,
                 'material_value'  => $request->material_value,
+                'material_received_by'  => $request->material_received_by,
+                'material_given_by'  => $request->material_given_by,
                 'making_charges'  => $request->making_charges,
                 'created_by'      => auth()->id(),
             ]);
@@ -126,13 +135,8 @@ class PurchaseInvoiceController extends Controller
                 $col995       = $purityWeight / 0.995;
                 $makingValue  = $itemData['gross_weight'] * $itemData['making_rate'];
 
-                // Logic to pick the correct rate for calculation
-                $metalRate = $itemData['material_type'] === 'gold'
-                    ? ($request->currency === 'USD' ? $request->gold_rate_usd : $request->gold_rate_aed)
-                    : ($request->currency === 'USD' ? $request->diamond_rate_usd : $request->diamond_rate_aed);
-
-                $materialValue = $purityWeight * ($metalRate ?? 0);
-                $taxable    = $makingValue + $materialValue;
+                $materialValue = $purityWeight * ($itemData['making_rate'] ?? 0);
+                $taxable    = $makingValue;
                 $vatAmount  = $taxable * ($itemData['vat_percent'] / 100);
                 $itemTotal  = $taxable + $vatAmount;
 
@@ -163,7 +167,8 @@ class PurchaseInvoiceController extends Controller
                             'variation_id' => $partData['variation_id'] ?? null,
                             'qty'          => $partData['qty'],
                             'rate'         => $partData['rate'],
-                            'stone'        => $partData['stone'] ?? 0,
+                            'stone_qty'    => $partData['stone_qty'] ?? 0,
+                            'stone_rate'   => $partData['stone_rate'] ?? 0,
                             'total'        => $partTotal,
                             'part_description' => $partData['part_description'] ?? null,
                         ]);
@@ -336,14 +341,15 @@ class PurchaseInvoiceController extends Controller
                     $html .= '
                     <tr style="font-size:7.5px; background-color:#fcfcfc;">
                         <td width="3%"></td>
-                        <td width="25%" colspan="2" style="text-align:left;">'.($part->product->name ?? 'Part').$variationText.'</td>
-                        <td width="22%" colspan="2" style="text-align:left;">'.$part->part_description.'</td>
-                        
+                        <td width="20%" colspan="2" style="text-align:left;">'.($part->product->name ?? 'Part').$variationText.'</td>
+                        <td width="20%" colspan="1" style="text-align:left;">'.$part->part_description.'</td>
+                
                         <td width="10%" colspan="2" style="text-align:center;">'.$part->qty.' '.$partUnit.'</td>
                         
                         <td width="10%" colspan="2" style="text-align:center;">Rate: '.number_format($part->rate, 2).'</td>
-                        <td width="10%" colspan="2" style="text-align:center;">Stone: '.number_format($part->stone ?? 0, 2).'</td>
-                        <td width="20%" colspan="3" style="text-align:right; padding-right:10px;"><b>Total: '.number_format($part->total, 2).'</b></td>
+                        <td width="11%" colspan="1" style="text-align:center;">Stone Qty: '.number_format($part->stone_qty ?? 0, 0).'</td>
+                        <td width="12%" colspan="1" style="text-align:center;">Rate: '.number_format($part->stone_rate ?? 0, 2).'</td>
+                        <td width="14%" colspan="2" style="text-align:right; padding-right:10px;"><b>Total: '.number_format($part->total, 2).'</b></td>
                     </tr>';
                 }
             }
@@ -370,42 +376,46 @@ class PurchaseInvoiceController extends Controller
                     <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
                         <tr style="background-color:#f5f5f5;"><td><b>Payment Details</b></td><td><b>Value</b></td></tr>
                         <tr><td>Method</td><td>'.ucfirst($invoice->payment_method).'</td></tr>';
-        
-        if($invoice->payment_method === 'cheque'){
-            $summaryHtml .= '
-                <tr><td>Bank Name</td><td>'.$invoice->bank_name.'</td></tr>
-                <tr><td>Cheque No</td><td>'.$invoice->cheque_no.'</td></tr>
-                <tr><td>Cheque Date</td><td>'.$invoice->cheque_date.'</td></tr>';
-        }
-        
-        if(str_contains($invoice->payment_method, 'material')){
-            $summaryHtml .= '
-                <tr><td>Material Wt / Pur</td><td>'.number_format($invoice->material_weight,2).' / '.number_format($invoice->material_purity,3).'</td></tr>
-                <tr><td>Making Charges</td><td>'.number_format($invoice->making_charges,2).' AED</td></tr>';
-        }
+  
+                        if($invoice->payment_method === 'credit'){
+                            $summaryHtml .= '
+                            <tr><td>Payment Term:</td><td>'.$invoice->payment_term.'</td></tr>';
+                        }
+                        if($invoice->payment_method === 'cheque'){
+                            $summaryHtml .= '
+                            <tr><td>Bank Name</td><td>'.$invoice->bank->name.'</td></tr>
+                            <tr><td>Cheque No</td><td>'.$invoice->cheque_no.'</td></tr>
+                            <tr><td>Cheque Date</td><td>'.$invoice->cheque_date.'</td></tr>';
+                        }
+                        if(str_contains($invoice->payment_method, 'material')){
+                            $summaryHtml .= '
+                            <tr><td>Material Wt / Pur</td><td>'.number_format($invoice->material_weight,2).' / '.number_format($invoice->material_purity,3).'</td></tr>
+                            <tr><td>Making Charges</td><td>'.number_format($invoice->making_charges,2).' AED</td></tr>
+                            <tr><td>Received By</td><td>'.$invoice->material_received_by.'</td></tr>
+                            <tr><td>Given By</td><td>'.$invoice->material_given_by.'</td></tr>';
+                        }
 
-        $summaryHtml .= '</table>
-                </td>
-                <td width="10%"></td>
-                <td width="45%" valign="top">
-                    <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
-                        <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary ('.$invoice->currency.')</b></td></tr>
-                        <tr><td width="60%">Total Taxable</td><td width="40%" align="right">'.number_format($runningTaxable, 2).'</td></tr>
-                        <tr><td>Total VAT</td><td align="right">'.number_format($runningVat, 2).'</td></tr>
-                        <tr style="font-weight:bold; background-color:#eeeeee;">
-                            <td>Invoice Total</td>
-                            <td align="right">'.number_format($invoice->net_amount, 2).'</td>
-                        </tr>';
-        
-        if($invoice->currency === 'USD'){
-            $summaryHtml .= '
-                <tr><td>Exchange Rate</td><td align="right">'.number_format($invoice->exchange_rate, 4).'</td></tr>
-                <tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">'.number_format($aedAmount, 2).'</td></tr>';
-        } else {
-            $summaryHtml .= '<tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">'.number_format($aedAmount, 2).'</td></tr>';
-        }
-
-        $summaryHtml .= '</table>
+                        $summaryHtml .= '</table>
+                                </td>
+                                <td width="10%"></td>
+                                <td width="45%" valign="top">
+                                    <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
+                                        <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary ('.$invoice->currency.')</b></td></tr>
+                                        <tr><td width="60%">Total Taxable</td><td width="40%" align="right">'.number_format($runningTaxable, 2).'</td></tr>
+                                        <tr><td>Total VAT</td><td align="right">'.number_format($runningVat, 2).'</td></tr>
+                                        <tr style="font-weight:bold; background-color:#eeeeee;">
+                                            <td>Invoice Total</td>
+                                            <td align="right">'.number_format($invoice->net_amount, 2).'</td>
+                                        </tr>';
+                        
+                        if($invoice->currency === 'USD'){
+                            $summaryHtml .= '
+                                <tr><td>Exchange Rate</td><td align="right">'.number_format($invoice->exchange_rate, 4).'</td></tr>
+                                <tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">'.number_format($aedAmount, 2).'</td></tr>';
+                        } else {
+                            $summaryHtml .= '<tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">'.number_format($aedAmount, 2).'</td></tr>';
+                        }
+                    $summaryHtml .= '</table>
                 </td>
             </tr>
         </table>';
@@ -416,7 +426,22 @@ class PurchaseInvoiceController extends Controller
         /* ================= AMOUNT IN WORDS ================= */
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', 'B', 9);
-        $pdf->Cell(0, 5, "Amount in Words (AED): " . $wordsText , 0, 1, 'L');
+
+        // Calculate AED and USD strings
+        $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
+        $wordsAED = $pdf->convertCurrencyToWords($aedAmount, 'AED');
+
+        if ($invoice->currency === 'USD') {
+            $wordsUSD = $pdf->convertCurrencyToWords($invoice->net_amount, 'USD');
+            
+            // Print USD Words
+            $pdf->Cell(0, 5, "Amount in Words (USD): " . $wordsUSD, 0, 1, 'L');
+            // Print AED Words below it
+            $pdf->Cell(0, 5, "Amount in Words (AED): " . $wordsAED, 0, 1, 'L');
+        } else {
+            // Just print AED
+            $pdf->Cell(0, 5, "Amount in Words (AED): " . $wordsAED, 0, 1, 'L');
+        }
 
         /* ================= TERMS & CONDITIONS ================= */
         $pdf->Ln(2);

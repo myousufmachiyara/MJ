@@ -33,7 +33,7 @@ return new class extends Migration
             /* ================= CHEQUE ================= */
             $table->string('cheque_no', 50)->nullable();
             $table->date('cheque_date')->nullable();
-            $table->string('bank_name', 100)->nullable();
+            $table->unsignedBigInteger('bank_name')->nullable();
             $table->decimal('cheque_amount', 18, 2)->nullable();
 
             /* ================= MATERIAL + MAKING ================= */
@@ -41,6 +41,8 @@ return new class extends Migration
             $table->decimal('material_purity', 10, 3)->nullable();
             $table->decimal('material_value', 18, 2)->nullable();
             $table->decimal('making_charges', 18, 2)->nullable();
+            $table->string('material_received_by', 100)->nullable();
+            $table->string('material_given_by', 100)->nullable();
 
             /* ================= METAL RATES (FIXED) ================= */
             // Gold Rates
@@ -58,8 +60,12 @@ return new class extends Migration
             $table->softDeletes();
 
             /* ================= FOREIGN KEYS ================= */
+            $table->foreign('bank_name')->references('id')->on('chart_of_accounts')->onDelete('cascade');
             $table->foreign('vendor_id')->references('id')->on('chart_of_accounts')->onDelete('cascade');
             $table->foreign('created_by')->references('id')->on('users')->onDelete('cascade');
+
+            
+
         });
     }
 

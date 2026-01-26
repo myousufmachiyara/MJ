@@ -33,6 +33,8 @@ class PurchaseInvoice extends Model
         'material_weight',
         'material_purity',
         'material_value',
+        'material_given_by',
+        'material_received_by',
         'making_charges',
 
         // header level rates
@@ -40,6 +42,7 @@ class PurchaseInvoice extends Model
         'gold_rate_usd',
         'diamond_rate_aed',
         'diamond_rate_usd',
+
 
         'created_by',
     ];
@@ -53,6 +56,11 @@ class PurchaseInvoice extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function bank()
+    {
+        return $this->belongsTo(ChartOfAccounts::class, 'bank_name');
     }
 
     public function items()
