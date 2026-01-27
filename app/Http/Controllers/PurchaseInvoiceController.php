@@ -357,7 +357,7 @@ class PurchaseInvoiceController extends Controller
 
         $html .= '
                 <tr style="font-weight:bold; background-color:#f5f5f5;">
-                    <td colspan="12" align="right">Net Amount (Incl. VAT)</td>
+                    <td colspan="10" align="right">Net Amount (Incl. VAT)</td>
                     <td colspan="2" align="center">'.number_format($invoice->net_amount, 2).'</td>
                 </tr>
             </tbody>
