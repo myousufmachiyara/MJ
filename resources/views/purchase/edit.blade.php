@@ -176,7 +176,7 @@
                     <div class="parts-wrapper">
                       <table class="table table-sm table-bordered parts-table">
                         <thead>
-                          <tr><th>Part</th><th>Description</th><th>Carat</th><th>Rate</th><th>Stone Qty</th><th>Stone Rate</th><th>Total</th><th></th></tr>
+                          <tr><th>Part</th><th>Description</th><th>Carat</th><th>Rate</th><th>Stone Ct.</th><th>Stone Rate</th><th>Total</th><th></th></tr>
                         </thead>
                         <tbody>
                             @foreach($item->parts as $pIdx => $part)
@@ -543,7 +543,7 @@
                 <div class="parts-wrapper">
                     <table class="table table-sm table-bordered parts-table">
                         <thead>
-                            <tr><th>Part</th><th>Description</th><th>Carat</th><th>Rate</th><th>Stone Qty</th><th>Stone Rate</th><th>Total</th><th></th></tr>
+                            <tr><th>Part</th><th>Description</th><th>Carat</th><th>Rate</th><th>Stone Ct.</th><th>Stone Rate</th><th>Total</th><th></th></tr>
                         </thead>
                         <tbody></tbody>
                     </table>
