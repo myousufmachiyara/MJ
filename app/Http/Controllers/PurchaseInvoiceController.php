@@ -1180,7 +1180,6 @@ class PurchaseInvoiceController extends Controller
 
         // Supplier/Receiver
         $pdf->SetXY(10, $y - 12);
-        $pdf->MultiCell(45, 3, "Confirmed for & on behalf of\nFor MUSFIRA JEWELRY L L C", 0, 'C');
         $pdf->Line(10, $y, 55, $y); 
         $pdf->SetXY(10, $y + 1);
         $pdf->Cell(45, 5, "RECEIVER'S SIGNATURE", 0, 0, 'C');
