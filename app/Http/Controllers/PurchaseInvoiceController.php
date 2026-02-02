@@ -819,8 +819,8 @@ class PurchaseInvoiceController extends Controller
         </table>';
 
         $pdf->writeHTML($html, true, false, false, false);
+        
         /* ================= SUMMARY SECTION ================= */
-
         $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
         $wordsText=$pdf->convertCurrencyToWords($aedAmount);
 
