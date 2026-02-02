@@ -822,8 +822,8 @@ class PurchaseInvoiceController extends Controller
                         <td width="20%" colspan="1" style="text-align:left;">'.htmlspecialchars($part->part_description).'</td>
                         <td width="10%" colspan="2" style="text-align:center;">'.$part->qty.' '.$partUnit.'</td>                       
                         <td width="10%" colspan="2" style="text-align:center;">Rate: '.number_format($part->rate, 2).'</td>
-                        <td width="11%" colspan="1" style="text-align:center;">St. Qty: '.number_format($part->stone_qty ?? 0, 0).'</td>
-                        <td width="12%" colspan="1" style="text-align:center;">St. Rate: '.number_format($part->stone_rate ?? 0, 2).'</td>
+                        <td width="11%" colspan="1" style="text-align:center;">Stone. Ct: '.number_format($part->stone_qty ?? 0, 0).'</td>
+                        <td width="12%" colspan="1" style="text-align:center;">Stone. Rate: '.number_format($part->stone_rate ?? 0, 2).'</td>
                         <td width="14%" colspan="2" style="text-align:right; padding-right:10px;"><b>Total: '.number_format($part->total, 2).'</b></td>
                     </tr>';
                 }
