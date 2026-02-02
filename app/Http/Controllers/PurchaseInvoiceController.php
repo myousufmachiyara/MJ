@@ -819,8 +819,11 @@ class PurchaseInvoiceController extends Controller
         </table>';
 
         $pdf->writeHTML($html, true, false, false, false);
+        /* ================= SUMMARY SECTION ================= */
 
         $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
+        $wordsText=$pdf->convertCurrencyToWords($aedAmount);
+
         $summaryHtml = '
         <table width="100%" cellpadding="0" border="0" style="margin-top:10px;">
             <tr>
@@ -828,21 +831,90 @@ class PurchaseInvoiceController extends Controller
                     <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
                         <tr style="background-color:#f5f5f5;"><td><b>Payment Details</b></td><td><b>Value</b></td></tr>
                         <tr><td>Method</td><td>'.ucfirst($invoice->payment_method).'</td></tr>';
-                        if($invoice->payment_method === 'credit') $summaryHtml .= '<tr><td>Payment Term:</td><td>'.$invoice->payment_term.'</td></tr>';
-                        if($invoice->payment_method === 'cheque') $summaryHtml .= '<tr><td>Bank</td><td>'.$invoice->bank->name.'</td></tr>';
-        $summaryHtml .= '</table></td>
-                <td width="10%"></td>
-                <td width="45%" valign="top">
-                    <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
-                        <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary ('.$invoice->currency.')</b></td></tr>
-                        <tr><td width="60%">Total Taxable</td><td width="40%" align="right">'.number_format($runningTaxable, 2).'</td></tr>
-                        <tr><td>Total VAT</td><td align="right">'.number_format($runningVat, 2).'</td></tr>
-                        <tr style="font-weight:bold; background-color:#eeeeee;"><td>Invoice Total</td><td align="right">'.number_format($invoice->net_amount, 2).'</td></tr>
-                    </table></td>
+  
+                        if($invoice->payment_method === 'credit'){
+                            $summaryHtml .= '
+                            <tr><td>Payment Term:</td><td>'.$invoice->payment_term.'</td></tr>';
+                        }
+                        if($invoice->payment_method === 'cheque'){
+                            $summaryHtml .= '
+                            <tr><td>Bank Name</td><td>'.$invoice->bank->name.'</td></tr>
+                            <tr><td>Cheque No</td><td>'.$invoice->cheque_no.'</td></tr>
+                            <tr><td>Cheque Date</td><td>'.$invoice->cheque_date.'</td></tr>';
+                        }
+                        if(str_contains($invoice->payment_method, 'material')){
+                            $summaryHtml .= '
+                            <tr><td>Material Wt / Pur</td><td>'.number_format($invoice->material_weight,2).' / '.number_format($invoice->material_purity,3).'</td></tr>
+                            <tr><td>Making Charges</td><td>'.number_format($invoice->making_charges,2).' AED</td></tr>
+                            <tr><td>Received By</td><td>'.$invoice->material_received_by.'</td></tr>
+                            <tr><td>Given By</td><td>'.$invoice->material_given_by.'</td></tr>';
+                        }
+
+                        $summaryHtml .= '</table>
+                                </td>
+                                <td width="10%"></td>
+                                <td width="45%" valign="top">
+                                    <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
+                                        <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary ('.$invoice->currency.')</b></td></tr>
+                                        <tr><td width="60%">Total Taxable</td><td width="40%" align="right">'.number_format($runningTaxable, 2).'</td></tr>
+                                        <tr><td>Total VAT</td><td align="right">'.number_format($runningVat, 2).'</td></tr>
+                                        <tr style="font-weight:bold; background-color:#eeeeee;">
+                                            <td>Invoice Total</td>
+                                            <td align="right">'.number_format($invoice->net_amount, 2).'</td>
+                                        </tr>';
+                        
+                        if($invoice->currency === 'USD'){
+                            $summaryHtml .= '
+                                <tr><td>Exchange Rate</td><td align="right">'.number_format($invoice->exchange_rate, 4).'</td></tr>
+                                <tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">'.number_format($aedAmount, 2).'</td></tr>';
+                        } else {
+                            $summaryHtml .= '<tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">'.number_format($aedAmount, 2).'</td></tr>';
+                        }
+                    $summaryHtml .= '</table>
+                </td>
             </tr>
         </table>';
+
+        $pdf->Ln(2);
         $pdf->writeHTML($summaryHtml, true, false, false, false);
+
+        /* ================= AMOUNT IN WORDS ================= */
+        $pdf->Ln(2);
+        $pdf->SetFont('helvetica', 'B', 9);
+
+        // Calculate AED and USD strings
+        $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
+        $wordsAED = $pdf->convertCurrencyToWords($aedAmount, 'AED');
+
+        if ($invoice->currency === 'USD') {
+            $wordsUSD = $pdf->convertCurrencyToWords($invoice->net_amount, 'USD');
+            
+            // Print USD Words
+            $pdf->Cell(0, 5, "Amount in Words (USD): " . $wordsUSD, 0, 1, 'L');
+            // Print AED Words below it
+            $pdf->Cell(0, 5, "Amount in Words (AED): " . $wordsAED, 0, 1, 'L');
+        } else {
+            // Just print AED
+            $pdf->Cell(0, 5, "Amount in Words (AED): " . $wordsAED, 0, 1, 'L');
+        }
         
+        //     /* ================= TERMS & CONDITIONS ================= */
+        $pdf->Ln(2);
+        $pdf->Line(10, $pdf->GetY(), 200, $pdf->GetY()); 
+        $pdf->Ln(2);
+        $pdf->SetFont('helvetica', '', 9); 
+        $termsHtml = '
+            <div style="line-height: 8px; text-align: justify; color: #333;">
+                <b>TERMS & CONDITIONS:</b> Goods sold on credit, if not paid when due, or in case of law suit arising there from, 
+                the purchaser agrees to pay the seller all expense of recovery, collection, etc., including attorney fees, 
+                legal expense and/or recovery-agent charges. <b>GOODS ONCE SOLD CANNOT BE RETURNED OR EXCHANGED.</b> 
+                Any dispute, difference, controversy or claim arising out of or in connection with this sale, 
+                including (but not limited to) any issue regarding its existence, validity, interpretation, performance, 
+                discharge and other applicable remedies, shall be subject to the exclusive jurisdiction of Dubai Courts.
+            </div>';
+
+        $pdf->writeHTML($termsHtml, true, false, false, false);
+
         // Signatures
         $pdf->Ln(20); $y = $pdf->GetY();
         $pdf->Line(20, $y, 80, $y); $pdf->Line(130, $y, 190, $y);
