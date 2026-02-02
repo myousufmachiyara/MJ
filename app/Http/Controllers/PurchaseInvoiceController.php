@@ -981,7 +981,7 @@ class PurchaseInvoiceController extends Controller
 
         // 2. TITLE & PARTY COPY
         $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->Cell(120, 8, 'METAL PURCHASE FIXING', 0, 0, 'R'); // Centered relative to content
+        $pdf->Cell(120, 8, 'METAL SALE FIXING', 0, 0, 'R'); // Centered relative to content
         $pdf->SetFont('helvetica', '', 9);
         $pdf->Cell(70, 8, 'PARTY COPY', 0, 1, 'R');
         $pdf->Ln(5);
@@ -1000,7 +1000,7 @@ class PurchaseInvoiceController extends Controller
                 </td>
                 <td width="40%">
                     <table border="1" cellpadding="3" width="100%">
-                        <tr><td width="40%"><b>P-MAT-FIX-NO</b></td><td width="60%"><b>'.$invoice->invoice_no.'</b></td></tr>
+                        <tr><td width="40%"><b>Invoice #</b></td><td width="60%"><b>'.$invoice->invoice_no.'</b></td></tr>
                         <tr><td><b>Date</b></td><td><b>'.\Carbon\Carbon::parse($invoice->invoice_date)->format('d/m/Y').'</b></td></tr>
                     </table>
                 </td>
@@ -1060,7 +1060,6 @@ class PurchaseInvoiceController extends Controller
 
         // Column 1: Supplier
         $pdf->SetXY(10, $y - 12);
-        $pdf->MultiCell(45, 3, "Confirmed for & on behalf of\nFor MUSFIRA JEWELRY L L C", 0, 'C');
         $pdf->Line(10, $y, 55, $y); 
         $pdf->SetXY(10, $y + 1);
         $pdf->Cell(45, 5, "SUPPLIER'S SIGNATURE", 0, 0, 'C');
