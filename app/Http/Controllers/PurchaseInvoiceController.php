@@ -716,9 +716,10 @@ class PurchaseInvoiceController extends Controller
                 </tr>
             </table><hr>', true, false, false, false);
 
-        $pdf->SetFont('helvetica','B',11);
-        $pdf->Cell(0,6,'TAX INVOICE (PURCHASE)',0,1,'C');
-        $pdf->Ln(2);
+        $title = $invoice->is_taxable ? 'TAX INVOICE (PURCHASE)' : 'PURCHASE INVOICE';        
+        $pdf->SetFont('helvetica', 'B', 11);
+        $pdf->Cell(0, 6, $title, 0, 1, 'C');
+        $pdf->Ln(2);        
         $pdf->SetFont('helvetica','',9);
 
         $vendorHtml = '
