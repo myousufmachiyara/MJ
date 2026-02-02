@@ -692,7 +692,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
         $pdf->SetCreator('Your App');
-        $pdf->SetTitle('PUR-' . $invoice->invoice_no);
+        $pdf->SetTitle($invoice->invoice_no);
         $pdf->SetMargins(10, 10, 10);
         $pdf->setCellPadding(1.2);
         
