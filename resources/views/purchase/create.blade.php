@@ -134,7 +134,7 @@
                       <option value="0.92">22K (92%)</option>
                       <option value="0.88">21K (88%)</option>
                       <option value="0.75">18K (75%)</option>
-                      <option value="0.60">18K (60%)</option>
+                      <option value="0.60">14K (60%)</option>
                     </select>
                   </td>
                   <td><input type="number" name="items[0][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>
