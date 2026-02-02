@@ -155,9 +155,8 @@
                         <thead>
                           <tr>
                             <th>Part</th>
-                            <th>Variation</th>
                             <th>Description</th>
-                            <th>Qty/Unit</th>
+                            <th>Carat</th>
                             <th>Rate</th>
                             <th>Stone Qty</th>
                             <th>Stone Rate</th>
@@ -340,6 +339,13 @@
   $(document).ready(function () {
     const products = @json($products);
 
+    // Toggle visibility of the parts section
+    $(document).on('click', '.toggle-parts', function() {
+        // Find the next tr with class 'parts-row'
+        const partsRow = $(this).closest('tr').next('.parts-row');
+        partsRow.fadeToggle(200); // Smooth transition
+    });
+
     // Map the unit name specifically so it's easy to access in the loop
     const productsWithUnits = products.map(p => {
         return {
@@ -381,22 +387,31 @@
     // ================= ROW MANAGEMENT =================
     function updateRowIndexes() {
         $('#PurchaseTable tr.item-row').each(function(i) {
-            $(this).attr('data-item-index', i);
-            $(this).find('input, select').each(function() {
+            const itemRow = $(this);
+            itemRow.attr('data-item-index', i);
+            
+            // Update main item inputs
+            itemRow.find('input, select').each(function() {
                 const name = $(this).attr('name');
                 if(name) {
                     const newName = name.replace(/items\[\d+\]/, `items[${i}]`);
                     $(this).attr('name', newName);
                 }
             });
-            // Update parts in the following parts-row
-            const partsRow = $(this).next('.parts-row');
-            partsRow.find('input, select').each(function() {
-                const name = $(this).attr('name');
-                if(name) {
-                    const newName = name.replace(/items\[\d+\]/, `items[${i}]`);
-                    $(this).attr('name', newName);
-                }
+
+            // Update nested parts inputs
+            const partsRow = itemRow.next('.parts-row');
+            partsRow.find('.part-item-row').each(function(j) {
+                $(this).attr('data-part-index', j);
+                $(this).find('input, select').each(function() {
+                    const name = $(this).attr('name');
+                    if(name) {
+                        // This replaces BOTH the item index and the part index
+                        const newName = name.replace(/items\[\d+\]/, `items[${i}]`)
+                                            .replace(/parts\[\d+\]/, `parts[${j}]`);
+                        $(this).attr('name', newName);
+                    }
+                });
             });
         });
     }
@@ -445,7 +460,9 @@
                 <div class="parts-wrapper">
                     <table class="table table-sm table-bordered parts-table">
                         <thead>
-                            <tr><th>Part</th><th>Variation</th><th>Description</th><th>Qty/Unit</th><th>Rate</th><th>Stone Qty</th><th>Stone Rate</th><th>Total</th><th></th></tr>
+                            <tr>
+                                <th>Part</th><th>Description</th><th>Carat</th><th>Rate</th><th>Stone Qty</th><th>Stone Rate</th><th>Total</th><th></th>
+                            </tr>
                         </thead>
                         <tbody></tbody>
                     </table>
@@ -454,6 +471,7 @@
             </td>
         </tr>`;
         $('#PurchaseTable').append(rowHtml);
+        updateRowIndexes();
     };
 
     window.removeRow = function(btn) {
@@ -467,66 +485,113 @@
         }
     };
 
-    // ================= PARTS & PRODUCT LOGIC =================
-    $(document).on('click', '.toggle-parts', function() {
-      $(this).closest('tr').next('.parts-row').toggle();
-    });
-
     $(document).on('click', '.add-part', function() {
-        const partsTable = $(this).siblings('table').find('tbody');
-        const itemIndex = $(this).closest('.parts-row').prev('.item-row').data('item-index');
-        let partIndex = partsTable.find('tr').length;
+        const partsWrapper = $(this).closest('.parts-wrapper');
+        const partsTableBody = partsWrapper.find('.parts-table tbody');
+        const itemRow = $(this).closest('.parts-row').prev('.item-row');
+        const itemIndex = itemRow.data('item-index');
+        const partIndex = partsTableBody.find('tr').length;
 
-        let row = `
-        <tr>
+        const rowHtml = `
+        <tr class="part-item-row" data-part-index="${partIndex}">
             <td>
-              <select name="items[${itemIndex}][parts][${partIndex}][product_id]" class="form-control select2-js part-product-select">
-                <option value="">Select Part</option>
-                ${products.map(p => `
-                  <option value="${p.id}" data-unit="${p.measurement_unit?.shortcode || ''}">
-                    ${p.name}
-                  </option>
-                `).join('')}
-              </select>
+                <div class="product-wrapper">
+                    <input type="text" name="items[${itemIndex}][parts][${partIndex}][item_name]" class="form-control item-name-input" placeholder="Part Name">
+                    <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
+                </div>
             </td>
-            <td><select name="items[${itemIndex}][parts][${partIndex}][variation_id]" class="form-control select2-js part-variation-select"><option value="">Select Variation</option></select></td>
             <td><input type="text" name="items[${itemIndex}][parts][${partIndex}][part_description]" class="form-control"></td>
             <td>
-              <div class="input-group">
-                <input type="number" name="items[${itemIndex}][parts][${partIndex}][qty]" step="any" value="0" class="form-control part-qty">
-                <input type="text" class="form-control part-unit-name" style="width:60px; flex:none;" readonly placeholder="Unit">
-              </div>
-            </td>          
+                <div class="input-group">
+                    <input type="number" name="items[${itemIndex}][parts][${partIndex}][qty]" step="any" value="0" class="form-control part-qty">
+                    <input type="text" class="form-control part-unit-name" style="width:70px; flex:none;" readonly placeholder="Carat">
+                </div>
+            </td>
             <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][rate]" step="any" value="0" class="form-control part-rate"></td>
             <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][stone_qty]" step="any" value="0" class="form-control part-stone-qty"></td>
             <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][stone_rate]" step="any" value="0" class="form-control part-stone-rate"></td>
-            <td><input type="number" class="form-control part-total" readonly></td>
-            <td><button type="button" class="btn btn-sm btn-danger remove-part">x</button></td>
+            <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][total]" step="any" value="0" class="form-control part-total" readonly></td>
+            <td><button type="button" class="btn btn-sm btn-danger remove-part"><i class="fas fa-times"></i></button></td>
         </tr>`;
-        partsTable.append(row);
-        partsTable.find('.select2-js').select2({ width: '100%' });
+
+        partsTableBody.append(rowHtml);
     });
 
-    $(document).on('click', '.toggle-product', function () {
-        const wrapper = $(this).closest('.product-wrapper');
-        const rowIndex = wrapper.closest('tr').data('item-index');
-        wrapper.empty().append(`
-            <select name="items[${rowIndex}][product_id]" class="form-control select2-js product-select mb-2">
-                <option value="">Select Product</option>
-                ${products.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-            </select>
-            <select name="items[${rowIndex}][variation_id]" class="form-control select2-js variation-select" style="display:none;"><option value="">Select Variation</option></select>
-            <button type="button" class="btn btn-link p-0 revert-to-name mt-1"> Write Name </button>
-        `).find('.select2-js').select2({ width: '100%' });
+    // Remove Part Logic
+    $(document).on('click', '.remove-part', function() {
+        $(this).closest('tr').remove();
+        calculateTotals(); // Ensure totals update when a part is removed
     });
 
-    $(document).on('click', '.revert-to-name', function () {
+    // 1. Handle Toggle (Name Input vs Select Dropdown)
+    $(document).on('click', '.toggle-product, .revert-to-name', function () {
+        const isReverting = $(this).hasClass('revert-to-name');
         const wrapper = $(this).closest('.product-wrapper');
-        const rowIndex = wrapper.closest('tr').data('item-index');
-        wrapper.empty().append(`
-            <input type="text" name="items[${rowIndex}][item_name]" class="form-control item-name-input" placeholder="Product Name">
-            <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
-        `);
+        const isPart = wrapper.closest('tr').hasClass('part-item-row');
+        
+        // Logic to determine name path: items[0] or items[0][parts][0]
+        let namePath = '';
+        const itemIdx = isPart ? wrapper.closest('.parts-row').prev('.item-row').data('item-index') : wrapper.closest('.item-row').data('item-index');
+        
+        if (isPart) {
+            const partIdx = wrapper.closest('.part-item-row').data('part-index');
+            namePath = `items[${itemIdx}][parts][${partIdx}]`;
+        } else {
+            namePath = `items[${itemIdx}]`;
+        }
+
+        if (isReverting) {
+            wrapper.html(`
+                <input type="text" name="${namePath}[item_name]" class="form-control item-name-input" placeholder="Name">
+                <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
+            `);
+        } else {
+            wrapper.html(`
+                <select name="${namePath}[product_id]" class="form-control select2-js product-select mb-2">
+                    <option value="">Select Product</option>
+                    ${products.map(p => `<option value="${p.id}" data-unit="${p.measurement_unit ? p.measurement_unit.name : ''}">${p.name}</option>`).join('')}
+                </select>
+                <select name="${namePath}[variation_id]" class="form-control select2-js variation-select">
+                    <option value="">Select Variation</option>
+                </select>
+                <button type="button" class="btn btn-link p-0 revert-to-name mt-1"> Write Name </button>
+            `).find('.select2-js').select2({ width: '100%' });
+        }
+    });
+
+    // 2. Unified Change Event for Product ID
+    $(document).on('change', '.product-select', function() {
+        const productId = $(this).val();
+        const row = $(this).closest('tr');
+        const variationSelect = row.find('.variation-select');
+        const unitInput = row.find('.part-unit-name');
+
+        // Update Unit if it's a part row
+        const selectedOption = $(this).find(':selected');
+        if(unitInput.length > 0) {
+            unitInput.val(selectedOption.data('unit') || '');
+        }
+
+        variationSelect.html('<option value="">Loading...</option>').prop('disabled', true);
+
+        if (!productId) {
+            variationSelect.html('<option value="">Select Variation</option>').prop('disabled', false);
+            return;
+        }
+
+        fetch(`/product/${productId}/variations`)
+            .then(res => res.json())
+            .then(data => {
+                variationSelect.prop('disabled', false);
+                let options = '<option value="">No variation</option>';
+                if (data.success && data.variation.length > 0) {
+                    options = '<option value="">Select Variation</option>';
+                    data.variation.forEach(v => {
+                        options += `<option value="${v.id}">${v.sku}</option>`;
+                    });
+                }
+                variationSelect.html(options).trigger('change');
+            });
     });
 
     // ================= CALCULATIONS (Integrated your 6 Rules) =================
@@ -661,55 +726,6 @@
         calculateTotals();
     });
 
-    $(document).on('change', '.part-product-select, .product-select', function() {
-        const productId = $(this).val();
-        const row = $(this).closest('tr');
-        
-        // Fix: Use .add() or check length to find the correct variation select
-        let variationSelect = row.find('.part-variation-select');
-        if (variationSelect.length === 0) {
-            variationSelect = row.find('.variation-select');
-        }
-
-        const selectedOption = $(this).find(':selected');
-        const unitName = selectedOption.data('unit') || '';
-        row.find('.part-unit-name').val(unitName);
-
-        variationSelect.html('<option value="">Loading...</option>').prop('disabled', true);
-
-        if (!productId) {
-            variationSelect.html('<option value="">Select Variation</option>').prop('disabled', false);
-            return;
-        }
-
-        fetch(`/product/${productId}/variations`)
-            .then(res => res.json())
-            .then(data => {
-                variationSelect.prop('disabled', false);
-                let options = '<option value="">No variation</option>';
-
-                if (data.success && data.variation.length > 0) {
-                    options = '<option value="">Select Variation</option>';
-                    data.variation.forEach(v => {
-                        options += `<option value="${v.id}">${v.sku}</option>`;
-                    });
-                }
-                variationSelect.html(options).trigger('change');
-            })
-            .catch(err => {
-                console.error('Error:', err);
-                variationSelect.html('<option value="">Error loading</option>').prop('disabled', false);
-            });
-    });
-
-    // ================= REMOVE PART LOGIC =================
-    $(document).on('click', '.remove-part', function() {
-        const row = $(this).closest('tr');
-        const tableBody = row.closest('tbody');
-        
-        row.remove();
-    });
-
     // ================= PARTS ROW CALCULATION =================
     $(document).on('input', '.part-qty, .part-rate, .part-stone-qty, .part-stone-rate', function() {
         const row = $(this).closest('tr');
@@ -723,30 +739,6 @@
         const total = (qty * rate) + (stoneQty * stoneRate);
         
         row.find('.part-total').val(total.toFixed(2));
-        
-        // Optional: If you want part totals to affect the main Item Total, 
-        // you would add logic here to sum parts and add to taxable-amount.
-    });
-
-    // ================= UPDATED REMOVE PART (WITH RECALC) =================
-    $(document).on('click', '.remove-part', function() {
-        const tableBody = $(this).closest('tbody');
-        $(this).closest('tr').remove();
-        
-        // Update indexes for remaining parts in this specific table
-        tableBody.find('tr').each(function(partIdx) {
-            const itemRow = $(this).closest('.parts-row').prev('.item-row');
-            const itemIdx = itemRow.data('item-index');
-            
-            $(this).find('input, select').each(function() {
-                const name = $(this).attr('name');
-                if (name) {
-                    // regex to update the part index [parts][index]
-                    const newName = name.replace(/\[parts\]\[\d+\]/, `[parts][${partIdx}]`);
-                    $(this).attr('name', newName);
-                }
-            });
-        });
     });
   });
 </script>

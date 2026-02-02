@@ -11,38 +11,12 @@ class PurchaseInvoiceItem extends Model
 
     protected $fillable = [
         'purchase_invoice_id',
-
-        // Product
-        'item_name',
-        'product_id',
-        'variation_id',
-        'item_description',
-
-        // Weights & purity
-        'gross_weight',
-        'purity',
-        'purity_weight',
-        'col_995',
-
-        // Making
-        'making_rate',
-        'making_value',
-
-        // Metal
-        'material_rate',
-        'material_type',
-        'material_value',
-
-        // Tax
-        'taxable_amount',
-        'vat_percent',
-        'vat_amount',
-
-        // Total
-        'item_total',
-
-        // Meta
-        'remarks',
+        'item_name', 'product_id', 'variation_id', 'item_description',
+        'gross_weight', 'purity', 'purity_weight', 'col_995',
+        'making_rate', 'making_value',
+        'material_type', 'material_rate', 'material_value', // Aligned
+        'taxable_amount', 'vat_percent', 'vat_amount',
+        'item_total', 'remarks',
     ];
 
     public function invoice()

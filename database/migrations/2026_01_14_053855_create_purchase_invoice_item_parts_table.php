@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('purchase_invoice_item_id')->constrained()->onDelete('cascade');
             $table->foreignId('product_id')->nullable();
+            $table->string('item_name')->nullable();              // manual name
             $table->foreignId('variation_id')->nullable();
             $table->decimal('qty', 15, 3)->default(0);
             $table->decimal('rate', 15, 2)->default(0);

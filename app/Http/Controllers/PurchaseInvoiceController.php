@@ -35,10 +35,7 @@ class PurchaseInvoiceController extends Controller
     {
         if ($request->payment_method !== 'cheque') {
             $request->merge([
-                'bank_name'     => null,
-                'cheque_no'     => null,
-                'cheque_date'   => null,
-                'cheque_amount' => null,
+                'bank_name' => null, 'cheque_no' => null, 'cheque_date' => null, 'cheque_amount' => null,
             ]);
         }
         
@@ -76,9 +73,10 @@ class PurchaseInvoiceController extends Controller
 
             // Parts
             'items.*.parts' => 'nullable|array',
-            'items.*.parts.*.product_id' => 'required|exists:products,id',
-            'items.*.parts.*.qty' => 'required|numeric|min:0',
-            'items.*.parts.*.rate' => 'required|numeric|min:0',
+            'items.*.parts.*.product_id' => 'nullable|exists:products,id|required_without:items.*.parts.*.item_name',
+            'items.*.parts.*.item_name'  => 'nullable|string|required_without:items.*.parts.*.product_id',
+            'items.*.parts.*.qty'        => 'required|numeric|min:0',
+            'items.*.parts.*.rate'       => 'required|numeric|min:0',
             'items.*.parts.*.stone_qty' => 'nullable|numeric|min:0',
             'items.*.parts.*.stone_rate' => 'nullable|numeric|min:0',
             'items.*.parts.*.part_description' => 'nullable|string',
@@ -95,38 +93,37 @@ class PurchaseInvoiceController extends Controller
             $nextNumber = $lastInvoice ? intval($lastInvoice->invoice_no) + 1 : 1;
             $invoiceNo = str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
 
-            $netAmountAed = $request->currency === 'USD' ? round($request->net_amount * $request->exchange_rate, 2) : $request->net_amount;
+            $netAmountAed = $request->currency === 'USD' 
+                ? round($request->net_amount * $request->exchange_rate, 2) 
+                : $request->net_amount;
 
             // 2. Create Invoice
             $invoice = PurchaseInvoice::create([
-                'invoice_no'      => $invoiceNo,
-                'vendor_id'       => $request->vendor_id,
-                'invoice_date'    => $request->invoice_date,
-                'remarks'         => $request->remarks,
-                'currency'        => $request->currency,
-                'exchange_rate'   => $request->exchange_rate,
-                
-                // ADDED: These lines ensure the rates are saved to the database
-                'gold_rate_aed'   => $request->gold_rate_aed,
-                'gold_rate_usd'   => $request->gold_rate_usd,
-                'diamond_rate_aed'  => $request->diamond_rate_aed,
-                'diamond_rate_usd'  => $request->diamond_rate_usd,
-
-                'net_amount'      => $request->net_amount,
-                'net_amount_aed'  => $netAmountAed,
-                'payment_method'  => $request->payment_method,
-                'payment_term'    => $request->payment_term ?? null,
-                'bank_name'       => $request->bank_name,
-                'cheque_no'       => $request->cheque_no,
-                'cheque_date'     => $request->cheque_date,
-                'cheque_amount'   => $request->cheque_amount,
-                'material_weight' => $request->material_weight,
-                'material_purity' => $request->material_purity,
-                'material_value'  => $request->material_value,
-                'material_received_by'  => $request->material_received_by,
-                'material_given_by'  => $request->material_given_by,
-                'making_charges'  => $request->making_charges,
-                'created_by'      => auth()->id(),
+                'invoice_no'           => $invoiceNo,
+                'vendor_id'            => $request->vendor_id,
+                'invoice_date'         => $request->invoice_date,
+                'remarks'              => $request->remarks,
+                'currency'             => $request->currency,
+                'exchange_rate'        => $request->exchange_rate,
+                'gold_rate_aed'        => $request->gold_rate_aed,
+                'gold_rate_usd'        => $request->gold_rate_usd,
+                'diamond_rate_aed'     => $request->diamond_rate_aed,
+                'diamond_rate_usd'     => $request->diamond_rate_usd,
+                'net_amount'           => $request->net_amount,
+                'net_amount_aed'       => $netAmountAed,
+                'payment_method'       => $request->payment_method,
+                'payment_term'         => $request->payment_term,
+                'bank_name'            => $request->bank_name,
+                'cheque_no'            => $request->cheque_no,
+                'cheque_date'          => $request->cheque_date,
+                'cheque_amount'        => $request->cheque_amount,
+                'material_weight'      => $request->material_weight,
+                'material_purity'      => $request->material_purity,
+                'material_value'       => $request->material_value,
+                'making_charges'       => $request->making_charges,
+                'material_received_by' => $request->material_received_by,
+                'material_given_by'    => $request->material_given_by,
+                'created_by'           => auth()->id(),
             ]);
 
             // 3. Create Items and their Parts
@@ -135,41 +132,49 @@ class PurchaseInvoiceController extends Controller
                 $col995       = $purityWeight / 0.995;
                 $makingValue  = $itemData['gross_weight'] * $itemData['making_rate'];
 
-                $materialValue = $purityWeight * ($itemData['making_rate'] ?? 0);
-                $taxable    = $makingValue;
-                $vatAmount  = $taxable * ($itemData['vat_percent'] / 100);
-                $itemTotal  = $taxable + $vatAmount;
+                // Determine correct metal rate for this item
+                $metalRate = ($itemData['material_type'] === 'gold') ? ($request->gold_rate_aed ?? 0) : ($request->dia_rate_aed ?? 0);
+
+                $materialValue = $purityWeight * $metalRate;
+                $taxable       = $makingValue; 
+                $vatAmount     = $taxable * ($itemData['vat_percent'] / 100);
+                $itemTotal     = $taxable + $materialValue + $vatAmount;
 
                 $invoiceItem = $invoice->items()->create([
                     'item_name'        => $itemData['item_name'] ?? null,
                     'product_id'       => $itemData['product_id'] ?? null,
                     'variation_id'     => $itemData['variation_id'] ?? null,
-                    'item_description' => $itemData['item_description'] ?? null,
+                    'item_description' => $itemData['item_description'],
                     'gross_weight'     => $itemData['gross_weight'],
                     'purity'           => $itemData['purity'],
                     'purity_weight'    => $purityWeight,
                     'col_995'          => $col995,
                     'making_rate'      => $itemData['making_rate'],
                     'making_value'     => $makingValue,
-                    'material_type'    => $itemData['material_type'],
-                    'material_value'   => $materialValue,
+                    'material_type'  => $itemData['material_type'],
+                    'material_rate'  => ($itemData['material_type'] === 'gold') ? $request->gold_rate_aed : $request->dia_rate_aed,
+                    'material_value' => $materialValue,
                     'taxable_amount'   => $taxable,
                     'vat_percent'      => $itemData['vat_percent'],
                     'vat_amount'       => $vatAmount,
                     'item_total'       => $itemTotal,
                 ]);
 
+                // Save Nested Parts
                 if (!empty($itemData['parts'])) {
                     foreach ($itemData['parts'] as $partData) {
-                        $partTotal = ($partData['qty'] * $partData['rate']) + ($partData['stone'] ?? 0);
+                        // Logic: (Qty * Rate) + (Stone Qty * Stone Rate)
+                        $partTotal = ($partData['qty'] * $partData['rate']) + (($partData['stone_qty'] ?? 0) * ($partData['stone_rate'] ?? 0));
+
                         $invoiceItem->parts()->create([
-                            'product_id'   => $partData['product_id'],
-                            'variation_id' => $partData['variation_id'] ?? null,
-                            'qty'          => $partData['qty'],
-                            'rate'         => $partData['rate'],
-                            'stone_qty'    => $partData['stone_qty'] ?? 0,
-                            'stone_rate'   => $partData['stone_rate'] ?? 0,
-                            'total'        => $partTotal,
+                            'product_id'       => $partData['product_id'] ?? null,
+                            'item_name'        => $partData['item_name'] ?? null, // Added support for custom names
+                            'variation_id'     => $partData['variation_id'] ?? null,
+                            'qty'              => $partData['qty'],
+                            'rate'             => $partData['rate'],
+                            'stone_qty'        => $partData['stone_qty'] ?? 0,
+                            'stone_rate'       => $partData['stone_rate'] ?? 0,
+                            'total'            => $partTotal,
                             'part_description' => $partData['part_description'] ?? null,
                         ]);
                     }
@@ -185,12 +190,12 @@ class PurchaseInvoiceController extends Controller
             }
 
             DB::commit();
-            return redirect()->route('purchase_invoices.index')->with('success', 'Invoice saved');
+            return redirect()->route('purchase_invoices.index')->with('success', 'Invoice #' . $invoiceNo . ' saved successfully.');
 
         } catch (\Throwable $e) {
             DB::rollBack();
-            \Log::error($e);
-            return back()->withInput()->with('error', 'Failed to save invoice: ' . $e->getMessage());
+            Log::error("Purchase Invoice Error: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return back()->withInput()->with('error', 'Critical Error: ' . $e->getMessage());
         }
     }
 
@@ -326,29 +331,27 @@ class PurchaseInvoiceController extends Controller
                         </tr>';
 
                 foreach ($item->parts as $part) {
-                    // Fetch the unit (e.g., Grams, Pcs, Cts)
-                    $partUnit = $part->product->measurementUnit->shortcode ?? ($part->product->measurementUnit->name ?? '-');
-                    
+                    // 1. Fetch the unit with a safe fallback
+                    $partUnit = $part->product->measurementUnit->shortcode ?? $part->product->measurementUnit->name ?? 'Ct.';
+
+                    // 2. Determine display name (Priority: Custom Name > Product Name > Default)
+                    $displayPartName = $part->item_name ?: ($part->product->name ?? 'Part');
+
+                    // 3. Variation Logic
                     $variationText = '';
                     if ($part->variation && $part->variation->attributeValues->count()) {
-                        $variationText = ' [' .
-                            $part->variation->attributeValues
-                                ->map(fn($av) => $av->attribute->name.': '.$av->value)
-                                ->implode(', ')
-                            . ']';
+                        $variationText = ' [' .$part->variation->attributeValues->map(fn($av) => $av->attribute->name.': '.$av->value)->implode(', '). ']';
                     }
 
                     $html .= '
                     <tr style="font-size:7.5px; background-color:#fcfcfc;">
                         <td width="3%"></td>
-                        <td width="20%" colspan="2" style="text-align:left;">'.($part->product->name ?? 'Part').$variationText.'</td>
-                        <td width="20%" colspan="1" style="text-align:left;">'.$part->part_description.'</td>
-                
-                        <td width="10%" colspan="2" style="text-align:center;">'.$part->qty.' '.$partUnit.'</td>
-                        
+                        <td width="20%" colspan="2" style="text-align:left;">'.$displayPartName . $variationText.'</td>
+                        <td width="20%" colspan="1" style="text-align:left;">'.htmlspecialchars($part->part_description).'</td>
+                        <td width="10%" colspan="2" style="text-align:center;">'.$part->qty.' '.$partUnit.'</td>                       
                         <td width="10%" colspan="2" style="text-align:center;">Rate: '.number_format($part->rate, 2).'</td>
-                        <td width="11%" colspan="1" style="text-align:center;">Stone Qty: '.number_format($part->stone_qty ?? 0, 0).'</td>
-                        <td width="12%" colspan="1" style="text-align:center;">Rate: '.number_format($part->stone_rate ?? 0, 2).'</td>
+                        <td width="11%" colspan="1" style="text-align:center;">St. Qty: '.number_format($part->stone_qty ?? 0, 0).'</td>
+                        <td width="12%" colspan="1" style="text-align:center;">St. Rate: '.number_format($part->stone_rate ?? 0, 2).'</td>
                         <td width="14%" colspan="2" style="text-align:right; padding-right:10px;"><b>Total: '.number_format($part->total, 2).'</b></td>
                     </tr>';
                 }

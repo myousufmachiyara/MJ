@@ -11,14 +11,8 @@ class PurchaseInvoiceItemPart extends Model
 
     protected $fillable = [
         'purchase_invoice_item_id',
-        'product_id',
-        'variation_id',
-        'qty',
-        'rate',
-        'stone_qty',
-        'stone_rate',
-        'total',
-        'part_description',
+        'product_id', 'variation_id', 'item_name', // Added item_name for custom parts
+        'qty', 'rate', 'stone_qty', 'stone_rate', 'total', 'part_description',
     ];
 
     public function item()

@@ -11,39 +11,15 @@ class PurchaseInvoice extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'invoice_no',
-        'vendor_id',
-        'invoice_date',
-        'remarks',
-
-        'currency',
-        'exchange_rate',
-        'net_amount',
-        'net_amount_aed',
-
-        'payment_method',
-        'payment_term',
-        'received_by',
-
-        'cheque_no',
-        'cheque_date',
-        'bank_name',
-        'cheque_amount',
-
-        'material_weight',
-        'material_purity',
-        'material_value',
-        'material_given_by',
-        'material_received_by',
-        'making_charges',
-
-        // header level rates
-        'gold_rate_aed',
-        'gold_rate_usd',
-        'diamond_rate_aed',
-        'diamond_rate_usd',
-
-
+        'invoice_no', 'vendor_id', 'invoice_date', 'remarks',
+        'currency', 'exchange_rate', 'net_amount', 'net_amount_aed',
+        'payment_method', 'payment_term', 'received_by',
+        'cheque_no', 'cheque_date', 'bank_name', 'cheque_amount',
+        'material_weight', 'material_purity', 'material_value',
+        'material_given_by', 'material_received_by', 'making_charges',
+        
+        // Header level rates - now aligned with controller
+        'gold_rate_aed', 'gold_rate_usd', 'diamond_rate_aed', 'diamond_rate_usd',
         'created_by',
     ];
 
