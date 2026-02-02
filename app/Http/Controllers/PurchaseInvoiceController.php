@@ -280,6 +280,25 @@ class PurchaseInvoiceController extends Controller
         try {
             DB::beginTransaction();
 
+            $isTaxable = $request->boolean('is_taxable');
+    
+            // Determine if we need a NEW invoice number
+            // We only change it if the taxable status changed from what is in the DB
+            if ($isTaxable !== (bool)$invoice->is_taxable) {
+                $prefix = $isTaxable ? 'PUR-TAX-' : 'PUR-';
+                
+                $lastInvoice = PurchaseInvoice::withTrashed()
+                    ->where('invoice_no', 'LIKE', $prefix . '%')
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                $nextNumber = $lastInvoice ? (intval(str_replace($prefix, '', $lastInvoice->invoice_no)) + 1) : 1;
+                $invoiceNo = $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+            } else {
+                // Keep the existing number if the type didn't change
+                $invoiceNo = $invoice->invoice_no;
+            }
+
             $netAmountAed = $request->currency === 'USD' ? round($request->net_amount * $request->exchange_rate, 2) : $request->net_amount;
 
             // 1. Update Invoice Header
