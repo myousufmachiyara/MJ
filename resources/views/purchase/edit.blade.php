@@ -27,9 +27,24 @@
         <div class="card-body">
           {{-- HEADER --}}
           <div class="row mb-5">
+
+            <div class="col-md-2">
+                <label class="fw-bold">Invoice #</label>
+                <input type="text" class="form-control" value="{{ $invoice->invoice_no }}" readonly>
+            </div>
+
             <div class="col-md-2">
               <label>Invoice Date</label>
               <input type="date" name="invoice_date" class="form-control" value="{{ $invoice->invoice_date }}">
+            </div>
+
+            <div class="col-md-2">
+              <label class="fw-bold">Invoice Type</label>
+              <select name="is_taxable" id="is_taxable" class="form-control border-primary" required>
+                  <option value="1" {{ (isset($invoice) && $invoice->is_taxable) ? 'selected' : '' }}>Taxable (PUR-TAX)</option>
+                  <option value="0" {{ (isset($invoice) && !$invoice->is_taxable) ? 'selected' : '' }}>Non-Taxable (PUR)</option>
+              </select>
+              <small class="text-muted">Determines the sequence number</small>
             </div>
 
             <div class="col-md-2">

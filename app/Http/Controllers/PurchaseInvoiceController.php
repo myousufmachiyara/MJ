@@ -31,7 +31,7 @@ class PurchaseInvoiceController extends Controller
         return view('purchase.create', compact('products', 'vendors', 'banks'));
     }
 
-    public function store(Request $request)
+    public function store(Request $request) 
     {
         if ($request->payment_method !== 'cheque') {
             $request->merge([
@@ -41,6 +41,7 @@ class PurchaseInvoiceController extends Controller
         
         $request->validate([
             // Header
+            'is_taxable'     => 'required|boolean', // Added to identify sequence
             'vendor_id'      => 'required|exists:chart_of_accounts,id',
             'invoice_date'   => 'required|date',
             'currency'       => 'required|in:AED,USD',
@@ -49,7 +50,7 @@ class PurchaseInvoiceController extends Controller
             'payment_method' => 'required|in:credit,cash,cheque,material+making cost',
             'payment_term'   => 'nullable|string',
 
-            // ADDED: Validation for the missing rates
+            // Rates
             'gold_rate_aed'  => 'nullable|numeric|min:0',
             'gold_rate_usd'  => 'nullable|numeric|min:0',
             'diamond_rate_aed' => 'nullable|numeric|min:0',
@@ -88,10 +89,26 @@ class PurchaseInvoiceController extends Controller
         try {
             DB::beginTransaction();
 
-            // 1. Generate Invoice Number
-            $lastInvoice = PurchaseInvoice::withTrashed()->orderBy('id', 'desc')->first();
-            $nextNumber = $lastInvoice ? intval($lastInvoice->invoice_no) + 1 : 1;
-            $invoiceNo = str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
+            // 1. Generate Split-Sequence Invoice Number
+            $isTaxable = $request->boolean('is_taxable'); 
+            $prefix = $isTaxable ? 'PUR-TAX-' : 'PUR-';
+
+            // Find the last invoice that starts with the current prefix
+            $lastInvoice = PurchaseInvoice::withTrashed()
+                ->where('invoice_no', 'LIKE', $prefix . '%')
+                ->orderBy('id', 'desc')
+                ->first();
+
+            if ($lastInvoice) {
+                // Remove prefix to get the numeric part (e.g., PUR-TAX-00001 -> 00001)
+                $lastNumber = str_replace($prefix, '', $lastInvoice->invoice_no);
+                $nextNumber = intval($lastNumber) + 1;
+            } else {
+                $nextNumber = 1;
+            }
+
+            // Pads to 5 digits, e.g., PUR-00001 or PUR-TAX-00001
+            $invoiceNo = $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
 
             $netAmountAed = $request->currency === 'USD' 
                 ? round($request->net_amount * $request->exchange_rate, 2) 
@@ -100,6 +117,7 @@ class PurchaseInvoiceController extends Controller
             // 2. Create Invoice
             $invoice = PurchaseInvoice::create([
                 'invoice_no'           => $invoiceNo,
+                'is_taxable'           => $isTaxable, // Ensure this column exists in DB
                 'vendor_id'            => $request->vendor_id,
                 'invoice_date'         => $request->invoice_date,
                 'remarks'              => $request->remarks,
@@ -132,7 +150,6 @@ class PurchaseInvoiceController extends Controller
                 $col995       = $purityWeight / 0.995;
                 $makingValue  = $itemData['gross_weight'] * $itemData['making_rate'];
 
-                // Determine correct metal rate for this item
                 $metalRate = ($itemData['material_type'] === 'gold') ? ($request->gold_rate_aed ?? 0) : ($request->dia_rate_aed ?? 0);
 
                 $materialValue = $purityWeight * $metalRate;
@@ -151,24 +168,22 @@ class PurchaseInvoiceController extends Controller
                     'col_995'          => $col995,
                     'making_rate'      => $itemData['making_rate'],
                     'making_value'     => $makingValue,
-                    'material_type'  => $itemData['material_type'],
-                    'material_rate'  => ($itemData['material_type'] === 'gold') ? $request->gold_rate_aed : $request->dia_rate_aed,
-                    'material_value' => $materialValue,
+                    'material_type'    => $itemData['material_type'],
+                    'material_rate'    => $metalRate,
+                    'material_value'   => $materialValue,
                     'taxable_amount'   => $taxable,
                     'vat_percent'      => $itemData['vat_percent'],
                     'vat_amount'       => $vatAmount,
                     'item_total'       => $itemTotal,
                 ]);
 
-                // Save Nested Parts
                 if (!empty($itemData['parts'])) {
                     foreach ($itemData['parts'] as $partData) {
-                        // Logic: (Qty * Rate) + (Stone Qty * Stone Rate)
                         $partTotal = ($partData['qty'] * $partData['rate']) + (($partData['stone_qty'] ?? 0) * ($partData['stone_rate'] ?? 0));
 
                         $invoiceItem->parts()->create([
                             'product_id'       => $partData['product_id'] ?? null,
-                            'item_name'        => $partData['item_name'] ?? null, // Added support for custom names
+                            'item_name'        => $partData['item_name'] ?? null,
                             'variation_id'     => $partData['variation_id'] ?? null,
                             'qty'              => $partData['qty'],
                             'rate'             => $partData['rate'],
@@ -194,11 +209,10 @@ class PurchaseInvoiceController extends Controller
 
         } catch (\Throwable $e) {
             DB::rollBack();
-            Log::error("Purchase Invoice Error: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return back()->withInput()->with('error', 'Critical Error: ' . $e->getMessage());
+            Log::error("Purchase Invoice Error: " . $e->getMessage());
+            return back()->withInput()->with('error', 'Error: ' . $e->getMessage());
         }
     }
-
 
     public function edit($id)
     {
@@ -217,6 +231,7 @@ class PurchaseInvoiceController extends Controller
         // Reuse your validation logic from Store
         $request->validate([
             // Header
+            'is_taxable'     => 'required|boolean', // Added
             'vendor_id'      => 'required|exists:chart_of_accounts,id',
             'invoice_date'   => 'required|date',
             'currency'       => 'required|in:AED,USD',
@@ -265,12 +280,11 @@ class PurchaseInvoiceController extends Controller
         try {
             DB::beginTransaction();
 
-            $netAmountAed = $request->currency === 'USD' 
-                ? round($request->net_amount * $request->exchange_rate, 2) 
-                : $request->net_amount;
+            $netAmountAed = $request->currency === 'USD' ? round($request->net_amount * $request->exchange_rate, 2) : $request->net_amount;
 
             // 1. Update Invoice Header
             $invoice->update([
+                'is_taxable'           => $isTaxable, // Ensure this column exists in DB
                 'vendor_id'            => $request->vendor_id,
                 'invoice_date'         => $request->invoice_date,
                 'remarks'              => $request->remarks,

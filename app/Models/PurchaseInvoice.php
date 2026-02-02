@@ -11,7 +11,7 @@ class PurchaseInvoice extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'invoice_no', 'vendor_id', 'invoice_date', 'remarks',
+        'invoice_no','is_taxable', 'vendor_id', 'invoice_date', 'remarks',
         'currency', 'exchange_rate', 'net_amount', 'net_amount_aed',
         'payment_method', 'payment_term', 'received_by',
         'cheque_no', 'cheque_date', 'bank_name', 'cheque_amount',

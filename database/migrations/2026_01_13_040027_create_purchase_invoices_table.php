@@ -16,6 +16,7 @@ return new class extends Migration
 
             /* ================= BASIC ================= */
             $table->string('invoice_no', 20)->unique();
+            $table->boolean('is_taxable')->default(1);
             $table->unsignedBigInteger('vendor_id');
             $table->date('invoice_date');
             $table->text('remarks')->nullable();
