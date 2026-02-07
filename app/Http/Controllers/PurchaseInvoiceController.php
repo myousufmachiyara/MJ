@@ -31,6 +31,61 @@ class PurchaseInvoiceController extends Controller
         return view('purchase.create', compact('products', 'vendors', 'banks'));
     }
 
+    public function downloadTemplate()
+    {
+        $filename = "purchase_import_template.csv";
+        $handle = fopen('php://output', 'w');
+
+        // Headers matching the JavaScript parser
+        fputcsv($handle, [
+            'Item Name', 'Description', 'Purity', 'Gross Wt', 
+            'Making Rate', 'Material', 'VAT %', 
+            'Part Name', 'Part Desc', 'Part Qty', 'Part Rate', 'Stone Qty', 'Stone Rate'
+        ]);
+
+        // Item 1: Gold Bracelet with Diamond Part
+        fputcsv($handle, ['18K Gold Bracelet', 'Handmade Chain Design', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '']);
+        fputcsv($handle, ['', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50']);
+
+        // Item 2: Standard 22K Ring (No Parts)
+        fputcsv($handle, ['22K Wedding Band', 'Plain Polished', '0.92', '8.45', '15.00', 'gold', '5', '', '', '', '', '', '']);
+
+        // Item 3: Luxury Diamond Ring (Multiple Parts)
+        fputcsv($handle, ['Diamond Engagement Ring', 'Solitaire Setting', '0.75', '4.20', '150.00', 'gold', '5', '', '', '', '', '', '']);
+        fputcsv($handle, ['', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0']);
+        fputcsv($handle, ['', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10']);
+
+        // Item 4: 21K Arabic Necklace
+        fputcsv($handle, ['21K Dubai Gold Necklace', 'Filigree Work', '0.88', '45.30', '12.00', 'gold', '5', '', '', '', '', '', '']);
+
+        // Item 5: Stone Necklace (Mixed Parts)
+        fputcsv($handle, ['Ruby Pendant', '18K White Gold', '0.75', '6.10', '45.00', 'gold', '5', '', '', '', '', '', '']);
+        fputcsv($handle, ['', '', '', '', '', '', '', 'Ruby Center', 'Oval Cut', '2.10', '3000', '1', '200']);
+        fputcsv($handle, ['', '', '', '', '', '', '', 'Diamond Halo', 'VS Clarity', '0.35', '1800', '12', '20']);
+
+        // Item 6: Simple Gold Coin (Investment)
+        fputcsv($handle, ['Gold Coin 10g', 'Swiss PAMP', '0.999', '10.00', '5.00', 'gold', '0', '', '', '', '', '', '']);
+
+        // Item 7: 18K Diamond Earrings
+        fputcsv($handle, ['Diamond Studs', 'White Gold 18K', '0.75', '2.50', '30.00', 'gold', '5', '', '', '', '', '', '']);
+        fputcsv($handle, ['', '', '', '', '', '', '', 'Diamonds', 'Pair Round Brilliant', '0.80', '4200', '2', '100']);
+
+        // Item 8: 22K Bangles (Heavy)
+        fputcsv($handle, ['22K Calcutta Bangles', 'Set of 2', '0.92', '65.00', '18.50', 'gold', '5', '', '', '', '', '', '']);
+
+        // Item 9: Fancy Colored Stone Ring
+        fputcsv($handle, ['Sapphire Ring', '18K Yellow Gold', '0.75', '5.80', '55.00', 'gold', '5', '', '', '', '', '', '']);
+        fputcsv($handle, ['', '', '', '', '', '', '', 'Blue Sapphire', 'Cushion Cut', '1.50', '2200', '1', '150']);
+
+        // Item 10: 14K Italian Chain
+        fputcsv($handle, ['14K Box Chain', 'Imported Italy', '0.60', '18.20', '10.00', 'gold', '5', '', '', '', '', '', '']);
+
+        header('Content-Type: text/csv');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        fclose($handle);
+        exit;
+    }
+
     public function store(Request $request) 
     {
         if ($request->payment_method !== 'cheque') {
@@ -730,7 +785,7 @@ class PurchaseInvoiceController extends Controller
                     '.($invoice->vendor->name ?? '-').'<br>
                     '.($invoice->vendor->address ?? '-').'<br>
                     Contact: '.($invoice->vendor->contact_no ?? '-').'<br>
-                    TRN: '.($invoice->vendor->trn ?? '-').'
+                    TRN: '.($invoice->vendor->trn ?? '-').'<br>
                 </td>
                 <td width="50%">
                     <table border="1" cellpadding="3" width="100%">

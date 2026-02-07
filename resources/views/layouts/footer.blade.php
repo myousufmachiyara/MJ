@@ -11,6 +11,7 @@
 <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="{{ asset('/assets/vendor/bootstrapv5-multiselect/js/bootstrap-multiselect.js') }}"></script>
 <script src="{{ asset('/assets/vendor/dropzone/dropzone.js') }}"></script>
 

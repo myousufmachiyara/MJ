@@ -95,95 +95,107 @@
           </div>
 
           {{-- TABLE --}}
-          <div class="table-responsive">
-            <table class="table table-bordered">
-              <thead>
-                <tr>
-                  <th width="12%" rowspan="2">Item Name</th>
-                  <th width="13%" rowspan="2">Item Description</th>
-                  <th width="9%" rowspan="2">Purity</th>
-                  <th rowspan="2">Gross Wt</th>
-                  <th rowspan="2">Purity Wt</th>
-                  <th rowspan="2">995</th>
-                  <th colspan="2" class="text-center">Making</th>
-                  <th width="6%" rowspan="2">Material</th>
-                  <th rowspan="2">Material Val</th>
-                  <th rowspan="2">Taxable (MC)</th>
-                  <th rowspan="2">VAT %</th>
-                  <th rowspan="2">VAT Amt</th>
-                  <th rowspan="2">Gross Total</th>
-                  <th width="6%" rowspan="2">Action</th>
-                </tr>
-                <tr>
-                  <th>Rate</th>
-                  <th>Value</th>
-                </tr>
-              </thead>
+          <section class="card">
+            <header class="card-header d-flex justify-content-between align-items-center">
+              <h2 class="card-title">Invoice Items</h2>
+              <div class="">
+                <input type="file" id="excel_import" class="d-none" accept=".xlsx, .xls, .csv">
+                <button type="button" class="btn btn-success" onclick="document.getElementById('excel_import').click()">
+                    <i class="fas fa-file-excel"></i> Import Excel
+                </button>
+                <a href="{{ route('purchase.download_template') }}" class="btn btn-danger"><i class="fas fa-download"></i> Download Template</a>
+              </div>
+            </header>
+            <div class="table-responsive">
+              <table class="table table-bordered">
+                <thead>
+                  <tr>
+                    <th width="12%" rowspan="2">Item Name</th>
+                    <th width="13%" rowspan="2">Item Description</th>
+                    <th width="9%" rowspan="2">Purity</th>
+                    <th rowspan="2">Gross Wt</th>
+                    <th rowspan="2">Purity Wt</th>
+                    <th rowspan="2">995</th>
+                    <th colspan="2" class="text-center">Making</th>
+                    <th width="6%" rowspan="2">Material</th>
+                    <th rowspan="2">Material Val</th>
+                    <th rowspan="2">Taxable (MC)</th>
+                    <th rowspan="2">VAT %</th>
+                    <th rowspan="2">VAT Amt</th>
+                    <th rowspan="2">Gross Total</th>
+                    <th width="6%" rowspan="2">Action</th>
+                  </tr>
+                  <tr>
+                    <th>Rate</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
 
-              <tbody id="PurchaseTable">
-                <tr class="item-row" data-item-index="0">
-                  <td>
-                    <div class="product-wrapper">
-                      <input type="text" name="items[0][item_name]" class="form-control item-name-input" placeholder="Product Name">
-                      <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
-                    </div>
-                  </td>
-                  <td><input type="text" name="items[0][item_description]" class="form-control" required></td>
-                  <td>
-                    <select name="items[0][purity]" class="form-control purity">
-                      <option value="0.92">22K (92%)</option>
-                      <option value="0.88">21K (88%)</option>
-                      <option value="0.75">18K (75%)</option>
-                      <option value="0.60">14K (60%)</option>
-                    </select>
-                  </td>
-                  <td><input type="number" name="items[0][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>
-                  <td><input type="number" name="items[0][purity_weight]" step="any" value="0" class="form-control purity-weight" readonly></td>
-                  <td><input type="number" name="items[0][995]" step="any" value="0" class="form-control col-995" readonly></td>
-                  <td><input type="number" name="items[0][making_rate]" step="any" value="0" class="form-control making-rate"></td>
-                  <td><input type="number" name="items[0][making_value]" step="any" class="form-control making-value" readonly></td>
-                  <td>
-                    <select name="items[0][material_type]" class="form-control material-type">
-                      <option value="gold">Gold</option>
-                      <option value="diamond">Diamond</option>
-                    </select>
-                  </td>
-                  <td><input type="number" name="items[0][metal_value]" step="any" value="0" class="form-control material-value" readonly></td>
-                  <td><input type="number" name="items[0][taxable_amount]" step="any" value="0" class="form-control taxable-amount" readonly></td>
-                  <td><input type="number" name="items[0][vat_percent]" class="form-control vat-percent" step="any" value="0"></td>
-                  <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
-                  <td><input type="number" class="form-control item-total" readonly></td>
-                  <td>
-                    <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
-                    <button type="button" class="btn btn-sm btn-primary toggle-parts"> <i class="fas fa-wrench"></i> </button>
-                  </td>
-                </tr>
-                <tr class="parts-row" style="display:none;background:#efefef">
-                  <td colspan="15">
-                    <div class="parts-wrapper">
-                      <table class="table table-sm table-bordered parts-table">
-                        <thead>
-                          <tr>
-                            <th>Part</th>
-                            <th>Description</th>
-                            <th>Carat</th>
-                            <th>Rate</th>
-                            <th>Stone Ct.</th>
-                            <th>Stone Rate</th>
-                            <th>Total</th>
-                            <th></th>
-                          </tr>
-                        </thead>
-                        <tbody></tbody>
-                      </table>
-                      <button type="button" class="btn btn-sm btn-outline-primary add-part"> + Add Part </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <button type="button" class="btn btn-outline-primary" onclick="addNewRow()">Add Item</button>
-          </div>
+                <tbody id="PurchaseTable">
+                  <tr class="item-row" data-item-index="0">
+                    <td>
+                      <div class="product-wrapper">
+                        <input type="text" name="items[0][item_name]" class="form-control item-name-input" placeholder="Product Name">
+                        <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
+                      </div>
+                    </td>
+                    <td><input type="text" name="items[0][item_description]" class="form-control" required></td>
+                    <td>
+                      <select name="items[0][purity]" class="form-control purity">
+                        <option value="0.92">22K (92%)</option>
+                        <option value="0.88">21K (88%)</option>
+                        <option value="0.75">18K (75%)</option>
+                        <option value="0.60">14K (60%)</option>
+                      </select>
+                    </td>
+                    <td><input type="number" name="items[0][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>
+                    <td><input type="number" name="items[0][purity_weight]" step="any" value="0" class="form-control purity-weight" readonly></td>
+                    <td><input type="number" name="items[0][995]" step="any" value="0" class="form-control col-995" readonly></td>
+                    <td><input type="number" name="items[0][making_rate]" step="any" value="0" class="form-control making-rate"></td>
+                    <td><input type="number" name="items[0][making_value]" step="any" class="form-control making-value" readonly></td>
+                    <td>
+                      <select name="items[0][material_type]" class="form-control material-type">
+                        <option value="gold">Gold</option>
+                        <option value="diamond">Diamond</option>
+                      </select>
+                    </td>
+                    <td><input type="number" name="items[0][metal_value]" step="any" value="0" class="form-control material-value" readonly></td>
+                    <td><input type="number" name="items[0][taxable_amount]" step="any" value="0" class="form-control taxable-amount" readonly></td>
+                    <td><input type="number" name="items[0][vat_percent]" class="form-control vat-percent" step="any" value="0"></td>
+                    <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
+                    <td><input type="number" class="form-control item-total" readonly></td>
+                    <td>
+                      <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
+                      <button type="button" class="btn btn-sm btn-primary toggle-parts"> <i class="fas fa-wrench"></i> </button>
+                    </td>
+                  </tr>
+                  <tr class="parts-row" style="display:none;background:#efefef">
+                    <td colspan="15">
+                      <div class="parts-wrapper">
+                        <table class="table table-sm table-bordered parts-table">
+                          <thead>
+                            <tr>
+                              <th>Part</th>
+                              <th>Description</th>
+                              <th>Carat</th>
+                              <th>Rate</th>
+                              <th>Stone Ct.</th>
+                              <th>Stone Rate</th>
+                              <th>Total</th>
+                              <th></th>
+                            </tr>
+                          </thead>
+                          <tbody></tbody>
+                        </table>
+                        <button type="button" class="btn btn-sm btn-outline-primary add-part"> + Add Part </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <button type="button" class="btn btn-outline-primary" onclick="addNewRow()">Add Item</button>
+            </div>
+          </section>
 
           {{-- SUMMARY --}}
           <div class="row mt-5 mb-5">
@@ -750,6 +762,73 @@
         
         row.find('.part-total').val(total.toFixed(2));
     });
+
+    $('#excel_import').on('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+
+            if (jsonData.length === 0) return;
+
+            // Clear only if the first row is empty
+            let firstRow = $('#PurchaseTable tr.item-row').first();
+            if ($('#PurchaseTable tr.item-row').length === 1 && !firstRow.find('.item-name-input').val()) {
+                firstRow.next('.parts-row').remove();
+                firstRow.remove();
+            }
+
+            let currentItemRow = null;
+
+            jsonData.forEach((row) => {
+                // Check if it's a Main Item (has Item Name)
+                if (row['Item Name'] && row['Item Name'].trim() !== "") {
+                    addNewRow();
+                    currentItemRow = $('#PurchaseTable tr.item-row').last();
+                    
+                    // Set values
+                    currentItemRow.find('.item-name-input').val(row['Item Name']);
+                    currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
+                    currentItemRow.find('.purity').val(row['Purity'] || '0.92');
+                    currentItemRow.find('.gross-weight').val(row['Gross Wt'] || 0);
+                    currentItemRow.find('.making-rate').val(row['Making Rate'] || 0);
+                    currentItemRow.find('.material-type').val((row['Material'] || 'gold').toLowerCase());
+                    currentItemRow.find('.vat-percent').val(row['VAT %'] || 0);
+
+                    // Force individual row calculation
+                    calculateRow(currentItemRow);
+                } 
+                
+                // Check if it's a Part (has Part Name)
+                if (row['Part Name'] && row['Part Name'].trim() !== "" && currentItemRow) {
+                    const partsRow = currentItemRow.next('.parts-row');
+                    partsRow.show(); 
+                    partsRow.find('.add-part').click();
+                    
+                    const currentPartRow = partsRow.find('.part-item-row').last();
+                    currentPartRow.find('.item-name-input').val(row['Part Name']);
+                    currentPartRow.find('input[name*="[part_description]"]').val(row['Part Desc'] || '');
+                    currentPartRow.find('.part-qty').val(row['Part Qty'] || 0);
+                    currentPartRow.find('.part-rate').val(row['Part Rate'] || 0);
+                    currentPartRow.find('.part-stone-qty').val(row['Stone Qty'] || 0);
+                    currentPartRow.find('.part-stone-rate').val(row['Stone Rate'] || 0);
+                    
+                    // Trigger part total calculation
+                    currentPartRow.find('.part-qty').trigger('input');
+                }
+            });
+
+            calculateTotals();
+            alert('Items Imported Successfully!');
+            $('#excel_import').val(''); // Clear file input
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
   });
 </script>
 @endsection

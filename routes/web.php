@@ -57,6 +57,7 @@ Route::middleware(['auth'])->group(function () {
 
     //Purchase Helper
     Route::get('/product/{product}/invoices', [PurchaseInvoiceController::class, 'getProductInvoices']);
+    Route::get('/purchase-invoices/download-template', [PurchaseInvoiceController::class, 'downloadTemplate'])->name('purchase.download_template');
 
     // Production Summary
     Route::get('/production-summary/{id}', [ProductionController::class, 'summary'])->name('production.summary');
