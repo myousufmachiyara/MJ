@@ -822,24 +822,24 @@ class PurchaseInvoiceController extends Controller
                         <td width="20%" colspan="1" style="text-align:left;">'.htmlspecialchars($part->part_description).'</td>
                         <td width="10%" colspan="2" style="text-align:center;">'.$part->qty.' '.$partUnit.'</td>                       
                         <td width="10%" colspan="2" style="text-align:center;">Rate: '.number_format($part->rate, 2).'</td>
-                        <td width="11%" colspan="1" style="text-align:center;">Stone. Ct: '.number_format($part->stone_qty ?? 0, 0).'</td>
                         <td width="12%" colspan="1" style="text-align:center;">Stone. Rate: '.number_format($part->stone_rate ?? 0, 2).'</td>
                         <td width="14%" colspan="2" style="text-align:right; padding-right:10px;"><b>Total: '.number_format($part->total, 2).'</b></td>
                     </tr>';
                 }
+
             }
         }
 
         $html .= '
                 <tr style="font-weight:bold; background-color:#f5f5f5;">
-                    <td colspan="10" align="right">Net Amount (Incl. VAT)</td>
                     <td colspan="2" align="center">'.number_format($invoice->net_amount, 2).'</td>
+                    <td colspan="2" align="right">'.number_format($invoice->net_amount, 2).'</td>
                 </tr>
             </tbody>
         </table>';
 
         $pdf->writeHTML($html, true, false, false, false);
-        
+
         /* ================= SUMMARY SECTION ================= */
         $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
         $wordsText=$pdf->convertCurrencyToWords($aedAmount);
@@ -961,10 +961,10 @@ class PurchaseInvoiceController extends Controller
 
     /* --- Document Logic for Image 1: Metal Purchase Fixing --- */
     private function renderMetalFixingPage($pdf, $invoice) {
+
         // 1. HEADER (Branding)
         $logoPath = public_path('assets/img/mj-logo.jpeg');
         $logoHtml = file_exists($logoPath) ? '<img src="'.$logoPath.'" width="80">' : '';
-        
         $header = '
         <table width="100%" cellpadding="2">
             <tr>
@@ -986,6 +986,8 @@ class PurchaseInvoiceController extends Controller
         $pdf->Cell(70, 8, 'PARTY COPY', 0, 1, 'R');
         $pdf->Ln(5);
 
+
+
         // 3. MASTER DETAILS (Precise Alignment)
         $pdf->SetFont('helvetica', '', 9);
         $htmlInfo = '
@@ -998,6 +1000,7 @@ class PurchaseInvoiceController extends Controller
                     Contact: '.($invoice->vendor->contact_no ?? '-').'<br>
                     TRN: '.($invoice->vendor->trn ?? '-').'
                 </td>
+
                 <td width="40%">
                     <table border="1" cellpadding="3" width="100%">
                         <tr><td width="40%"><b>Invoice #</b></td><td width="60%"><b>'.$invoice->invoice_no.'</b></td></tr>
@@ -1006,6 +1009,7 @@ class PurchaseInvoiceController extends Controller
                 </td>
             </tr>
         </table>';
+
         $pdf->writeHTML($htmlInfo, true, false, false, false);
 
         // 4. CONTENT AREA ("WE HAVE")
@@ -1016,9 +1020,10 @@ class PurchaseInvoiceController extends Controller
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', 'B', 10);
         $pdf->writeHTML('<b>WE HAVE</b>', true, false, false, false);
-        
+
         $pdf->SetFont('helvetica', '', 11);
         $htmlContent = '
+
         <table width="100%" style="border: 1px solid #000;">
             <tr>
                 <td>
@@ -1029,10 +1034,11 @@ class PurchaseInvoiceController extends Controller
         </table>';
         $pdf->writeHTML($htmlContent, true, false, false, false);
 
+
+
         // 5. ACCOUNT UPDATE (Two-column words/credit box)
         $pdf->SetFont('helvetica', '', 8);
         $words = $pdf->convertCurrencyToWords($invoice->net_amount_aed, 'AED');
-        
         $htmlAccount = '
         <table width="100%" cellpadding="4" style="border:1px solid #000;">
             <tr>
@@ -1052,15 +1058,15 @@ class PurchaseInvoiceController extends Controller
 
         // 6. SIGNATURE SECTION (Professional 4-Column Layout)
         $pdf->Ln(10); // Provide enough space for stamps/signatures
-        
+
         // 5. SIGNATURE SECTION (Using your exact Line/SetXY method)
-        $pdf->Ln(25); 
+        $pdf->Ln(25);
         $y = $pdf->GetY();
         $pdf->SetFont('helvetica', '', 7);
 
         // Column 1: Supplier
         $pdf->SetXY(10, $y - 12);
-        $pdf->Line(10, $y, 55, $y); 
+        $pdf->Line(10, $y, 55, $y);
         $pdf->SetXY(10, $y + 1);
         $pdf->Cell(45, 5, "SUPPLIER'S SIGNATURE", 0, 0, 'C');
 
@@ -1086,6 +1092,7 @@ class PurchaseInvoiceController extends Controller
     }
 
     /* --- Document Logic for Image 3: Currency Payment --- */
+
     private function renderCurrencyPaymentPage($pdf, $invoice) {
         // 1. HEADER (Consistent with previous pages)
         $logoPath = public_path('assets/img/mj-logo.jpeg');
@@ -1136,7 +1143,7 @@ class PurchaseInvoiceController extends Controller
                 <th width="13%">Amount AED</th>
                 <th width="14%">Total Amount</th>
             </tr>';
-        
+
             $tableBody = '
             <tr style="text-align:center;">
                 <td>1</td>
@@ -1147,6 +1154,7 @@ class PurchaseInvoiceController extends Controller
                 <td>'.number_format($invoice->net_amount_aed, 2).'</td>
                 <td>'.number_format($invoice->net_amount_aed, 2).'</td>
             </tr>
+
             <tr style="font-weight:bold; background-color:#f9f9f9;">
                 <td colspan="4" align="right">Total (AED)</td>
                 <td align="center">'.number_format($invoice->net_amount, 2).'</td>
@@ -1154,7 +1162,7 @@ class PurchaseInvoiceController extends Controller
                 <td align="center">'.number_format($invoice->net_amount_aed, 2).'</td>
             </tr>
         </table>';
-        
+
         $pdf->writeHTML($tableHead . $tableBody, true, false, false, false);
 
         // 5. ACCOUNT STATUS & NARRATION
@@ -1166,6 +1174,7 @@ class PurchaseInvoiceController extends Controller
                 <td width="30%" style="border: 1px solid #000; background-color:#f2f2f2;">Your account has been updated with :</td>
                 <td width="70%">'.strtoupper($words).'</td>
             </tr>
+
             <tr>
                 <td style="border-right: 0.5px solid #000;"><b>AED '.number_format($invoice->net_amount_aed, 2).' DEBITED</b></td>
                 <td></td>
@@ -1174,13 +1183,13 @@ class PurchaseInvoiceController extends Controller
         $pdf->writeHTML($htmlStatus, true, false, false, false);
 
         // 6. SIGNATURE SECTION (Same Professional 4-Column Layout)
-        $pdf->Ln(25); 
+        $pdf->Ln(25);
         $y = $pdf->GetY();
         $pdf->SetFont('helvetica', '', 7);
 
         // Supplier/Receiver
         $pdf->SetXY(10, $y - 12);
-        $pdf->Line(10, $y, 55, $y); 
+        $pdf->Line(10, $y, 55, $y);
         $pdf->SetXY(10, $y + 1);
         $pdf->Cell(45, 5, "RECEIVER'S SIGNATURE", 0, 0, 'C');
 
@@ -1202,6 +1211,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->SetXY(155, $y + 1);
         $pdf->SetFont('helvetica', '', 7);
         $pdf->Cell(40, 5, "AUTHORISED SIGNATORY", 0, 0, 'C');
+
     }
 
     private function drawCommonHeader($pdf) {
