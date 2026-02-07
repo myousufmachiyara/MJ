@@ -750,6 +750,8 @@ class PurchaseInvoiceController extends Controller
         </table>';
         $pdf->writeHTML($vendorHtml, true, false, false, false);
 
+        $runningTaxable = 0; $runningVat = 0;
+
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
@@ -763,10 +765,10 @@ class PurchaseInvoiceController extends Controller
                     <th width="6%" rowspan="2">995</th>
                     <th width="14%" colspan="2">Making</th>
                     <th width="8%" rowspan="2">Material</th>
-                    <th width="7%" rowspan="2">Material Val</th>
-                    <th width="8%" rowspan="2">Taxable</th>
+                    <th width="8%" rowspan="2">Material Val</th>
+                    <th width="7%" rowspan="2">Taxable</th>
                     <th width="6%" rowspan="2">VAT %</th>
-                    <th width="8%" rowspan="2">Gross Total</th>
+                    <th width="8%" rowspan="2">Item Total</th>
                 </tr>
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
                     <th width="7%">Rate</th>
@@ -775,15 +777,22 @@ class PurchaseInvoiceController extends Controller
             </thead>
             <tbody>';
 
-        $runningTaxable = 0; $runningVat = 0;
         foreach ($invoice->items as $index => $item) {
-            $taxable = $item->taxable_amount;
-            $vat = $item->vat_amount;
-            $rowTotal = $taxable + $vat;
-            $runningTaxable += $taxable;
-            $runningVat += $vat;
+            $hasParts = ($item->parts && $item->parts->count() > 0);
+            $partsSum = $hasParts ? $item->parts->sum('total') : 0;
+            
+            // Individual Item Total (Taxable + VAT for this item only)
+            $itemOnlyTotal = $item->taxable_amount + $item->vat_amount;
+            
+            // Product Total (Item + Parts + VAT)
+            $productTotal = $item->taxable_amount + $partsSum + $item->vat_amount;
+            
+            $runningTaxable += $item->taxable_amount;
+            $runningVat += $item->vat_amount;
+            
             $vatPercent = ($item->taxable_amount > 0) ? ($item->vat_amount / $item->taxable_amount) * 100 : 0;
 
+            // Main Item Row
             $html .= '
                 <tr style="text-align:center; background-color: #ffffff;">
                     <td width="3%">'.($index + 1).'</td>
@@ -796,13 +805,14 @@ class PurchaseInvoiceController extends Controller
                     <td width="7%">'.number_format($item->making_rate ?? 0, 2).'</td>
                     <td width="7%">'.number_format($item->making_value, 2).'</td>
                     <td width="8%">'.ucfirst($item->material_type).'</td>
-                    <td width="7%">'.number_format($item->material_value, 2).'</td>
-                    <td width="8%">'.number_format($item->taxable_amount, 2).'</td>
+                    <td width="8%">'.number_format($item->material_value, 2).'</td>
+                    <td width="7%">'.number_format($item->taxable_amount, 2).'</td>
                     <td width="6%">'.round($vatPercent, 0).'%</td>
-                    <td width="8%">'.number_format($rowTotal, 2).'</td>
+                    <td width="8%" style="font-weight:bold;">'.number_format($itemOnlyTotal, 2).'</td>
                 </tr>';
 
-            if ($item->parts && $item->parts->count() > 0) {
+            // Parts Detail Rows
+            if ($hasParts) {
                 $html .= '<tr style="background-color:#f9f9f9; font-style:italic; font-size:7px;">
                             <td width="3%"></td>
                             <td colspan="13" width="97%"><b>Parts Detail:</b></td>
@@ -811,28 +821,39 @@ class PurchaseInvoiceController extends Controller
                 foreach ($item->parts as $part) {
                     $partUnit = $part->product->measurementUnit->shortcode ?? $part->product->measurementUnit->name ?? 'Ct.';
                     $displayPartName = $part->item_name ?: ($part->product->name ?? 'Part');
-                    $variationText = '';
-                    if ($part->variation && $part->variation->attributeValues->count()) {
-                        $variationText = ' [' .$part->variation->attributeValues->map(fn($av) => $av->attribute->name.': '.$av->value)->implode(', '). ']';
-                    }
+                    
                     $html .= '
                     <tr style="font-size:7.5px; background-color:#fcfcfc;">
                         <td width="3%"></td>
-                        <td width="20%" colspan="2" style="text-align:left;">'.$displayPartName . $variationText.'</td>
+                        <td width="20%" colspan="2" style="text-align:left;">'.$displayPartName.'</td>
                         <td width="20%" colspan="1" style="text-align:left;">'.htmlspecialchars($part->part_description).'</td>
                         <td width="10%" colspan="2" style="text-align:center;">'.$part->qty.' '.$partUnit.'</td>                       
                         <td width="10%" colspan="2" style="text-align:center;">Rate: '.number_format($part->rate, 2).'</td>
-                        <td width="12%" colspan="1" style="text-align:center;">Stone. Rate: '.number_format($part->stone_rate ?? 0, 2).'</td>
-                        <td width="14%" colspan="2" style="text-align:right; padding-right:10px;"><b>Total: '.number_format($part->total, 2).'</b></td>
+                        <td width="11%" colspan="1" style="text-align:center;">St. Qty: '.number_format($part->stone_qty ?? 0, 0).'</td>
+                        <td width="12%" colspan="1" style="text-align:center;">St. Rate: '.number_format($part->stone_rate ?? 0, 2).'</td>
+                        <td width="14%" colspan="2" style="text-align:right; padding-right:10px;"><b>'.number_format($part->total, 2).'</b></td>
                     </tr>';
                 }
 
+                // Product Summary Row (Item + Parts)
+                $html .= '
+                    <tr style="background-color:#eeeeee; font-weight:bold; font-size:8px;">
+                        <td colspan="10" align="right" style="padding-right:10px;">Product Grand Total (Item + Parts + VAT):</td>
+                        <td colspan="2" align="right">'.number_format($productTotal, 2).'</td>
+                    </tr>';
+            } else {
+                // Simple Summary Row for items without parts
+                $html .= '
+                    <tr style="background-color:#eeeeee; font-weight:bold; font-size:8px;">
+                        <td colspan="12" align="right" style="padding-right:10px;">Product Total:</td>
+                        <td colspan="2" align="right">'.number_format($productTotal, 2).'</td>
+                    </tr>';
             }
         }
 
         $html .= '
                 <tr style="font-weight:bold; background-color:#f5f5f5;">
-                    <td colspan="2" align="center">'.number_format($invoice->net_amount, 2).'</td>
+                    <td colspan="12" align="right">Net Invoice Amount (Incl. VAT)</td>
                     <td colspan="2" align="right">'.number_format($invoice->net_amount, 2).'</td>
                 </tr>
             </tbody>
