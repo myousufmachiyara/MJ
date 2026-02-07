@@ -1012,7 +1012,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->writeHTML($termsHtml, true, false, false, false);
 
         // Signatures
-        $pdf->Ln(20); $y = $pdf->GetY();
+        $pdf->Ln(40); $y = $pdf->GetY();
         $pdf->Line(20, $y, 80, $y); $pdf->Line(130, $y, 190, $y);
         $pdf->SetXY(20, $y); $pdf->Cell(60, 5, "Receiver's Signature", 0, 0, 'C');
         $pdf->SetXY(130, $y); $pdf->Cell(60, 5, "Authorized Signature", 0, 0, 'C');
@@ -1062,8 +1062,6 @@ class PurchaseInvoiceController extends Controller
         $pdf->Cell(70, 8, 'PARTY COPY', 0, 1, 'R');
         $pdf->Ln(5);
 
-
-
         // 3. MASTER DETAILS (Precise Alignment)
         $pdf->SetFont('helvetica', '', 9);
         $htmlInfo = '
@@ -1110,8 +1108,6 @@ class PurchaseInvoiceController extends Controller
         </table>';
         $pdf->writeHTML($htmlContent, true, false, false, false);
 
-
-
         // 5. ACCOUNT UPDATE (Two-column words/credit box)
         $pdf->SetFont('helvetica', '', 8);
         $words = $pdf->convertCurrencyToWords($invoice->net_amount_aed, 'AED');
@@ -1133,10 +1129,10 @@ class PurchaseInvoiceController extends Controller
         $pdf->writeHTML('Being '.number_format($totalPureWt, 2).' gms pure gold rate '.number_format($rate, 2).' /- fixed with Musfira Jewelry llc Against Purchase #'.$invoice->invoice_no.'.', true, false, false, false);
 
         // 6. SIGNATURE SECTION (Professional 4-Column Layout)
-        $pdf->Ln(10); // Provide enough space for stamps/signatures
+        $pdf->Ln(20); // Provide enough space for stamps/signatures
 
         // 5. SIGNATURE SECTION (Using your exact Line/SetXY method)
-        $pdf->Ln(25);
+        $pdf->Ln(20);
         $y = $pdf->GetY();
         $pdf->SetFont('helvetica', '', 7);
 
@@ -1212,28 +1208,23 @@ class PurchaseInvoiceController extends Controller
         <table width="100%" cellpadding="5" border="1" style="border-collapse: collapse;">
             <tr style="background-color:#f2f2f2; font-weight:bold; text-align:center;">
                 <th width="5%">No.</th>
-                <th width="10%">Branch</th>
-                <th width="35%">Account Description</th>
-                <th width="10%">Type</th>
-                <th width="13%">Amount FC</th>
-                <th width="13%">Amount AED</th>
-                <th width="14%">Total Amount</th>
+                <th width="50%">Account Description</th>
+                <th width="12%">Type</th>
+                <th width="15%">Amount AED</th>
+                <th width="18%">Total Amount</th>
             </tr>';
 
             $tableBody = '
             <tr style="text-align:center;">
                 <td>1</td>
-                <td>JOJ</td>
                 <td align="left">120000 - Cash On Hand<br>(Being Aed '.number_format($invoice->net_amount_aed, 2).' Paid to '.($invoice->vendor->name ?? '').')</td>
                 <td>Cash</td>
-                <td>'.number_format($invoice->net_amount, 2).'</td>
                 <td>'.number_format($invoice->net_amount_aed, 2).'</td>
                 <td>'.number_format($invoice->net_amount_aed, 2).'</td>
             </tr>
 
             <tr style="font-weight:bold; background-color:#f9f9f9;">
-                <td colspan="4" align="right">Total (AED)</td>
-                <td align="center">'.number_format($invoice->net_amount, 2).'</td>
+                <td colspan="3" align="right">Total (AED)</td>
                 <td align="center">'.number_format($invoice->net_amount_aed, 2).'</td>
                 <td align="center">'.number_format($invoice->net_amount_aed, 2).'</td>
             </tr>
@@ -1259,7 +1250,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->writeHTML($htmlStatus, true, false, false, false);
 
         // 6. SIGNATURE SECTION (Same Professional 4-Column Layout)
-        $pdf->Ln(25);
+        $pdf->Ln(40);
         $y = $pdf->GetY();
         $pdf->SetFont('helvetica', '', 7);
 
