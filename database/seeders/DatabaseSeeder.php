@@ -14,7 +14,6 @@ use App\Models\MeasurementUnit;
 use App\Models\ProductCategory;
 use App\Models\Attribute;
 use App\Models\AttributeValue;
-use App\Models\BarcodeSequence;
 use App\Models\ProductSubcategory;
 use Illuminate\Support\Str;
 
@@ -40,6 +39,19 @@ class DatabaseSeeder extends Seeder
 
         $superAdmin = Role::firstOrCreate(['name' => 'superadmin']);
         $admin->assignRole($superAdmin);
+
+        $managerUser = User::firstOrCreate(
+            ['username' => 'm.kashif'],
+            [
+                'name' => 'M.Kashif',
+                'email' => null,
+                'password' => Hash::make('12345678'),
+            ]
+        );
+
+        $managerRole = Role::firstOrCreate(['name' => 'manager']);
+        $managerUser->assignRole($managerRole);
+
 
         // 📌 Functional Modules (CRUD-style permissions)
         $modules = [
@@ -79,6 +91,30 @@ class DatabaseSeeder extends Seeder
             'production_return',
         ];
 
+        $managerModules = [
+            // Accounts
+            'coa',
+            'shoa',
+
+            // Products
+            'products',
+            'product_categories',
+            'product_subcategories',
+            'attributes',
+
+            // Purchases
+            'purchase_invoices',
+            'purchase_return',
+
+            // Sales
+            'sale_invoices',
+            'sale_return',
+
+            // Vouchers
+            'payment_vouchers',
+            'vouchers',
+        ];
+
         $actions = ['index', 'create', 'edit', 'delete', 'print'];
 
         foreach ($modules as $module) {
@@ -89,6 +125,13 @@ class DatabaseSeeder extends Seeder
             }
         }
 
+        $managerPermissions = [];
+
+        foreach ($managerModules as $module) {
+            foreach ($actions as $action) {
+                $managerPermissions[] = "$module.$action";
+            }
+        }
         // 📊 Report permissions (only view access, no CRUD)
         $reports = ['inventory', 'purchase', 'production', 'sales', 'accounts'];
 
@@ -98,9 +141,21 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
+        $reportPermissions = [
+            'reports.inventory',
+            'reports.purchase',
+            'reports.sales',
+            'reports.accounts',
+        ];
+
         // Assign all permissions to Superadmin
         $superAdmin->syncPermissions(Permission::all());
-
+        $managerRole->syncPermissions(
+            Permission::whereIn('name', array_merge(
+                $managerPermissions,
+                $reportPermissions
+            ))->get()
+        );
         // ---------------------
         // HEADS OF ACCOUNTS
         // ---------------------
@@ -260,22 +315,6 @@ class DatabaseSeeder extends Seeder
                 'attribute_id' => $size->id,
                 'value' => $sz,
             ]);
-        }
-
-        $sequences = [
-            ['prefix' => 'GLOBAL', 'next_number' => 1],
-            ['prefix' => 'FG', 'next_number' => 1],
-            ['prefix' => 'RAW', 'next_number' => 1],
-            ['prefix' => 'SRV', 'next_number' => 1],
-            ['prefix' => 'PRD', 'next_number' => 1],
-            ['prefix' => 'VAR', 'next_number' => 1],
-        ];
-
-        foreach ($sequences as $seq) {
-            BarcodeSequence::firstOrCreate(
-                ['prefix' => $seq['prefix']],
-                ['next_number' => $seq['next_number']]
-            );
         }
     }
 }
