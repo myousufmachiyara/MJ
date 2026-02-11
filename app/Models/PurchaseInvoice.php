@@ -16,7 +16,8 @@ class PurchaseInvoice extends Model
         'payment_method', 'payment_term', 'received_by',
         'cheque_no', 'cheque_date', 'bank_name', 'cheque_amount',
         'material_weight', 'material_purity', 'material_value',
-        'material_given_by', 'material_received_by', 'making_charges',
+        'material_given_by', 'material_received_by', 'making_charges','transfer_from_bank', 
+        'transfer_to_bank', 'account_title', 'account_no', 'transaction_id', 'transfer_date', 'transfer_amount',
         
         // Header level rates - now aligned with controller
         'gold_rate_aed', 'gold_rate_usd', 'diamond_rate_aed', 'diamond_rate_usd',
@@ -37,6 +38,11 @@ class PurchaseInvoice extends Model
     public function bank()
     {
         return $this->belongsTo(ChartOfAccounts::class, 'bank_name');
+    }
+
+    public function transferBank()
+    {
+        return $this->belongsTo(ChartOfAccounts::class, 'transfer_from_bank');
     }
 
     public function items()

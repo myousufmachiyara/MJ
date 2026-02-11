@@ -28,7 +28,7 @@ return new class extends Migration
             $table->decimal('net_amount_aed', 18, 2)->default(0);
 
             /* ================= PAYMENT ================= */
-            $table->enum('payment_method', ['cash', 'credit', 'cheque', 'material+making cost'])->nullable();
+            $table->enum('payment_method', ['cash', 'credit', 'bank_transfer' , 'cheque', 'material+making cost'])->nullable();
             $table->string('payment_term')->nullable(); // Matches your $fillable 'payment_term'
 
             /* ================= CHEQUE ================= */
@@ -36,6 +36,15 @@ return new class extends Migration
             $table->date('cheque_date')->nullable();
             $table->unsignedBigInteger('bank_name')->nullable();
             $table->decimal('cheque_amount', 18, 2)->nullable();
+
+            /* ================= BANK TRANSFER ================= */
+            $table->unsignedBigInteger('transfer_from_bank')->nullable();
+            $table->string('transfer_to_bank', 150)->nullable(); // Vendor bank name
+            $table->string('account_title', 150)->nullable();
+            $table->string('account_no', 100)->nullable();
+            $table->string('transaction_id', 100)->nullable();
+            $table->date('transfer_date')->nullable();
+            $table->decimal('transfer_amount', 18, 2)->nullable();
 
             /* ================= MATERIAL + MAKING ================= */
             $table->decimal('material_weight', 15, 3)->nullable();
@@ -64,9 +73,7 @@ return new class extends Migration
             $table->foreign('bank_name')->references('id')->on('chart_of_accounts')->onDelete('cascade');
             $table->foreign('vendor_id')->references('id')->on('chart_of_accounts')->onDelete('cascade');
             $table->foreign('created_by')->references('id')->on('users')->onDelete('cascade');
-
-            
-
+            $table->foreign('transfer_from_bank')->references('id')->on('chart_of_accounts')->onDelete('cascade');
         });
     }
 

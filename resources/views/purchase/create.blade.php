@@ -238,6 +238,7 @@
                 <option value="">Select Payment Method</option>
                 <option value="credit">Credit</option>
                 <option value="cash">Cash</option>
+                <option value="bank_transfer">Bank Transfer</option>
                 <option value="cheque">Cheque</option>
                 <option value="material+making cost">Material + Making Cost</option>
               </select>
@@ -321,6 +322,57 @@
                 <label>Material Received By</label>
                 <input type="text" id="material_received_by" name="material_received_by" class="form-control text-danger fw-bold">
               </div>
+          </div>
+
+          <div class="row mb-3 d-none" id="bank_transfer_fields">
+
+              <!-- From Bank (Our Bank - Required) -->
+              <div class="col-md-2">
+                  <label>Transfer From Bank</label>
+                  <select name="transfer_from_bank" class="form-control select2-js">
+                      <option value="">Select Bank</option>
+                      @foreach ($banks as $bank)
+                          <option value="{{ $bank->id }}">{{ $bank->name }}</option>
+                      @endforeach
+                  </select>
+              </div>
+
+              <!-- Vendor Bank Name -->
+              <div class="col-md-2">
+                  <label>Vendor Bank Name</label>
+                  <input type="text" name="transfer_to_bank" class="form-control" placeholder="e.g. Emirates NBD">
+              </div>
+
+              <!-- Account Title -->
+              <div class="col-md-2">
+                  <label>Account Title</label>
+                  <input type="text" name="account_title" class="form-control" placeholder="Account Holder Name">
+              </div>
+
+              <!-- Account Number -->
+              <div class="col-md-2">
+                  <label>Account Number</label>
+                  <input type="text" name="account_no" class="form-control" placeholder="XXXX XXXX XXXX">
+              </div>
+
+              <!-- Transaction Ref -->
+              <div class="col-md-2">
+                  <label>Transaction Ref No</label>
+                  <input type="text" name="transaction_id" class="form-control">
+              </div>
+
+              <!-- Transfer Date -->
+              <div class="col-md-2">
+                  <label>Transfer Date</label>
+                  <input type="date" name="transfer_date" class="form-control">
+              </div>
+
+              <!-- Amount -->
+              <div class="col-md-2 mt-2">
+                  <label>Transfer Amount</label>
+                  <input type="number" step="any" name="transfer_amount" class="form-control">
+              </div>
+
           </div>
 
           <div class="card mt-3">
@@ -744,6 +796,7 @@
         $('#cheque_fields, #material_fields, #received_by_box').addClass('d-none');
         if(val === 'cheque') $('#cheque_fields, #received_by_box').removeClass('d-none');
         else if(val === 'cash') $('#received_by_box').removeClass('d-none');
+        else if(val === 'bank_transfer')$('#bank_transfer_fields').removeClass('d-none');
         else if(val === 'material+making cost') $('#material_fields').removeClass('d-none');
         calculateTotals();
     });

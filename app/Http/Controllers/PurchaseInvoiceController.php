@@ -272,11 +272,29 @@ class PurchaseInvoiceController extends Controller
 
     public function store(Request $request) 
     {
+        // Clear cheque fields if not cheque
         if ($request->payment_method !== 'cheque') {
             $request->merge([
-                'bank_name' => null, 'cheque_no' => null, 'cheque_date' => null, 'cheque_amount' => null,
+                'bank_name' => null,
+                'cheque_no' => null,
+                'cheque_date' => null,
+                'cheque_amount' => null,
             ]);
         }
+
+        // Clear bank transfer fields if not bank_transfer
+        if ($request->payment_method !== 'bank_transfer') {
+            $request->merge([
+                'transfer_from_bank' => null,
+                'transfer_to_bank'   => null,
+                'account_title'      => null,
+                'account_no'         => null,
+                'transaction_id'     => null,
+                'transfer_date'      => null,
+                'transfer_amount'    => null,
+            ]);
+        }
+
         
         $request->validate([
             'is_taxable'         => 'required|boolean',
@@ -285,7 +303,7 @@ class PurchaseInvoiceController extends Controller
             'currency'           => 'required|in:AED,USD',
             'exchange_rate'      => 'nullable|required_if:currency,USD|numeric|min:0',
             'net_amount'         => 'required|numeric|min:0',
-            'payment_method'     => 'required|in:credit,cash,cheque,material+making cost',
+            'payment_method' => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
             'payment_term'       => 'nullable|string',
             'gold_rate_aed'      => 'nullable|numeric|min:0',
             'gold_rate_usd'      => 'nullable|numeric|min:0',
@@ -295,6 +313,13 @@ class PurchaseInvoiceController extends Controller
             'cheque_no'          => 'nullable|required_if:payment_method,cheque|string',
             'cheque_date'        => 'nullable|required_if:payment_method,cheque|date',
             'cheque_amount'      => 'nullable|required_if:payment_method,cheque|numeric|min:0',
+            'transfer_from_bank' => 'nullable|required_if:payment_method,bank_transfer|exists:chart_of_accounts,id',
+            'transfer_to_bank'   => 'nullable|string',
+            'account_title'      => 'nullable|string',
+            'account_no'         => 'nullable|string',
+            'transaction_id'     => 'nullable|string',
+            'transfer_date'      => 'nullable|required_if:payment_method,bank_transfer|date',
+            'transfer_amount'    => 'nullable|required_if:payment_method,bank_transfer|numeric|min:0',
             'items'              => 'required|array|min:1',
             'items.*.item_name'  => 'nullable|string|required_without:items.*.product_id',
             'items.*.product_id' => 'nullable|exists:products,id|required_without:items.*.item_name',
@@ -346,6 +371,13 @@ class PurchaseInvoiceController extends Controller
                 'cheque_no'            => $request->cheque_no,
                 'cheque_date'          => $request->cheque_date,
                 'cheque_amount'        => $request->cheque_amount,
+                'transfer_from_bank' => $request->transfer_from_bank,
+                'transfer_to_bank'   => $request->transfer_to_bank,
+                'account_title'      => $request->account_title,
+                'account_no'         => $request->account_no,
+                'transaction_id'     => $request->transaction_id,
+                'transfer_date'      => $request->transfer_date,
+                'transfer_amount'    => $request->transfer_amount,
                 'material_received_by' => $request->material_received_by,
                 'material_given_by'    => $request->material_given_by,
                 'created_by'           => auth()->id(),
@@ -432,6 +464,7 @@ class PurchaseInvoiceController extends Controller
             return back()->withInput()->with('error', 'Error: ' . $e->getMessage());
         }
     }
+
     public function edit($id)
     {
         $invoice = PurchaseInvoice::with(['items.parts', 'attachments', 'vendor', 'bank'])->findOrFail($id);
@@ -903,7 +936,8 @@ class PurchaseInvoiceController extends Controller
             'items.product.measurementUnit',
             'items.parts.product.measurementUnit',
             'items.parts.variation.attributeValues.attribute',
-            'bank'
+            'bank',
+            'transferBank'
         ])->findOrFail($id);
 
         $pdf = new MyPDF();
@@ -1101,6 +1135,17 @@ class PurchaseInvoiceController extends Controller
                             <tr><td>Cheque No</td><td>'.$invoice->cheque_no.'</td></tr>
                             <tr><td>Cheque Date</td><td>'.$invoice->cheque_date.'</td></tr>';
                         }
+                        if($invoice->payment_method === 'bank_transfer'){
+                            $summaryHtml .= '
+                            <tr><td>From Bank</td><td>'.($invoice->transferBank->name ?? '-').'</td></tr>
+                            <tr><td>Vendor Bank</td><td>'.($invoice->transfer_to_bank ?? '-').'</td></tr>
+                            <tr><td>Account Title</td><td>'.($invoice->account_title ?? '-').'</td></tr>
+                            <tr><td>Account No</td><td>'.($invoice->account_no ?? '-').'</td></tr>
+                            <tr><td>Transfer Date</td><td>'.($invoice->transfer_date ?? '-').'</td></tr>
+                            <tr><td>Transaction Ref</td><td>'.($invoice->transaction_id ?? '-').'</td></tr>
+                            <tr><td>Transfer Amount</td><td>'.number_format($invoice->transfer_amount ?? 0, 2).'</td></tr>';
+                        }
+
                         if(str_contains($invoice->payment_method, 'material')){
                             $summaryHtml .= '
                             <tr><td>Material Wt / Pur</td><td>'.number_format($invoice->material_weight,2).' / '.number_format($invoice->material_purity,3).'</td></tr>
@@ -1179,17 +1224,19 @@ class PurchaseInvoiceController extends Controller
         $pdf->Line(20, $y, 80, $y); $pdf->Line(130, $y, 190, $y);
         $pdf->SetXY(20, $y); $pdf->Cell(60, 5, "Receiver's Signature", 0, 0, 'C');
         $pdf->SetXY(130, $y); $pdf->Cell(60, 5, "Authorized Signature", 0, 0, 'C');
-        // --- END OF YOUR EXISTING CODE ---
-
-        // =========================================================================
-        // NEW DOCUMENTS BASED ON IMAGES
-        // =========================================================================
 
         // 2. METAL PURCHASE FIXING (Based on Image 1)
         if (str_contains(strtolower($invoice->payment_method), 'material')) {
+
+            // PARTY COPY
             $pdf->AddPage();
-            $this->renderMetalFixingPage($pdf, $invoice);
+            $this->renderMetalFixingPage($pdf, $invoice, 'PARTY COPY');
+
+            // ACCOUNTS COPY
+            $pdf->AddPage();
+            $this->renderMetalFixingPage($pdf, $invoice, 'ACCOUNTS COPY');
         }
+
 
         // 4. CURRENCY PAYMENT (Financial Ledger View)
         $pdf->AddPage();
@@ -1198,8 +1245,8 @@ class PurchaseInvoiceController extends Controller
         return $pdf->Output('purchase_package_'.$invoice->invoice_no.'.pdf', 'I');
     }
 
-    /* --- Document Logic for Image 1: Metal Purchase Fixing --- */
-    private function renderMetalFixingPage($pdf, $invoice) {
+    private function renderMetalFixingPage($pdf, $invoice, $copyType = 'PARTY COPY')
+    {
 
         // 1. HEADER (Branding)
         $logoPath = public_path('assets/img/mj-logo.jpeg');
@@ -1222,7 +1269,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->SetFont('helvetica', 'B', 12);
         $pdf->Cell(120, 8, 'METAL SALE FIXING', 0, 0, 'R'); // Centered relative to content
         $pdf->SetFont('helvetica', '', 9);
-        $pdf->Cell(70, 8, 'PARTY COPY', 0, 1, 'R');
+        $pdf->Cell(70, 8, strtoupper($copyType), 0, 1, 'R');
         $pdf->Ln(5);
 
         // 3. MASTER DETAILS (Precise Alignment)
@@ -1281,7 +1328,7 @@ class PurchaseInvoiceController extends Controller
                 <td width="70%" rowspan="2" valign="middle">'.strtoupper($words).'</td>
             </tr>
             <tr>
-                <td width="30%" style="border-right: 0.5px solid #000;"><b>CREDITED AED '.number_format($invoice->net_amount_aed, 2).'</b></td>
+                <td width="30%" style="border-right: 0.5px solid #000;"><b>DEBITED AED '.number_format($invoice->net_amount_aed, 2).'</b></td>
             </tr>
         </table>';
         $pdf->writeHTML($htmlAccount, true, false, false, false);
@@ -1289,7 +1336,7 @@ class PurchaseInvoiceController extends Controller
         // Narration
         $pdf->Ln(1);
         $pdf->SetFont('helvetica', '', 8);
-        $pdf->writeHTML('Being '.number_format($totalPureWt, 2).' gms pure gold rate '.number_format($rate, 2).' /- fixed with Musfira Jewelry llc Against Purchase #'.$invoice->invoice_no.'.', true, false, false, false);
+        $pdf->writeHTML('Being '.number_format($totalPureWt, 2).' gms pure gold rate '.number_format($rate, 2).' /- fixed with '.$invoice->vendor->name.' TRN-'.$invoice->vendor->trn.' Against Purchase Invoice # '.$invoice->invoice_no.'.', true, false, false, false);
 
         // 6. SIGNATURE SECTION (Professional 4-Column Layout)
         $pdf->Ln(20); // Provide enough space for stamps/signatures
@@ -1325,8 +1372,6 @@ class PurchaseInvoiceController extends Controller
         $pdf->Cell(40, 5, "AUTHORISED SIGNATORY", 0, 0, 'C');
 
     }
-
-    /* --- Document Logic for Image 3: Currency Payment --- */
 
     private function renderCurrencyPaymentPage($pdf, $invoice) {
         // 1. HEADER (Consistent with previous pages)
