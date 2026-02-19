@@ -156,9 +156,10 @@ class DatabaseSeeder extends Seeder
                 $reportPermissions
             ))->get()
         );
-        // ---------------------
-        // HEADS OF ACCOUNTS
-        // ---------------------
+ 
+        // --------------------- 
+        // HEADS OF ACCOUNTS 
+        // --------------------- 
         HeadOfAccounts::insert([
             ['id' => 1, 'name' => 'Assets', 'created_at' => $now, 'updated_at' => $now],
             ['id' => 2, 'name' => 'Liabilities', 'created_at' => $now, 'updated_at' => $now],
@@ -167,47 +168,74 @@ class DatabaseSeeder extends Seeder
             ['id' => 5, 'name' => 'Expenses', 'created_at' => $now, 'updated_at' => $now],
         ]);
 
-        // ---------------------
-        // SUB HEADS
-        // ---------------------
+        // --------------------- 
+        // SUB HEADS 
+        // --------------------- 
         SubHeadOfAccounts::insert([
+            // Assets
             ['id' => 1, 'hoa_id' => 1, 'name' => 'Cash', 'created_at' => $now, 'updated_at' => $now],
             ['id' => 2, 'hoa_id' => 1, 'name' => 'Bank', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 3, 'hoa_id' => 1, 'name' => 'Accounts Receivable', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 4, 'hoa_id' => 1, 'name' => 'Inventory', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 5, 'hoa_id' => 2, 'name' => 'Accounts Payable', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 6, 'hoa_id' => 2, 'name' => 'Loans', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 7, 'hoa_id' => 3, 'name' => 'Owner Capital', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 8, 'hoa_id' => 4, 'name' => 'Sales', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 9, 'hoa_id' => 5, 'name' => 'Purchases', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 10,'hoa_id' => 5, 'name' => 'Salaries', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 11,'hoa_id' => 5, 'name' => 'Rent', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 12,'hoa_id' => 5, 'name' => 'Utilities', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 3, 'hoa_id' => 1, 'name' => 'Inventory', 'created_at' => $now, 'updated_at' => $now],
+            
+            // Liabilities
+            ['id' => 4, 'hoa_id' => 2, 'name' => 'Accounts Payable', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 5, 'hoa_id' => 2, 'name' => 'Tax Payable', 'created_at' => $now, 'updated_at' => $now],
+            
+            // Equity
+            ['id' => 6, 'hoa_id' => 3, 'name' => 'Owner Capital', 'created_at' => $now, 'updated_at' => $now],
+            
+            // Expenses
+            ['id' => 7, 'hoa_id' => 5, 'name' => 'Purchases', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 8, 'hoa_id' => 5, 'name' => 'Purchase VAT', 'created_at' => $now, 'updated_at' => $now],
         ]);
 
-        // ---------------------
-        // CHART OF ACCOUNTS
-        // ---------------------
+        // --------------------- 
+        // CHART OF ACCOUNTS FOR PURCHASE MODULE
+        // --------------------- 
         $coaData = [
-            ['account_code' => 'A001', 'name' => 'Cash in Hand', 'account_type' => 'cash', 'shoa_id' => 1, 'receivables' => 0, 'payables' => 0],
-            ['account_code' => 'A002', 'name' => 'Bank ABC', 'account_type' => 'bank', 'shoa_id' => 2, 'receivables' => 0, 'payables' => 0],
-            ['account_code' => 'A003', 'name' => 'Customer A', 'account_type' => 'customer', 'shoa_id' => 3, 'receivables' => 1000, 'payables' => 0],
-            ['account_code' => 'A004', 'name' => 'Inventory - Raw Material', 'account_type' => 'asset', 'shoa_id' => 4, 'receivables' => 0, 'payables' => 0],
-            ['account_code' => 'L001', 'name' => 'Vendor X', 'account_type' => 'vendor', 'shoa_id' => 5, 'receivables' => 0, 'payables' => 500],
-            ['account_code' => 'L002', 'name' => 'Bank Loan', 'account_type' => 'liability', 'shoa_id' => 6, 'receivables' => 0, 'payables' => 10000],
-            ['account_code' => 'E001', 'name' => 'Owner Capital', 'account_type' => 'equity', 'shoa_id' => 7, 'receivables' => 0, 'payables' => 0],
-            ['account_code' => 'R001', 'name' => 'Sales Income', 'account_type' => 'revenue', 'shoa_id' => 8, 'receivables' => 0, 'payables' => 0],
-            ['account_code' => 'EX001', 'name' => 'Purchase of Goods', 'account_type' => 'expenses', 'shoa_id' => 9, 'receivables' => 0, 'payables' => 0],
-            ['account_code' => 'EX002', 'name' => 'Salary Expense', 'account_type' => 'expenses', 'shoa_id' => 10, 'receivables' => 0, 'payables' => 0],
-            ['account_code' => 'EX003', 'name' => 'Rent Expense', 'account_type' => 'expenses', 'shoa_id' => 11, 'receivables' => 0, 'payables' => 0],
-            ['account_code' => 'EX004', 'name' => 'Utility Expense', 'account_type' => 'expenses', 'shoa_id' => 12, 'receivables' => 0, 'payables' => 0],
+            // ========== ASSETS ==========
+            
+            // Cash & Bank (for cash/cheque/bank_transfer payments)
+            ['account_code' => '101001', 'shoa_id' => 1, 'name' => 'Cash in Hand', 'account_type' => 'cash'],
+            ['account_code' => '102001', 'shoa_id' => 2, 'name' => 'Meezan Bank', 'account_type' => 'bank'],
+            ['account_code' => '102002', 'shoa_id' => 2, 'name' => 'HBL Bank', 'account_type' => 'bank'],
+            
+            // Inventory Accounts (for material purchases)
+            ['account_code' => '104001', 'shoa_id' => 3, 'name' => 'Gold Inventory', 'account_type' => 'asset'],
+            ['account_code' => '104002', 'shoa_id' => 3, 'name' => 'Diamond Inventory', 'account_type' => 'asset'],
+            ['account_code' => '104003', 'shoa_id' => 3, 'name' => 'Parts Inventory', 'account_type' => 'asset'],
+            
+            // ========== LIABILITIES ==========
+            
+            // Vendors (Accounts Payable)
+            ['account_code' => '205001', 'shoa_id' => 4, 'name' => 'Vendor 01', 'account_type' => 'vendor'],
+            ['account_code' => '205002', 'shoa_id' => 4, 'name' => 'Vendor 02', 'account_type' => 'vendor'],
+            
+            // VAT Payable (for tax collection)
+            ['account_code' => '207001', 'shoa_id' => 5, 'name' => 'VAT Payable', 'account_type' => 'liability'],
+            
+            // ========== EQUITY ==========
+            ['account_code' => '307001', 'shoa_id' => 6, 'name' => 'Owner Capital', 'account_type' => 'equity'],
+            
+            // ========== EXPENSES ==========
+            
+            // Purchase Accounts
+            ['account_code' => '510001', 'shoa_id' => 7, 'name' => 'Material Purchases (Gold)', 'account_type' => 'expenses'],
+            ['account_code' => '510002', 'shoa_id' => 7, 'name' => 'Material Purchases (Diamond)', 'account_type' => 'expenses'],
+            ['account_code' => '510003', 'shoa_id' => 7, 'name' => 'Making Charges', 'account_type' => 'expenses'],
+            ['account_code' => '510004', 'shoa_id' => 7, 'name' => 'Parts Purchases', 'account_type' => 'expenses'],
+            
+            // Purchase VAT (Input Tax)
+            ['account_code' => '511001', 'shoa_id' => 8, 'name' => 'Purchase VAT (Input Tax)', 'account_type' => 'expenses'],
         ];
 
         foreach ($coaData as $data) {
             ChartOfAccounts::create(array_merge($data, [
+                'receivables' => 0.00,
+                'payables' => 0.00,
                 'trn' => null,
                 'opening_date' => $now,
-                'credit_limit' => 0,
+                'credit_limit' => 0.00,
                 'remarks' => null,
                 'address' => null,
                 'contact_no' => null,
@@ -215,6 +243,7 @@ class DatabaseSeeder extends Seeder
                 'updated_by' => $userId,
             ]));
         }
+
 
 
         // 📏 Measurement Units

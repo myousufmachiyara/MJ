@@ -28,7 +28,8 @@ return new class extends Migration
             $table->decimal('purity_weight', 15, 3)->default(0); // calculated
             $table->decimal('col_995', 15, 3)->default(0);
             $table->decimal('making_rate', 15, 2)->default(0);
-            $table->decimal('making_value', 18, 2)->default(0); 
+            $table->decimal('making_value', 18, 2)->default(0);
+            $table->decimal('parts_total', 15, 2)->default(0);
             $table->decimal('material_rate', 18, 2)->default(0); // material cost based on metal_rate
             $table->string('material_type'); // for custom descriptions
             $table->decimal('material_value', 18, 2)->default(0); // total value of metals

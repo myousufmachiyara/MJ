@@ -14,7 +14,6 @@ class Product extends Model
         'subcategory_id',
         'name',
         'sku',
-        'barcode',
         'description',
         'manufacturing_cost',
         'opening_stock',
@@ -25,25 +24,8 @@ class Product extends Model
         'minimum_order_qty',
         'measurement_unit',
         'item_type',    // fg, raw, service
-        'is_active',
+        'is_active',    
     ];
-
-    protected static function booted()
-    {
-        static::creating(function ($product) {
-            if (empty($product->barcode)) {
-                $prefix = match($product->item_type) {
-                    'fg'      => 'FG-',
-                    'raw'     => 'RAW-',
-                    'service' => 'SRV-',
-                    default   => 'PRD-',
-                };
-
-                $product->barcode = generateGlobalBarcode($prefix);
-            }
-        });
-    }
-
 
     /* ----------------- Relationships ----------------- */
 

@@ -12,24 +12,10 @@ class ProductVariation extends Model
     protected $fillable = [
         'product_id',
         'sku',
-        'barcode',
         'manufacturing_cost',
         'selling_price',
         'stock_quantity',
     ];
-
-    // In ProductVariation.php
-    protected static function booted()
-    {
-        static::creating(function ($variation) {
-            if (empty($variation->barcode)) {
-                $product = $variation->product;
-                $prefix = strtoupper($product->item_type) . '-VAR-';
-
-                $variation->barcode = generateGlobalBarcode($prefix);
-            }
-        });
-    }
 
     /* ----------------- Relationships ----------------- */
 

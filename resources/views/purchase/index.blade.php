@@ -24,12 +24,10 @@
           <table class="table table-bordered table-striped" id="purchaseInvoiceTable">
             <thead>
               <tr>
-                <th>#</th>
+                <th>S.No</th>
+                <th>Invoice No.</th>
                 <th>Invoice Date</th>
                 <th>Vendor</th>
-                <th>Bill No</th>
-                <th>Ref No</th>
-                <th>Attachments</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -37,19 +35,9 @@
               @foreach ($invoices as $index => $invoice)
               <tr>
                 <td>{{ $index + 1 }}</td>
+                <td>{{ $invoice->invoice_no ?? 'N/A' }}</td>
                 <td>{{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d-M-Y') }}</td>
                 <td>{{ $invoice->vendor->name ?? 'N/A' }}</td>
-                <td>{{ $invoice->bill_no }}</td>
-                <td>{{ $invoice->ref_no }}</td>
-                <td>
-                  @if($invoice->attachments && count($invoice->attachments))
-                    @foreach ($invoice->attachments as $file)
-                      <a href="{{ asset('storage/' . $file->attachment_path) }}" target="_blank">View</a><br>
-                    @endforeach
-                  @else
-                    N/A
-                  @endif
-                </td>
                 <td>
                   <a href="{{ route('purchase_invoices.edit', $invoice->id) }}" class="text-primary"><i class="fas fa-edit"></i></a>
                   <a href="{{ route('purchase_invoices.print', $invoice->id) }}" target="_blank" class="text-success"><i class="fas fa-print"></i></a>

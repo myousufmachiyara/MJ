@@ -12,7 +12,6 @@ use App\Models\ProductVariation;
 use App\Models\ProductPart;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
-use Picqer\Barcode\BarcodeGeneratorPNG;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Response;
@@ -24,68 +23,6 @@ class ProductController extends Controller
     {
         $products = Product::with('category', 'subcategory', 'variations')->get();        
         return view('products.index', compact('products'));
-    }
-
-    public function barcodeSelection()
-    {
-        $variations = ProductVariation::with('product')->get();
-        return view('products.barcode-selection', compact('variations'));
-    }
-
-    public function generateMultipleBarcodes(Request $request)
-    {
-        try {
-            // Validation
-            $validator = Validator::make($request->all(), [
-                'selected_variations'   => 'required|array|min:1',
-                'selected_variations.*' => 'exists:product_variations,id',
-                'quantity'              => 'required|array',
-            ]);
-
-            if ($validator->fails()) {
-                Log::error('Barcode generation validation failed', [
-                    'errors'  => $validator->errors(),
-                    'request' => $request->all(),
-                ]);
-                return back()->withErrors($validator)->withInput();
-            }
-
-            $barcodes = [];
-
-            foreach ($request->selected_variations as $variationId) {
-                $qty = max(1, (int)($request->quantity[$variationId] ?? 1));
-                $variation = ProductVariation::with('product')->findOrFail($variationId);
-
-                $barcodeText = $variation->barcode ?? $variation->sku ?? 'NO-BARCODE';
-                $price = number_format($variation->product->selling_price ?? 0, 2);
-
-                $generator = new BarcodeGeneratorPNG();
-                $barcodeImage = base64_encode(
-                    $generator->getBarcode($barcodeText, $generator::TYPE_CODE_128)
-                );
-
-                for ($i = 0; $i < $qty; $i++) {
-                    $barcodes[] = [
-                        'product'      => $variation->product->name,
-                        'variation'    => $variation->name ?? '',
-                        'barcodeText'  => $barcodeText,
-                        'barcodeImage' => $barcodeImage,
-                        'price'        => $price,
-                        'sku'          => $variation->sku,
-                    ];
-                }
-            }
-
-            return view('products.multiple-barcodes', compact('barcodes'));
-
-        } catch (\Throwable $e) {
-            Log::error('Exception while generating barcodes', [
-                'message' => $e->getMessage(),
-                'trace'   => $e->getTraceAsString(),
-                'request' => $request->all(),
-            ]);
-            return back()->with('error', 'Something went wrong while generating barcodes. Check logs for details.');
-        }
     }
 
     public function create()

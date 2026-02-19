@@ -74,12 +74,12 @@
 
             <div class="col-12 col-md-2 mt-2">
               <label>Diamond Rate (AED) / Ounce</label>
-              <input type="number" step="any" id="diamond_rate_aed" name="diamond_rate_aed" class="form-control" value="0">
+              <input type="number" step="any" id="diamond_rate_aed_ounce" name="diamond_rate_aed_ounce" class="form-control" value="0">
             </div>
 
             <div class="col-12 col-md-3">
               <label class="text-primary">Diamond Converted Rate (AED / <b>Gram</b>)</label>
-              <input type="number" step="any" id="dia_rate_aed" name="dia_rate_aed" class="form-control" value="0" readonly>
+              <input type="number" step="any" id="diamond_rate_aed_gram" name="diamond_rate_aed" class="form-control" value="0" readonly>
               <small class="text-danger text-bold">Used for calculations</small>
             </div>
 
@@ -177,7 +177,7 @@
                             <tr>
                               <th>Part</th>
                               <th>Description</th>
-                              <th>Carat</th>
+                              <th>Carat (CTS)</th>
                               <th>Rate</th>
                               <th>Stone Ct.</th>
                               <th>Stone Rate</th>
@@ -325,8 +325,6 @@
           </div>
 
           <div class="row mb-3 d-none" id="bank_transfer_fields">
-
-              <!-- From Bank (Our Bank - Required) -->
               <div class="col-md-2">
                   <label>Transfer From Bank</label>
                   <select name="transfer_from_bank" class="form-control select2-js">
@@ -336,43 +334,30 @@
                       @endforeach
                   </select>
               </div>
-
-              <!-- Vendor Bank Name -->
               <div class="col-md-2">
                   <label>Vendor Bank Name</label>
                   <input type="text" name="transfer_to_bank" class="form-control" placeholder="e.g. Emirates NBD">
               </div>
-
-              <!-- Account Title -->
               <div class="col-md-2">
                   <label>Account Title</label>
                   <input type="text" name="account_title" class="form-control" placeholder="Account Holder Name">
               </div>
-
-              <!-- Account Number -->
               <div class="col-md-2">
                   <label>Account Number</label>
                   <input type="text" name="account_no" class="form-control" placeholder="XXXX XXXX XXXX">
               </div>
-
-              <!-- Transaction Ref -->
               <div class="col-md-2">
                   <label>Transaction Ref No</label>
                   <input type="text" name="transaction_id" class="form-control">
               </div>
-
-              <!-- Transfer Date -->
               <div class="col-md-2">
                   <label>Transfer Date</label>
                   <input type="date" name="transfer_date" class="form-control">
               </div>
-
-              <!-- Amount -->
               <div class="col-md-2 mt-2">
                   <label>Transfer Amount</label>
                   <input type="number" step="any" name="transfer_amount" class="form-control">
               </div>
-
           </div>
 
           <div class="card mt-3">
@@ -413,28 +398,15 @@
   $(document).ready(function () {
     const products = @json($products);
 
-    // Toggle visibility of the parts section
     $(document).on('click', '.toggle-parts', function() {
-        // Find the next tr with class 'parts-row'
         const partsRow = $(this).closest('tr').next('.parts-row');
-        partsRow.fadeToggle(200); // Smooth transition
-    });
-
-    // Map the unit name specifically so it's easy to access in the loop
-    const productsWithUnits = products.map(p => {
-        return {
-            id: p.id,
-            name: p.name,
-            // Access the name column from the measurement_unit table
-            unit_name: p.measurement_unit ? p.measurement_unit.name : '' 
-        };
+        partsRow.fadeToggle(200);
     });
 
     const TROY_OUNCE_TO_GRAM = 31.1034768;
 
     $('#currency').on('change', function() {
         const isUSD = $(this).val() === 'USD';
-        
         if (isUSD) {
             $('#exchangeRateBox').show();
             $('#exchange_rate').attr('required', true);
@@ -444,46 +416,34 @@
             $('#exchange_rate').removeAttr('required');
             $('#exchange_rate').val('');
         }
-        
-        // Recalculate everything when currency changes
-        calculateTotals(); 
+        calculateTotals();
     });
 
-    // Also trigger calculation when the exchange rate itself is typed
     $('#exchange_rate').on('input', function() {
         calculateTotals();
     });
 
     $('.select2-js').select2({ width: '100%' });
-    const currencySelect = $('#currency');
-    const rateInput = $('#exchange_rate');
 
     // ================= ROW MANAGEMENT =================
     function updateRowIndexes() {
         $('#PurchaseTable tr.item-row').each(function(i) {
             const itemRow = $(this);
             itemRow.attr('data-item-index', i);
-            
-            // Update main item inputs
             itemRow.find('input, select').each(function() {
                 const name = $(this).attr('name');
-                if(name) {
-                    const newName = name.replace(/items\[\d+\]/, `items[${i}]`);
-                    $(this).attr('name', newName);
-                }
+                if(name) $(this).attr('name', name.replace(/items\[\d+\]/, `items[${i}]`));
             });
-
-            // Update nested parts inputs
             const partsRow = itemRow.next('.parts-row');
             partsRow.find('.part-item-row').each(function(j) {
                 $(this).attr('data-part-index', j);
                 $(this).find('input, select').each(function() {
                     const name = $(this).attr('name');
                     if(name) {
-                        // This replaces BOTH the item index and the part index
-                        const newName = name.replace(/items\[\d+\]/, `items[${i}]`)
-                                            .replace(/parts\[\d+\]/, `parts[${j}]`);
-                        $(this).attr('name', newName);
+                        $(this).attr('name',
+                            name.replace(/items\[\d+\]/, `items[${i}]`)
+                                .replace(/parts\[\d+\]/, `parts[${j}]`)
+                        );
                     }
                 });
             });
@@ -506,6 +466,7 @@
                     <option value="0.92">22K (92%)</option>
                     <option value="0.88">21K (88%)</option>
                     <option value="0.75">18K (75%)</option>
+                    <option value="0.60">14K (60%)</option>
                 </select>
             </td>
             <td><input type="number" name="items[${nextIndex}][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>
@@ -535,7 +496,7 @@
                     <table class="table table-sm table-bordered parts-table">
                         <thead>
                             <tr>
-                                <th>Part</th><th>Description</th><th>Carat</th><th>Rate</th><th>Stone Ct.</th><th>Stone Rate</th><th>Total</th><th></th>
+                                <th>Part</th><th>Description</th><th>Carat (CTS)</th><th>Rate</th><th>Stone Ct.</th><th>Stone Rate</th><th>Total</th><th></th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -578,7 +539,7 @@
             <td>
                 <div class="input-group">
                     <input type="number" name="items[${itemIndex}][parts][${partIndex}][qty]" step="any" value="0" class="form-control part-qty">
-                    <input type="text" class="form-control part-unit-name" style="width:70px; flex:none;" readonly placeholder="Carat">
+                    <input type="text" class="form-control part-unit-name" style="width:70px; flex:none;" readonly placeholder="CTS">
                 </div>
             </td>
             <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][rate]" step="any" value="0" class="form-control part-rate"></td>
@@ -591,22 +552,22 @@
         partsTableBody.append(rowHtml);
     });
 
-    // Remove Part Logic
     $(document).on('click', '.remove-part', function() {
+        const itemRow = $(this).closest('.parts-row').prev('.item-row');
         $(this).closest('tr').remove();
-        calculateTotals(); // Ensure totals update when a part is removed
+        // Recalculate gross weight after removing a part
+        recalcItemGrossWeight(itemRow);
+        calculateTotals();
     });
 
-    // 1. Handle Toggle (Name Input vs Select Dropdown)
+    // ================= PRODUCT TOGGLE =================
     $(document).on('click', '.toggle-product, .revert-to-name', function () {
         const isReverting = $(this).hasClass('revert-to-name');
         const wrapper = $(this).closest('.product-wrapper');
         const isPart = wrapper.closest('tr').hasClass('part-item-row');
-        
-        // Logic to determine name path: items[0] or items[0][parts][0]
-        let namePath = '';
         const itemIdx = isPart ? wrapper.closest('.parts-row').prev('.item-row').data('item-index') : wrapper.closest('.item-row').data('item-index');
-        
+
+        let namePath = '';
         if (isPart) {
             const partIdx = wrapper.closest('.part-item-row').data('part-index');
             namePath = `items[${itemIdx}][parts][${partIdx}]`;
@@ -633,21 +594,18 @@
         }
     });
 
-    // 2. Unified Change Event for Product ID
     $(document).on('change', '.product-select', function() {
         const productId = $(this).val();
         const row = $(this).closest('tr');
         const variationSelect = row.find('.variation-select');
         const unitInput = row.find('.part-unit-name');
 
-        // Update Unit if it's a part row
         const selectedOption = $(this).find(':selected');
         if(unitInput.length > 0) {
             unitInput.val(selectedOption.data('unit') || '');
         }
 
         variationSelect.html('<option value="">Loading...</option>').prop('disabled', true);
-
         if (!productId) {
             variationSelect.html('<option value="">Select Variation</option>').prop('disabled', false);
             return;
@@ -668,65 +626,100 @@
             });
     });
 
-    // ================= CALCULATIONS (Integrated your 6 Rules) =================
-    $(document).on('input change', '.gross-weight, .purity, .making-rate, .vat-percent, .material-type, #gold_rate_aed, #diamond_rate_aed', function() {
+    // ================= CALCULATIONS =================
+
+    // When user manually edits gross weight, update the base-gross data attribute
+    $(document).on('input', '.gross-weight', function() {
+        const grossInput = $(this);
+        grossInput.data('base-gross', parseFloat(grossInput.val()) || 0);
+        const itemRow = grossInput.closest('tr.item-row');
+        // Recalc using new base, incorporating any existing parts
+        recalcItemGrossWeight(itemRow);
+    });
+
+    // When any other item field changes, just recalculate the row
+    $(document).on('input change', '.purity, .making-rate, .vat-percent, .material-type, #gold_rate_aed, #diamond_rate_aed_gram', function() {
         const row = $(this).closest('tr.item-row');
         if(row.length) calculateRow(row);
         calculateTotals();
     });
 
+    /**
+     * Recalculates gross weight for an item row based on:
+     * base gross (user entered) + sum of (part carat qty / 5)
+     * Then triggers a full row recalculation.
+     */
+    function recalcItemGrossWeight(itemRow) {
+        if (!itemRow || !itemRow.length) return;
+
+        const grossInput = itemRow.find('.gross-weight');
+
+        // Retrieve stored base gross (set when user types in the field)
+        let baseGross = parseFloat(grossInput.data('base-gross'));
+        if (isNaN(baseGross)) {
+            // First time: treat current value as base and store it
+            baseGross = parseFloat(grossInput.val()) || 0;
+            grossInput.data('base-gross', baseGross);
+        }
+
+        // Sum carat contribution from ALL parts: each part's qty / 5
+        const partsRow = itemRow.next('.parts-row');
+        let totalCaratContribution = 0;
+        partsRow.find('.part-item-row').each(function() {
+            const caratQty = parseFloat($(this).find('.part-qty').val()) || 0;
+            totalCaratContribution += caratQty / 5;
+        });
+
+        // New gross = base gross + total carat contribution
+        const newGross = baseGross + totalCaratContribution;
+        grossInput.val(newGross.toFixed(3));
+
+        // Now recalculate the item row with updated gross
+        calculateRow(itemRow);
+        calculateTotals();
+    }
+
     function calculateRow(row) {
-        const purity = parseFloat(row.find('.purity').val()) || 0;
-        const gross = parseFloat(row.find('.gross-weight').val()) || 0;
-        const makingRate = parseFloat(row.find('.making-rate').val()) || 0;
-        const vatPercent = parseFloat(row.find('.vat-percent').val()) || 0;
+        const purity       = parseFloat(row.find('.purity').val())       || 0;
+        const gross        = parseFloat(row.find('.gross-weight').val())  || 0;
+        const makingRate   = parseFloat(row.find('.making-rate').val())   || 0;
+        const vatPercent   = parseFloat(row.find('.vat-percent').val())   || 0;
         const materialType = row.find('.material-type').val();
-        
-        // Inside calculateRow(row)...
-        let rate = (materialType === 'gold') ? parseFloat($('#gold_rate_aed').val()) : parseFloat($('#dia_rate_aed').val()); // Use the Gram rate field here
+
+        let rate = (materialType === 'gold')
+            ? parseFloat($('#gold_rate_aed').val())
+            : parseFloat($('#diamond_rate_aed_gram').val());
         rate = rate || 0;
 
-        // 1. gross wt. * purity = purity wt.
-        const purityWt = gross * purity;
-
-        // 2. purity wt. / 0.995 = 995 val
-        const col995 = purityWt / 0.995;
-
-        // 3. makingValue = making rate * gross wt. / 0.995 = 995 val
-        const makingValue = gross * makingRate ;
-
-        // 4. making rate * purity wt. = material value (As per your rule)
+        const purityWt      = gross * purity;
+        const col995        = purityWt / 0.995;
+        const makingValue   = gross * makingRate;
         const materialValue = rate * purityWt;
-
-        // 5. making value = Taxable (Your logic maps rule 3 to rule 4)
-        const taxableAmount = makingValue; 
-
-        // 6. taxable * VAT% = VAT Amount
-        const vatAmount = taxableAmount * vatPercent / 100;
-
-        // 5. Taxable + Material Val (Metal) + VAT Amount = gross amount
-        const itemTotal = taxableAmount + materialValue + vatAmount;
+        const taxableAmount = makingValue;
+        const vatAmount     = taxableAmount * vatPercent / 100;
+        const itemTotal     = taxableAmount + materialValue + vatAmount;
 
         row.find('.purity-weight').val(purityWt.toFixed(3));
         row.find('.col-995').val(col995.toFixed(3));
         row.find('.making-value').val(makingValue.toFixed(2));
-        row.find('.material-value').val(materialValue.toFixed(2)); 
+        row.find('.material-value').val(materialValue.toFixed(2));
         row.find('.taxable-amount').val(taxableAmount.toFixed(2));
         row.find('.vat-amount').val(vatAmount.toFixed(2));
         row.find('.item-total').val(itemTotal.toFixed(2));
     }
 
     function calculateTotals() {
-        let sumGross = 0, sumPurity = 0, sum995 = 0, sumMakingTaxable = 0, sumMaterial = 0, sumVAT = 0, netTotal = 0;
-        
+        let sumGross = 0, sumPurity = 0, sum995 = 0, sumMakingTaxable = 0,
+            sumMaterial = 0, sumVAT = 0, netTotal = 0;
+
         $('#PurchaseTable tr.item-row').each(function () {
-            sumGross         += parseFloat($(this).find('.gross-weight').val()) || 0;
-            sumPurity        += parseFloat($(this).find('.purity-weight').val()) || 0;
-            sum995           += parseFloat($(this).find('.col-995').val()) || 0;
+            sumGross         += parseFloat($(this).find('.gross-weight').val())   || 0;
+            sumPurity        += parseFloat($(this).find('.purity-weight').val())  || 0;
+            sum995           += parseFloat($(this).find('.col-995').val())        || 0;
             sumMakingTaxable += parseFloat($(this).find('.taxable-amount').val()) || 0;
             sumMaterial      += parseFloat($(this).find('.material-value').val()) || 0;
-            sumVAT           += parseFloat($(this).find('.vat-amount').val()) || 0;
-            netTotal         += parseFloat($(this).find('.item-total').val()) || 0;
+            sumVAT           += parseFloat($(this).find('.vat-amount').val())     || 0;
+            netTotal         += parseFloat($(this).find('.item-total').val())     || 0;
         });
 
         const makingTotalWithVat = sumMakingTaxable + sumVAT;
@@ -740,18 +733,9 @@
         $('#net_amount_display').val(netTotal.toFixed(2));
         $('#net_amount').val(netTotal.toFixed(2));
 
-        // --- NEW LOGIC FOR CONVERTED TOTAL ---
         const currency = $('#currency').val();
-        const exRate = parseFloat($('#exchange_rate').val()) || 1;
-        
-        if (currency === 'USD') {
-            // If invoice is in USD, converted total (AED) = USD Amount * Rate
-            $('#converted_total').val((netTotal * exRate).toFixed(2));
-        } else {
-            // If already in AED, converted total is just the net total
-            $('#converted_total').val(netTotal.toFixed(2));
-        }
-        // -------------------------------------
+        const exRate   = parseFloat($('#exchange_rate').val()) || 1;
+        $('#converted_total').val(currency === 'USD' ? (netTotal * exRate).toFixed(2) : netTotal.toFixed(2));
 
         if ($('#payment_method').val() === 'material+making cost') {
             $('input[name="material_weight"]').val(sum995.toFixed(3));
@@ -762,73 +746,72 @@
     }
 
     // ================= OUNCE TO GRAM & CURRENCY CONVERSION =================
-    $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #diamond_rate_aed, #exchange_rate', function() {
-        const id = $(this).attr('id');
+    $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #diamond_rate_aed_ounce, #exchange_rate', function() {
+        const id     = $(this).attr('id');
         const exRate = parseFloat($('#exchange_rate').val()) || 3.6725;
-        const TROY_OUNCE_TO_GRAM = 31.1034768;
 
-        // --- GOLD LOGIC ---
+        // Gold
         if (id === 'gold_rate_usd' || id === 'exchange_rate') {
             const goldUsd = parseFloat($('#gold_rate_usd').val()) || 0;
             $('#gold_rate_aed_ounce').val((goldUsd * exRate).toFixed(2));
         }
-        // Update Gold Gram Rate
         const goldAedOunceFinal = parseFloat($('#gold_rate_aed_ounce').val()) || 0;
         $('#gold_rate_aed').val((goldAedOunceFinal / TROY_OUNCE_TO_GRAM).toFixed(4));
 
-        // --- DIAMOND LOGIC (FIXED) ---
+        // Diamond
         if (id === 'diamond_rate_usd' || id === 'exchange_rate') {
             const diaUsd = parseFloat($('#diamond_rate_usd').val()) || 0;
-            // Calculate AED/Ounce based on USD input
-            $('#diamond_rate_aed').val((diaUsd * exRate).toFixed(2));
+            $('#diamond_rate_aed_ounce').val((diaUsd * exRate).toFixed(2));
         }
+        const diaAedOunceFinal = parseFloat($('#diamond_rate_aed_ounce').val()) || 0;
+        $('#diamond_rate_aed_gram').val((diaAedOunceFinal / TROY_OUNCE_TO_GRAM).toFixed(4));
 
-        // Always update the Converted Gram Rate (dia_rate_aed) based on the Ounce Rate (diamond_rate_aed)
-        const diaAedOunceFinal = parseFloat($('#diamond_rate_aed').val()) || 0;
-        $('#dia_rate_aed').val((diaAedOunceFinal / TROY_OUNCE_TO_GRAM).toFixed(4));
-
-        // Trigger row recalculations to update the table
-        $('.gross-weight').first().trigger('input'); 
+        $('#PurchaseTable tr.item-row').each(function() {
+            calculateRow($(this));
+        });
+        calculateTotals();
     });
 
     $('#payment_method').on('change', function() {
         const val = $(this).val();
-        $('#cheque_fields, #material_fields, #received_by_box').addClass('d-none');
-        if(val === 'cheque') $('#cheque_fields, #received_by_box').removeClass('d-none');
-        else if(val === 'cash') $('#received_by_box').removeClass('d-none');
-        else if(val === 'bank_transfer')$('#bank_transfer_fields').removeClass('d-none');
+        $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields').addClass('d-none');
+        if(val === 'cheque')                    $('#cheque_fields, #received_by_box').removeClass('d-none');
+        else if(val === 'cash')                 $('#received_by_box').removeClass('d-none');
+        else if(val === 'bank_transfer')        $('#bank_transfer_fields').removeClass('d-none');
         else if(val === 'material+making cost') $('#material_fields').removeClass('d-none');
         calculateTotals();
     });
 
     // ================= PARTS ROW CALCULATION =================
     $(document).on('input', '.part-qty, .part-rate, .part-stone-qty, .part-stone-rate', function() {
-        const row = $(this).closest('tr');
-        
-        const qty = parseFloat(row.find('.part-qty').val()) || 0;
-        const rate = parseFloat(row.find('.part-rate').val()) || 0;
-        const stoneQty = parseFloat(row.find('.part-stone-qty').val()) || 0;
+        const row       = $(this).closest('tr');
+        const qty       = parseFloat(row.find('.part-qty').val())        || 0;
+        const rate      = parseFloat(row.find('.part-rate').val())        || 0;
+        const stoneQty  = parseFloat(row.find('.part-stone-qty').val())  || 0;
         const stoneRate = parseFloat(row.find('.part-stone-rate').val()) || 0;
 
-        // Rule: (part qty * part rate) + (stone qty * stone rate)
+        // Part total: (carat qty * rate) + (stone qty * stone rate)
         const total = (qty * rate) + (stoneQty * stoneRate);
-        
         row.find('.part-total').val(total.toFixed(2));
+
+        // Update parent item's gross weight: base gross + sum(all part carats / 5)
+        const itemRow = row.closest('.parts-row').prev('.item-row');
+        recalcItemGrossWeight(itemRow);
     });
 
+    // ================= EXCEL IMPORT =================
     $('#excel_import').on('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
 
         const reader = new FileReader();
         reader.onload = function(e) {
-            const data = new Uint8Array(e.target.result);
+            const data     = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
             const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
 
             if (jsonData.length === 0) return;
 
-            // Clear only if the first row is empty
             let firstRow = $('#PurchaseTable tr.item-row').first();
             if ($('#PurchaseTable tr.item-row').length === 1 && !firstRow.find('.item-name-input').val()) {
                 firstRow.next('.parts-row').remove();
@@ -838,30 +821,29 @@
             let currentItemRow = null;
 
             jsonData.forEach((row) => {
-                // Check if it's a Main Item (has Item Name)
                 if (row['Item Name'] && row['Item Name'].trim() !== "") {
                     addNewRow();
                     currentItemRow = $('#PurchaseTable tr.item-row').last();
-                    
-                    // Set values
+
+                    const baseGross = parseFloat(row['Gross Wt']) || 0;
+                    currentItemRow.find('.gross-weight').data('base-gross', baseGross);
+
                     currentItemRow.find('.item-name-input').val(row['Item Name']);
                     currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
                     currentItemRow.find('.purity').val(row['Purity'] || '0.92');
-                    currentItemRow.find('.gross-weight').val(row['Gross Wt'] || 0);
+                    currentItemRow.find('.gross-weight').val(baseGross);
                     currentItemRow.find('.making-rate').val(row['Making Rate'] || 0);
                     currentItemRow.find('.material-type').val((row['Material'] || 'gold').toLowerCase());
                     currentItemRow.find('.vat-percent').val(row['VAT %'] || 0);
 
-                    // Force individual row calculation
                     calculateRow(currentItemRow);
-                } 
-                
-                // Check if it's a Part (has Part Name)
+                }
+
                 if (row['Part Name'] && row['Part Name'].trim() !== "" && currentItemRow) {
                     const partsRow = currentItemRow.next('.parts-row');
-                    partsRow.show(); 
+                    partsRow.show();
                     partsRow.find('.add-part').click();
-                    
+
                     const currentPartRow = partsRow.find('.part-item-row').last();
                     currentPartRow.find('.item-name-input').val(row['Part Name']);
                     currentPartRow.find('input[name*="[part_description]"]').val(row['Part Desc'] || '');
@@ -869,15 +851,15 @@
                     currentPartRow.find('.part-rate').val(row['Part Rate'] || 0);
                     currentPartRow.find('.part-stone-qty').val(row['Stone Qty'] || 0);
                     currentPartRow.find('.part-stone-rate').val(row['Stone Rate'] || 0);
-                    
-                    // Trigger part total calculation
+
+                    // Trigger part qty input to update total AND recalc gross
                     currentPartRow.find('.part-qty').trigger('input');
                 }
             });
 
             calculateTotals();
             alert('Items Imported Successfully!');
-            $('#excel_import').val(''); // Clear file input
+            $('#excel_import').val('');
         };
         reader.readAsArrayBuffer(file);
     });

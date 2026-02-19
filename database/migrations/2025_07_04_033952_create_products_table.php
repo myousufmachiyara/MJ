@@ -17,7 +17,6 @@ return new class extends Migration
             $table->unsignedBigInteger('subcategory_id')->nullable();
             $table->string('name');
             $table->string('sku')->unique();
-            $table->string('barcode')->nullable();
             $table->text('description')->nullable();
 
             // Inventory & Pricing
