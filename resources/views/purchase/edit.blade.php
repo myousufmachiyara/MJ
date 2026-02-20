@@ -18,6 +18,24 @@
           </ul>
         </div>
       @endif
+      @if(session('printed_delete_warning'))
+        <div class="alert alert-warning">
+            <strong>Warning:</strong> The following items have already been printed and will be permanently deleted:
+            <br><code>{{ session('printed_delete_warning') }}</code>
+            <br><br>
+            <form method="POST" action="{{ route('purchase_invoices.update', $purchaseInvoice->id) }}" enctype="multipart/form-data" id="confirm-delete-form">
+                @csrf @method('PUT')
+                <input type="hidden" name="confirm_delete_printed" value="1">
+                {{-- Re-submit all original form data --}}
+                <button type="button" class="btn btn-danger" onclick="resubmitWithConfirm()">
+                    Delete anyway and update invoice
+                </button>
+                <a href="{{ route('purchase_invoices.edit', $purchaseInvoice->id) }}" class="btn btn-secondary ms-2">
+                    Go back and keep items
+                </a>
+            </form>
+        </div>
+        @endif
 
       <section class="card">
         <header class="card-header d-flex justify-content-between align-items-center">
@@ -357,7 +375,7 @@
 </div>
 
 <script>
-$(document).ready(function () {
+  $(document).ready(function () {
 
     const products      = @json($products);
     const existingItems = @json($itemsData);
@@ -434,6 +452,7 @@ $(document).ready(function () {
             <td>
                 <div class="product-wrapper">
                     <input type="text" name="items[${index}][item_name]" class="form-control item-name-input" placeholder="Product Name" value="${name}">
+                    <input type="hidden" name="items[${index}][barcode_number]" value="${data.barcode_number || ''}">
                     <button type="button" class="btn btn-link p-0 toggle-product">Select Product</button>
                 </div>
             </td>
@@ -848,6 +867,16 @@ $(document).ready(function () {
         reader.readAsArrayBuffer(file);
     });
 
-});
+    function resubmitWithConfirm() {
+      // Add hidden field to the main form and resubmit
+      const form = document.querySelector('form[action*="update"]');
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'confirm_delete_printed';
+      input.value = '1';
+      form.appendChild(input);
+      form.submit();
+    }
+  });
 </script>
 @endsection

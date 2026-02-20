@@ -176,17 +176,23 @@ class DatabaseSeeder extends Seeder
             ['id' => 1, 'hoa_id' => 1, 'name' => 'Cash', 'created_at' => $now, 'updated_at' => $now],
             ['id' => 2, 'hoa_id' => 1, 'name' => 'Bank', 'created_at' => $now, 'updated_at' => $now],
             ['id' => 3, 'hoa_id' => 1, 'name' => 'Inventory', 'created_at' => $now, 'updated_at' => $now],
-            
+            ['id' => 4, 'hoa_id' => 1, 'name' => 'Accounts Receivable', 'created_at' => $now, 'updated_at' => $now],
+
             // Liabilities
-            ['id' => 4, 'hoa_id' => 2, 'name' => 'Accounts Payable', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 5, 'hoa_id' => 2, 'name' => 'Tax Payable', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 5, 'hoa_id' => 2, 'name' => 'Accounts Payable', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 6, 'hoa_id' => 2, 'name' => 'Tax Payable', 'created_at' => $now, 'updated_at' => $now],
             
             // Equity
-            ['id' => 6, 'hoa_id' => 3, 'name' => 'Owner Capital', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 7, 'hoa_id' => 3, 'name' => 'Owner Capital', 'created_at' => $now, 'updated_at' => $now],
             
             // Expenses
-            ['id' => 7, 'hoa_id' => 5, 'name' => 'Purchases', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 8, 'hoa_id' => 5, 'name' => 'Purchase VAT', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 8, 'hoa_id' => 5, 'name' => 'Purchases', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 9, 'hoa_id' => 5, 'name' => 'Purchase VAT', 'created_at' => $now, 'updated_at' => $now],
+
+            // Revenue
+            ['id' => 10, 'hoa_id' => 4, 'name' => 'Sales', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 11, 'hoa_id' => 4, 'name' => 'Service Income', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 12, 'hoa_id' => 4, 'name' => 'Output VAT', 'created_at' => $now, 'updated_at' => $now],
         ]);
 
         // --------------------- 
@@ -205,6 +211,10 @@ class DatabaseSeeder extends Seeder
             ['account_code' => '104002', 'shoa_id' => 3, 'name' => 'Diamond Inventory', 'account_type' => 'asset'],
             ['account_code' => '104003', 'shoa_id' => 3, 'name' => 'Parts Inventory', 'account_type' => 'asset'],
             
+            // Customers (Receivable)
+            ['account_code' => '103001', 'shoa_id' => 9, 'name' => 'Customer 01', 'account_type' => 'customer'],
+            ['account_code' => '103002', 'shoa_id' => 9, 'name' => 'Customer 02', 'account_type' => 'customer'],
+
             // ========== LIABILITIES ==========
             
             // Vendors (Accounts Payable)
@@ -227,6 +237,21 @@ class DatabaseSeeder extends Seeder
             
             // Purchase VAT (Input Tax)
             ['account_code' => '511001', 'shoa_id' => 8, 'name' => 'Purchase VAT (Input Tax)', 'account_type' => 'expenses'],
+
+            // ========== REVENUE ==========
+
+            // Material Sales
+            ['account_code' => '401001', 'shoa_id' => 10, 'name' => 'Gold Sales', 'account_type' => 'revenue'],
+            ['account_code' => '401002', 'shoa_id' => 10, 'name' => 'Diamond Sales', 'account_type' => 'revenue'],
+
+            // Making Income
+            ['account_code' => '402001', 'shoa_id' => 11, 'name' => 'Making Charges Income', 'account_type' => 'revenue'],
+
+            // Parts Income
+            ['account_code' => '403001', 'shoa_id' => 10, 'name' => 'Parts Sales', 'account_type' => 'revenue'],
+
+            // VAT Output (VERY IMPORTANT — this is liability nature but income group)
+            ['account_code' => '404001', 'shoa_id' => 12, 'name' => 'VAT Output Tax', 'account_type' => 'liability'],
         ];
 
         foreach ($coaData as $data) {

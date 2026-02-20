@@ -44,7 +44,8 @@ return new class extends Migration
 
             /* ================= REMARKS & FILES ================= */
             $table->string('remarks')->nullable();
-
+            $table->string('barcode_number')->nullable()->unique();
+            $table->boolean('is_printed')->default(false);
             $table->timestamps();
 
             $table->foreign('purchase_invoice_id')->references('id')->on('purchase_invoices')->onDelete('cascade');

@@ -47,10 +47,15 @@ Route::middleware(['auth'])->group(function () {
     //Purchase Helper
     Route::get('/product/{product}/invoices', [PurchaseInvoiceController::class, 'getProductInvoices']);
     Route::get('/purchase-invoices/download-template', [PurchaseInvoiceController::class, 'downloadTemplate'])->name('purchase.download_template');
-
+    Route::get('purchase-invoices/{id}/barcodes', [PurchaseInvoiceController::class, 'printBarcodes'])->name('purchase_invoices.barcodes');
+    
     // Production Summary
     Route::get('/production-summary/{id}', [ProductionController::class, 'summary'])->name('production.summary');
     Route::get('/production-gatepass/{id}', [ProductionController::class, 'printGatepass'])->name('production.gatepass');
+
+    // Sale Helper
+    Route::get('sale-invoices/scan-barcode', [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
+
     // Common Modules
     $modules = [
         // User Management

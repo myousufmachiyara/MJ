@@ -39,6 +39,7 @@
                 <td>{{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d-M-Y') }}</td>
                 <td>{{ $invoice->vendor->name ?? 'N/A' }}</td>
                 <td>
+                  <a href="{{ route('purchase_invoices.barcodes', $invoice->id) }}" class="text-success" target="_blank"><i class="fas fa-barcode"></i></a>
                   <a href="{{ route('purchase_invoices.edit', $invoice->id) }}" class="text-primary"><i class="fas fa-edit"></i></a>
                   <a href="{{ route('purchase_invoices.print', $invoice->id) }}" target="_blank" class="text-success"><i class="fas fa-print"></i></a>
                   <form action="{{ route('purchase_invoices.destroy', $invoice->id) }}" method="POST" style="display:inline;">

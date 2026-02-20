@@ -16,7 +16,7 @@ class PurchaseInvoiceItem extends Model
         'making_rate', 'making_value',
         'material_type', 'material_rate', 'material_value',
         'taxable_amount', 'vat_percent', 'vat_amount',
-        'item_total', 'remarks',
+        'item_total', 'remarks', 'barcode_number', 'is_printed',
     ];
 
     protected $casts = [
@@ -32,6 +32,7 @@ class PurchaseInvoiceItem extends Model
         'vat_percent' => 'decimal:2',
         'vat_amount' => 'decimal:2',
         'item_total' => 'decimal:2',
+        
     ];
 
     // ========================================

@@ -864,6 +864,12 @@
         reader.readAsArrayBuffer(file);
     });
 
+    // Prevent double submit
+    document.querySelector('form').addEventListener('submit', function() {
+        const btn = this.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    });
   });
 </script>
 @endsection
