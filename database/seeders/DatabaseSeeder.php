@@ -181,77 +181,68 @@ class DatabaseSeeder extends Seeder
             // Liabilities
             ['id' => 5, 'hoa_id' => 2, 'name' => 'Accounts Payable', 'created_at' => $now, 'updated_at' => $now],
             ['id' => 6, 'hoa_id' => 2, 'name' => 'Tax Payable', 'created_at' => $now, 'updated_at' => $now],
-            
+            ['id' => 7, 'hoa_id' => 2, 'name' => 'Output VAT Payable', 'created_at' => $now, 'updated_at' => $now],
+
             // Equity
-            ['id' => 7, 'hoa_id' => 3, 'name' => 'Owner Capital', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 8, 'hoa_id' => 3, 'name' => 'Owner Capital', 'created_at' => $now, 'updated_at' => $now],
             
             // Expenses
-            ['id' => 8, 'hoa_id' => 5, 'name' => 'Purchases', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 9, 'hoa_id' => 5, 'name' => 'Purchase VAT', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 9, 'hoa_id' => 5, 'name' => 'Purchases', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 10, 'hoa_id' => 5, 'name' => 'Purchase VAT', 'created_at' => $now, 'updated_at' => $now],
 
             // Revenue
-            ['id' => 10, 'hoa_id' => 4, 'name' => 'Sales', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 11, 'hoa_id' => 4, 'name' => 'Service Income', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 12, 'hoa_id' => 4, 'name' => 'Output VAT', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 11, 'hoa_id' => 4, 'name' => 'Sales', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 12, 'hoa_id' => 4, 'name' => 'Service Income', 'created_at' => $now, 'updated_at' => $now],
+            ['id' => 13, 'hoa_id' => 4, 'name' => 'Output VAT', 'created_at' => $now, 'updated_at' => $now],
         ]);
 
         // --------------------- 
         // CHART OF ACCOUNTS FOR PURCHASE MODULE
         // --------------------- 
         $coaData = [
+
             // ========== ASSETS ==========
-            
-            // Cash & Bank (for cash/cheque/bank_transfer payments)
             ['account_code' => '101001', 'shoa_id' => 1, 'name' => 'Cash in Hand', 'account_type' => 'cash'],
             ['account_code' => '102001', 'shoa_id' => 2, 'name' => 'Meezan Bank', 'account_type' => 'bank'],
             ['account_code' => '102002', 'shoa_id' => 2, 'name' => 'HBL Bank', 'account_type' => 'bank'],
-            
-            // Inventory Accounts (for material purchases)
+
+            // Inventory
             ['account_code' => '104001', 'shoa_id' => 3, 'name' => 'Gold Inventory', 'account_type' => 'asset'],
             ['account_code' => '104002', 'shoa_id' => 3, 'name' => 'Diamond Inventory', 'account_type' => 'asset'],
             ['account_code' => '104003', 'shoa_id' => 3, 'name' => 'Parts Inventory', 'account_type' => 'asset'],
-            
-            // Customers (Receivable)
-            ['account_code' => '103001', 'shoa_id' => 9, 'name' => 'Customer 01', 'account_type' => 'customer'],
-            ['account_code' => '103002', 'shoa_id' => 9, 'name' => 'Customer 02', 'account_type' => 'customer'],
+
+            // Customers → Accounts Receivable
+            ['account_code' => '103001', 'shoa_id' => 4, 'name' => 'Customer 01', 'account_type' => 'customer'],
+            ['account_code' => '103002', 'shoa_id' => 4, 'name' => 'Customer 02', 'account_type' => 'customer'],
+
 
             // ========== LIABILITIES ==========
-            
-            // Vendors (Accounts Payable)
-            ['account_code' => '205001', 'shoa_id' => 4, 'name' => 'Vendor 01', 'account_type' => 'vendor'],
-            ['account_code' => '205002', 'shoa_id' => 4, 'name' => 'Vendor 02', 'account_type' => 'vendor'],
-            
-            // VAT Payable (for tax collection)
-            ['account_code' => '207001', 'shoa_id' => 5, 'name' => 'VAT Payable', 'account_type' => 'liability'],
-            
+            ['account_code' => '205001', 'shoa_id' => 5, 'name' => 'Vendor 01', 'account_type' => 'vendor'],
+            ['account_code' => '205002', 'shoa_id' => 5, 'name' => 'Vendor 02', 'account_type' => 'vendor'],
+
+            // VAT Payables
+            ['account_code' => '207001', 'shoa_id' => 6, 'name' => 'General VAT Payable', 'account_type' => 'liability'],
+            ['account_code' => '208001', 'shoa_id' => 7, 'name' => 'Output VAT Payable', 'account_type' => 'liability'],
+
+
             // ========== EQUITY ==========
-            ['account_code' => '307001', 'shoa_id' => 6, 'name' => 'Owner Capital', 'account_type' => 'equity'],
-            
+            ['account_code' => '307001', 'shoa_id' => 8, 'name' => 'Owner Capital', 'account_type' => 'equity'],
+
+
             // ========== EXPENSES ==========
-            
-            // Purchase Accounts
-            ['account_code' => '510001', 'shoa_id' => 7, 'name' => 'Material Purchases (Gold)', 'account_type' => 'expenses'],
-            ['account_code' => '510002', 'shoa_id' => 7, 'name' => 'Material Purchases (Diamond)', 'account_type' => 'expenses'],
-            ['account_code' => '510003', 'shoa_id' => 7, 'name' => 'Making Charges', 'account_type' => 'expenses'],
-            ['account_code' => '510004', 'shoa_id' => 7, 'name' => 'Parts Purchases', 'account_type' => 'expenses'],
-            
-            // Purchase VAT (Input Tax)
-            ['account_code' => '511001', 'shoa_id' => 8, 'name' => 'Purchase VAT (Input Tax)', 'account_type' => 'expenses'],
+            ['account_code' => '510001', 'shoa_id' => 9, 'name' => 'Material Purchases (Gold)', 'account_type' => 'expenses'],
+            ['account_code' => '510002', 'shoa_id' => 9, 'name' => 'Material Purchases (Diamond)', 'account_type' => 'expenses'],
+            ['account_code' => '510003', 'shoa_id' => 9, 'name' => 'Making Charges Expense', 'account_type' => 'expenses'],
+            ['account_code' => '510004', 'shoa_id' => 9, 'name' => 'Parts Purchases', 'account_type' => 'expenses'],
+
+            ['account_code' => '511001', 'shoa_id' => 10, 'name' => 'Purchase VAT (Input Tax)', 'account_type' => 'expenses'],
+
 
             // ========== REVENUE ==========
-
-            // Material Sales
-            ['account_code' => '401001', 'shoa_id' => 10, 'name' => 'Gold Sales', 'account_type' => 'revenue'],
-            ['account_code' => '401002', 'shoa_id' => 10, 'name' => 'Diamond Sales', 'account_type' => 'revenue'],
-
-            // Making Income
-            ['account_code' => '402001', 'shoa_id' => 11, 'name' => 'Making Charges Income', 'account_type' => 'revenue'],
-
-            // Parts Income
-            ['account_code' => '403001', 'shoa_id' => 10, 'name' => 'Parts Sales', 'account_type' => 'revenue'],
-
-            // VAT Output (VERY IMPORTANT — this is liability nature but income group)
-            ['account_code' => '404001', 'shoa_id' => 12, 'name' => 'VAT Output Tax', 'account_type' => 'liability'],
+            ['account_code' => '401001', 'shoa_id' => 11, 'name' => 'Gold Sales', 'account_type' => 'revenue'],
+            ['account_code' => '401002', 'shoa_id' => 11, 'name' => 'Diamond Sales', 'account_type' => 'revenue'],
+            ['account_code' => '402001', 'shoa_id' => 12, 'name' => 'Making Charges Income', 'account_type' => 'revenue'],
+            ['account_code' => '403001', 'shoa_id' => 11, 'name' => 'Parts Sales', 'account_type' => 'revenue'],
         ];
 
         foreach ($coaData as $data) {
@@ -268,8 +259,6 @@ class DatabaseSeeder extends Seeder
                 'updated_by' => $userId,
             ]));
         }
-
-
 
         // 📏 Measurement Units
         MeasurementUnit::insert([

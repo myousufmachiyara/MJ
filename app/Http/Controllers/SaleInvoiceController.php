@@ -1033,13 +1033,15 @@ class SaleInvoiceController extends Controller
 
     protected function createSaleAccountingEntries($invoice, $totalMaterialAed, $totalMakingAed, $totalPartsAed, $totalVatAed)
     {
-        $getAccountByCode = function ($code) {
+        $getAccount = function ($code) {
             $account = ChartOfAccounts::where('account_code', $code)->first();
             if (!$account) {
-                throw new \Exception("Account code {$code} not found in Chart of Accounts");
+                throw new \Exception("COA Missing: {$code}");
             }
             return $account->id;
         };
+
+        DB::beginTransaction();
 
         $voucher = Voucher::create([
             'voucher_no'     => Voucher::generateVoucherNo('sale'),
@@ -1047,127 +1049,237 @@ class SaleInvoiceController extends Controller
             'voucher_date'   => $invoice->invoice_date,
             'reference_type' => 'App\Models\SaleInvoice',
             'reference_id'   => $invoice->id,
-            'ac_dr_sid'      => null,
-            'ac_cr_sid'      => null,
-            'amount'         => null,
             'remarks'        => 'Sale Invoice #' . $invoice->invoice_no,
             'created_by'     => auth()->id(),
         ]);
 
         $entries = [];
 
-        // Total sale revenue = material + making + parts
-        $totalRevenueValue  = $totalMaterialAed + $totalMakingAed + $totalPartsAed;
-        $totalReceivable    = $totalRevenueValue + $totalVatAed;
+        /* -------------------------------------------------
+            1️⃣ DEBIT SIDE — WHAT WE RECEIVE
+        --------------------------------------------------*/
+        $totalReceivable = round($totalMaterialAed + $totalMakingAed + $totalPartsAed + $totalVatAed, 2);
 
-        // DEBIT: Receivable / Payment account
-        switch ($invoice->payment_method) {
-            case 'credit':
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->customer_id,
-                    'debit'      => round($totalReceivable, 2),
-                    'credit'     => 0,
-                    'narration'  => 'Sale on Credit',
-                ];
-                break;
+        $debitAccount = match ($invoice->payment_method) {
+            'credit' => $invoice->customer_id,
+            'cash' => $getAccount('101001'),
+            'cheque' => $invoice->bank_name,
+            'bank_transfer' => $invoice->transfer_from_bank,
+            'material+making cost' => $invoice->customer_id,
+            default => throw new \Exception('Invalid payment method'),
+        };
 
-            case 'cash':
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $getAccountByCode('101001'),
-                    'debit'      => round($totalReceivable, 2),
-                    'credit'     => 0,
-                    'narration'  => 'Cash Receipt',
-                ];
-                break;
+        $entries[] = [
+            'voucher_id' => $voucher->id,
+            'account_id' => $debitAccount,
+            'debit'      => $totalReceivable,
+            'credit'     => 0,
+            'narration'  => 'Sale Invoice ' . $invoice->invoice_no,
+        ];
 
-            case 'cheque':
-                if (!$invoice->bank_name) {
-                    throw new \Exception('Bank account is required for cheque payment');
-                }
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->bank_name,
-                    'debit'      => round($totalReceivable, 2),
-                    'credit'     => 0,
-                    'narration'  => 'Cheque Receipt #' . $invoice->cheque_no,
-                ];
-                break;
+        /* -------------------------------------------------
+            2️⃣ CREDIT SIDE — ACTUAL REVENUE BREAKUP
+        --------------------------------------------------*/
 
-            case 'bank_transfer':
-                if (!$invoice->transfer_from_bank) {
-                    throw new \Exception('Transfer bank is required for bank transfer');
-                }
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->transfer_from_bank,
-                    'debit'      => round($totalReceivable, 2),
-                    'credit'     => 0,
-                    'narration'  => 'Bank Transfer #' . $invoice->transaction_id,
-                ];
-                break;
-
-            case 'material+making cost':
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->customer_id,
-                    'debit'      => round($totalReceivable, 2),
-                    'credit'     => 0,
-                    'narration'  => 'Material Received from ' . ($invoice->material_given_by ?? 'Customer'),
-                ];
-                break;
-
-            default:
-                throw new \Exception('Invalid payment method: ' . $invoice->payment_method);
-        }
-
-        // CREDIT: Sales Revenue
-        $materialType     = $invoice->items->first()->material_type;
-        $revenueAccountCode = $materialType === 'gold' ? '401001' : '401002'; // adjust to your COA
-
-        if ($totalRevenueValue > 0) {
+        // GOLD SALES
+        if ($totalMaterialAed > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $getAccountByCode($revenueAccountCode),
+                'account_id' => $getAccount('401001'),
                 'debit'      => 0,
-                'credit'     => round($totalRevenueValue, 2),
+                'credit'     => round($totalMaterialAed, 2),
+                'narration'  => 'Gold Value',
             ];
         }
 
-        // CREDIT: VAT Output Tax
+        // MAKING INCOME (SERVICE REVENUE)
+        if ($totalMakingAed > 0) {
+            $entries[] = [
+                'voucher_id' => $voucher->id,
+                'account_id' => $getAccount('402001'),
+                'debit'      => 0,
+                'credit'     => round($totalMakingAed, 2),
+                'narration'  => 'Making Charges Income',
+            ];
+        }
+
+        // PARTS SALES
+        if ($totalPartsAed > 0) {
+            $entries[] = [
+                'voucher_id' => $voucher->id,
+                'account_id' => $getAccount('403001'),
+                'debit'      => 0,
+                'credit'     => round($totalPartsAed, 2),
+                'narration'  => 'Parts / Stones Sales',
+            ];
+        }
+
+        // VAT OUTPUT LIABILITY
         if ($totalVatAed > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $getAccountByCode('511002'), // VAT Output account — adjust to your COA
+                'account_id' => $getAccount('511002'),
                 'debit'      => 0,
                 'credit'     => round($totalVatAed, 2),
-                'narration'  => 'VAT Output Tax',
+                'narration'  => 'VAT Output',
             ];
         }
 
+        /* -------------------------------------------------
+            3️⃣ SAVE & VERIFY
+        --------------------------------------------------*/
         foreach ($entries as $entry) {
             AccountingEntry::create($entry);
         }
 
-        $totalDebits  = collect($entries)->sum('debit');
-        $totalCredits = collect($entries)->sum('credit');
+        $debit  = collect($entries)->sum('debit');
+        $credit = collect($entries)->sum('credit');
 
-        if (round($totalDebits, 2) !== round($totalCredits, 2)) {
-            throw new \Exception("Accounting entry imbalance: Debits ({$totalDebits}) ≠ Credits ({$totalCredits})");
+        if (round($debit,2) !== round($credit,2)) {
+            throw new \Exception("Journal imbalance DR {$debit} CR {$credit}");
         }
 
-        Log::info('Sale Accounting Entries Created', [
-            'invoice_no'    => $invoice->invoice_no,
-            'voucher_no'    => $voucher->voucher_no,
-            'material'      => $totalMaterialAed,
-            'making'        => $totalMakingAed,
-            'parts'         => $totalPartsAed,
-            'vat'           => $totalVatAed,
-            'total_debit'   => $totalDebits,
-            'total_credit'  => $totalCredits,
-        ]);
+        DB::commit();
 
         return $voucher;
     }
+    // protected function createSaleAccountingEntries($invoice, $totalMaterialAed, $totalMakingAed, $totalPartsAed, $totalVatAed)
+    // {
+    //     $getAccountByCode = function ($code) {
+    //         $account = ChartOfAccounts::where('account_code', $code)->first();
+    //         if (!$account) {
+    //             throw new \Exception("Account code {$code} not found in Chart of Accounts");
+    //         }
+    //         return $account->id;
+    //     };
+
+    //     $voucher = Voucher::create([
+    //         'voucher_no'     => Voucher::generateVoucherNo('sale'),
+    //         'voucher_type'   => 'sale',
+    //         'voucher_date'   => $invoice->invoice_date,
+    //         'reference_type' => 'App\Models\SaleInvoice',
+    //         'reference_id'   => $invoice->id,
+    //         'ac_dr_sid'      => null,
+    //         'ac_cr_sid'      => null,
+    //         'amount'         => null,
+    //         'remarks'        => 'Sale Invoice #' . $invoice->invoice_no,
+    //         'created_by'     => auth()->id(),
+    //     ]);
+
+    //     $entries = [];
+
+    //     // Total sale revenue = material + making + parts
+    //     $totalRevenueValue  = $totalMaterialAed + $totalMakingAed + $totalPartsAed;
+    //     $totalReceivable    = $totalRevenueValue + $totalVatAed;
+
+    //     // DEBIT: Receivable / Payment account
+    //     switch ($invoice->payment_method) {
+    //         case 'credit':
+    //             $entries[] = [
+    //                 'voucher_id' => $voucher->id,
+    //                 'account_id' => $invoice->customer_id,
+    //                 'debit'      => round($totalReceivable, 2),
+    //                 'credit'     => 0,
+    //                 'narration'  => 'Sale on Credit',
+    //             ];
+    //             break;
+
+    //         case 'cash':
+    //             $entries[] = [
+    //                 'voucher_id' => $voucher->id,
+    //                 'account_id' => $getAccountByCode('101001'),
+    //                 'debit'      => round($totalReceivable, 2),
+    //                 'credit'     => 0,
+    //                 'narration'  => 'Cash Receipt',
+    //             ];
+    //             break;
+
+    //         case 'cheque':
+    //             if (!$invoice->bank_name) {
+    //                 throw new \Exception('Bank account is required for cheque payment');
+    //             }
+    //             $entries[] = [
+    //                 'voucher_id' => $voucher->id,
+    //                 'account_id' => $invoice->bank_name,
+    //                 'debit'      => round($totalReceivable, 2),
+    //                 'credit'     => 0,
+    //                 'narration'  => 'Cheque Receipt #' . $invoice->cheque_no,
+    //             ];
+    //             break;
+
+    //         case 'bank_transfer':
+    //             if (!$invoice->transfer_from_bank) {
+    //                 throw new \Exception('Transfer bank is required for bank transfer');
+    //             }
+    //             $entries[] = [
+    //                 'voucher_id' => $voucher->id,
+    //                 'account_id' => $invoice->transfer_from_bank,
+    //                 'debit'      => round($totalReceivable, 2),
+    //                 'credit'     => 0,
+    //                 'narration'  => 'Bank Transfer #' . $invoice->transaction_id,
+    //             ];
+    //             break;
+
+    //         case 'material+making cost':
+    //             $entries[] = [
+    //                 'voucher_id' => $voucher->id,
+    //                 'account_id' => $invoice->customer_id,
+    //                 'debit'      => round($totalReceivable, 2),
+    //                 'credit'     => 0,
+    //                 'narration'  => 'Material Received from ' . ($invoice->material_given_by ?? 'Customer'),
+    //             ];
+    //             break;
+
+    //         default:
+    //             throw new \Exception('Invalid payment method: ' . $invoice->payment_method);
+    //     }
+
+    //     // CREDIT: Sales Revenue
+    //     $materialType     = $invoice->items->first()->material_type;
+    //     $revenueAccountCode = $materialType === 'gold' ? '401001' : '401002'; // adjust to your COA
+
+    //     if ($totalRevenueValue > 0) {
+    //         $entries[] = [
+    //             'voucher_id' => $voucher->id,
+    //             'account_id' => $getAccountByCode($revenueAccountCode),
+    //             'debit'      => 0,
+    //             'credit'     => round($totalRevenueValue, 2),
+    //         ];
+    //     }
+
+    //     // CREDIT: VAT Output Tax
+    //     if ($totalVatAed > 0) {
+    //         $entries[] = [
+    //             'voucher_id' => $voucher->id,
+    //             'account_id' => $getAccountByCode('511002'), // VAT Output account — adjust to your COA
+    //             'debit'      => 0,
+    //             'credit'     => round($totalVatAed, 2),
+    //             'narration'  => 'VAT Output Tax',
+    //         ];
+    //     }
+
+    //     foreach ($entries as $entry) {
+    //         AccountingEntry::create($entry);
+    //     }
+
+    //     $totalDebits  = collect($entries)->sum('debit');
+    //     $totalCredits = collect($entries)->sum('credit');
+
+    //     if (round($totalDebits, 2) !== round($totalCredits, 2)) {
+    //         throw new \Exception("Accounting entry imbalance: Debits ({$totalDebits}) ≠ Credits ({$totalCredits})");
+    //     }
+
+    //     Log::info('Sale Accounting Entries Created', [
+    //         'invoice_no'    => $invoice->invoice_no,
+    //         'voucher_no'    => $voucher->voucher_no,
+    //         'material'      => $totalMaterialAed,
+    //         'making'        => $totalMakingAed,
+    //         'parts'         => $totalPartsAed,
+    //         'vat'           => $totalVatAed,
+    //         'total_debit'   => $totalDebits,
+    //         'total_credit'  => $totalCredits,
+    //     ]);
+
+    //     return $voucher;
+    // }
 }
