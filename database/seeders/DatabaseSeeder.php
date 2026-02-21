@@ -186,12 +186,12 @@ class DatabaseSeeder extends Seeder
         // PURITIES
         // ---------------------
         $purities = [
-            ['label' => '24K (99.9%)', 'value' => 0.9990, 'sort_order' => 1],
-            ['label' => '22K (92%)',   'value' => 0.9200, 'sort_order' => 2],
-            ['label' => '21K (88%)',   'value' => 0.8800, 'sort_order' => 3],
-            ['label' => '18K (75%)',   'value' => 0.7500, 'sort_order' => 4],
-            ['label' => '14K (60%)',   'value' => 0.6000, 'sort_order' => 5],
-            ['label' => '9K (37.5%)', 'value' => 0.3750, 'sort_order' => 6],
+            ['label' => '24K (99.9%)', 'value' => 0.99, 'sort_order' => 1],
+            ['label' => '22K (92%)',   'value' => 0.92, 'sort_order' => 2],
+            ['label' => '21K (88%)',   'value' => 0.88, 'sort_order' => 3],
+            ['label' => '18K (75%)',   'value' => 0.75, 'sort_order' => 4],
+            ['label' => '14K (60%)',   'value' => 0.60, 'sort_order' => 5],
+            ['label' => '9K (37.5%)', 'value' => 0.37, 'sort_order' => 6],
         ];
 
         foreach ($purities as $row) {
