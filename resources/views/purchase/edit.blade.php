@@ -459,10 +459,11 @@
             <td><input type="text" name="items[${index}][item_description]" class="form-control" value="${desc}" required></td>
             <td>
                 <select name="items[${index}][purity]" class="form-control purity">
-                    <option value="0.92" ${purity == 0.92 ? 'selected' : ''}>22K (92%)</option>
-                    <option value="0.88" ${purity == 0.88 ? 'selected' : ''}>21K (88%)</option>
-                    <option value="0.75" ${purity == 0.75 ? 'selected' : ''}>18K (75%)</option>
-                    <option value="0.60" ${purity == 0.60 ? 'selected' : ''}>14K (60%)</option>
+                    @foreach($purities as $p)
+                        <option value="{{ $p->value }}" ${purity == {{ $p->value }} ? 'selected' : ''}>
+                            {{ $p->label }}
+                        </option>
+                    @endforeach
                 </select>
             </td>
             <td><input type="number" name="items[${index}][gross_weight]" step="any" value="${gross}" class="form-control gross-weight"></td>

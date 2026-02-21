@@ -142,10 +142,9 @@
                     <td><input type="text" name="items[0][item_description]" class="form-control" required></td>
                     <td>
                       <select name="items[0][purity]" class="form-control purity">
-                        <option value="0.92">22K (92%)</option>
-                        <option value="0.88">21K (88%)</option>
-                        <option value="0.75">18K (75%)</option>
-                        <option value="0.60">14K (60%)</option>
+                        @foreach($purities as $p)
+                          <option value="{{ $p->value }}">{{ $p->label }}</option>
+                        @endforeach
                       </select>
                     </td>
                     <td><input type="number" name="items[0][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>
@@ -463,10 +462,9 @@
             <td><input type="text" name="items[${nextIndex}][item_description]" class="form-control" required></td>
             <td>
                 <select name="items[${nextIndex}][purity]" class="form-control purity">
-                    <option value="0.92">22K (92%)</option>
-                    <option value="0.88">21K (88%)</option>
-                    <option value="0.75">18K (75%)</option>
-                    <option value="0.60">14K (60%)</option>
+                  @foreach($purities as $p)
+                    <option value="{{ $p->value }}">{{ $p->label }}</option>
+                  @endforeach
                 </select>
             </td>
             <td><input type="number" name="items[${nextIndex}][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>

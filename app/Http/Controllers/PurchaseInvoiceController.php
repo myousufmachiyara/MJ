@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\Voucher;
 use App\Models\MeasurementUnit;
 use App\Models\AccountingEntry;
+use \App\Models\Purity;
 use App\Models\ChartOfAccounts; // assuming vendors are COA entries
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -30,7 +31,9 @@ class PurchaseInvoiceController extends Controller
         $vendors = ChartOfAccounts::where('account_type', 'vendor')->get();
         $banks = ChartOfAccounts::where('account_type', 'bank')->get();
         $products = Product::with('measurementUnit')->get();
-        return view('purchase.create', compact('products', 'vendors', 'banks'));
+        $purities   = Purity::all();
+
+        return view('purchase.create', compact('products', 'vendors', 'banks', 'purities'));
     }
 
     public function downloadTemplate()
@@ -86,19 +89,18 @@ class PurchaseInvoiceController extends Controller
         exit;
     }
 
-    public function store(Request $request) 
+    public function store(Request $request)
     {
-        // Clear cheque fields if not cheque
+        // ── Clear irrelevant payment fields ───────────────────────────────────
         if ($request->payment_method !== 'cheque') {
             $request->merge([
-                'bank_name' => null,
-                'cheque_no' => null,
-                'cheque_date' => null,
+                'bank_name'     => null,
+                'cheque_no'     => null,
+                'cheque_date'   => null,
                 'cheque_amount' => null,
             ]);
         }
 
-        // Clear bank transfer fields if not bank_transfer
         if ($request->payment_method !== 'bank_transfer') {
             $request->merge([
                 'transfer_from_bank' => null,
@@ -110,62 +112,67 @@ class PurchaseInvoiceController extends Controller
                 'transfer_amount'    => null,
             ]);
         }
-        
+
+        // ── Validation ────────────────────────────────────────────────────────
         $request->validate([
-            'is_taxable'         => 'required|boolean',
-            'vendor_id'          => 'required|exists:chart_of_accounts,id',
-            'invoice_date'       => 'required|date',
-            'currency'           => 'required|in:AED,USD',
-            'exchange_rate'      => 'nullable|required_if:currency,USD|numeric|min:0',
-            'net_amount'         => 'required|numeric|min:0',
-            'payment_method'     => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
-            'payment_term'       => 'nullable|string',
-            'gold_rate_aed'      => 'nullable|numeric|min:0',
-            'gold_rate_usd'      => 'nullable|numeric|min:0',
-            'diamond_rate_aed'   => 'nullable|numeric|min:0',
-            'diamond_rate_usd'   => 'nullable|numeric|min:0',
-            'bank_name'          => 'nullable|required_if:payment_method,cheque|exists:chart_of_accounts,id',
-            'cheque_no'          => 'nullable|required_if:payment_method,cheque|string',
-            'cheque_date'        => 'nullable|required_if:payment_method,cheque|date',
-            'cheque_amount'      => 'nullable|required_if:payment_method,cheque|numeric|min:0',
-            'transfer_from_bank' => 'nullable|required_if:payment_method,bank_transfer|exists:chart_of_accounts,id',
-            'transfer_to_bank'   => 'nullable|string',
-            'account_title'      => 'nullable|string',
-            'account_no'         => 'nullable|string',
-            'transaction_id'     => 'nullable|string',
-            'transfer_date'      => 'nullable|required_if:payment_method,bank_transfer|date',
-            'transfer_amount'    => 'nullable|required_if:payment_method,bank_transfer|numeric|min:0',
-            'items'              => 'required|array|min:1',
-            'items.*.item_name'  => 'nullable|string|required_without:items.*.product_id',
-            'items.*.product_id' => 'nullable|exists:products,id|required_without:items.*.item_name',
-            'items.*.gross_weight'=> 'required|numeric|min:0',
-            'items.*.purity'     => 'required|numeric|min:0|max:1',
-            'items.*.making_rate'=> 'required|numeric|min:0',
-            'items.*.material_type'=> 'required|in:gold,diamond',
-            'items.*.vat_percent' => 'required|numeric|min:0',
-            'material_given_by'  => 'nullable|required_if:payment_method,material+making cost|string',
+            'is_taxable'          => 'required|boolean',
+            'vendor_id'           => 'required|exists:chart_of_accounts,id',
+            'invoice_date'        => 'required|date',
+            'currency'            => 'required|in:AED,USD',
+            'exchange_rate'       => 'nullable|required_if:currency,USD|numeric|min:0',
+            'net_amount'          => 'required|numeric|min:0',
+            'payment_method'      => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
+            'payment_term'        => 'nullable|string',
+            'gold_rate_aed'       => 'nullable|numeric|min:0',
+            'gold_rate_usd'       => 'nullable|numeric|min:0',
+            'diamond_rate_aed'    => 'nullable|numeric|min:0',
+            'diamond_rate_usd'    => 'nullable|numeric|min:0',
+            'bank_name'           => 'nullable|required_if:payment_method,cheque|exists:chart_of_accounts,id',
+            'cheque_no'           => 'nullable|required_if:payment_method,cheque|string',
+            'cheque_date'         => 'nullable|required_if:payment_method,cheque|date',
+            'cheque_amount'       => 'nullable|required_if:payment_method,cheque|numeric|min:0',
+            'transfer_from_bank'  => 'nullable|required_if:payment_method,bank_transfer|exists:chart_of_accounts,id',
+            'transfer_to_bank'    => 'nullable|string',
+            'account_title'       => 'nullable|string',
+            'account_no'          => 'nullable|string',
+            'transaction_id'      => 'nullable|string',
+            'transfer_date'       => 'nullable|required_if:payment_method,bank_transfer|date',
+            'transfer_amount'     => 'nullable|required_if:payment_method,bank_transfer|numeric|min:0',
+            'items'               => 'required|array|min:1',
+            'items.*.item_name'   => 'nullable|string|required_without:items.*.product_id',
+            'items.*.product_id'  => 'nullable|exists:products,id|required_without:items.*.item_name',
+            'items.*.gross_weight'   => 'required|numeric|min:0',
+            'items.*.purity'         => 'required|numeric|min:0|max:1',
+            'items.*.making_rate'    => 'required|numeric|min:0',
+            'items.*.material_type'  => 'required|in:gold,diamond',
+            'items.*.vat_percent'    => 'required|numeric|min:0',
+            'material_given_by'   => 'nullable|required_if:payment_method,material+making cost|string',
             'material_received_by'=> 'nullable|required_if:payment_method,material+making cost|string',
         ]);
 
         try {
             DB::beginTransaction();
 
-            // 1. Generate Split-Sequence Invoice Number
-            $isTaxable = $request->boolean('is_taxable'); 
-            $prefix = $isTaxable ? 'PUR-TAX-' : 'PUR-';
+            // ── Generate invoice number ───────────────────────────────────────
+            $isTaxable = $request->boolean('is_taxable');
+            $prefix    = $isTaxable ? 'PUR-TAX-' : 'PUR-';
+
             $lastInvoice = PurchaseInvoice::withTrashed()
                 ->where('invoice_no', 'LIKE', $prefix . '%')
                 ->orderBy('id', 'desc')
                 ->first();
 
-            $nextNumber = $lastInvoice ? intval(str_replace($prefix, '', $lastInvoice->invoice_no)) + 1 : 1;
+            $nextNumber = $lastInvoice
+                ? (int) str_replace($prefix, '', $lastInvoice->invoice_no) + 1
+                : 1;
+
             $invoiceNo = $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
 
-            $netAmountAed = $request->currency === 'USD' 
-                ? round($request->net_amount * $request->exchange_rate, 2) 
+            $netAmountAed = $request->currency === 'USD'
+                ? round($request->net_amount * $request->exchange_rate, 2)
                 : $request->net_amount;
 
-            // 2. Create Invoice Header
+            // ── Create invoice header ─────────────────────────────────────────
             $invoice = PurchaseInvoice::create([
                 'invoice_no'           => $invoiceNo,
                 'is_taxable'           => $isTaxable,
@@ -198,43 +205,43 @@ class PurchaseInvoiceController extends Controller
                 'created_by'           => auth()->id(),
             ]);
 
-            $totalVatAed = 0;
-            $totalMaterialAed = 0;
-            $totalMakingAed = 0;
-            $totalPartsAed = 0;
-            $position = 1;
-            // 3. Create Items and their Parts
+            // ── Accumulate totals for accounting (split by material type) ─────
+            $totalGoldMaterialAed    = 0.0;
+            $totalDiamondMaterialAed = 0.0;
+            $totalMakingAed          = 0.0;
+            $totalPartsAed           = 0.0;
+            $totalVatAed             = 0.0;
+            $position                = 1;
+
+            // ── Create items ──────────────────────────────────────────────────
             foreach ($request->items as $itemData) {
                 $purityWeight = $itemData['gross_weight'] * $itemData['purity'];
                 $col995       = $purityWeight / 0.995;
                 $makingValue  = $itemData['gross_weight'] * $itemData['making_rate'];
-                
-                // Determine metal rate based on type
-                $metalRate = ($itemData['material_type'] === 'gold') 
-                    ? ($request->gold_rate_aed ?? 0) 
+
+                $metalRate = ($itemData['material_type'] === 'gold')
+                    ? ($request->gold_rate_aed ?? 0)
                     : ($request->diamond_rate_aed ?? 0);
 
                 $materialValue = $purityWeight * $metalRate;
-                
-                // Calculate parts total for this item BEFORE calculating taxable amount
-                $itemPartsTotal = 0;
+
+                // Parts total for this item
+                $itemPartsTotal = 0.0;
                 if (!empty($itemData['parts'])) {
                     foreach ($itemData['parts'] as $partData) {
-                        $itemPartsTotal += ($partData['qty'] * $partData['rate']) + 
-                                        (($partData['stone_qty'] ?? 0) * ($partData['stone_rate'] ?? 0));
+                        $itemPartsTotal += ($partData['qty'] * $partData['rate'])
+                            + (($partData['stone_qty']  ?? 0) * ($partData['stone_rate'] ?? 0));
                     }
                 }
-                
-                // Taxable = making + parts (adjust based on your tax rules)
-                $taxable = $makingValue + $itemPartsTotal;
-                $vatAmount = $taxable * ($itemData['vat_percent'] / 100);
-                
-                // Item total = material + making + VAT (parts will be added via relationship)
-                $itemTotal = $materialValue + $makingValue + $vatAmount;
+
+                // UAE VAT: making charges + parts are taxable, material is zero-rated
+                $taxableAmount = $makingValue + $itemPartsTotal;
+                $vatAmount     = $taxableAmount * ($itemData['vat_percent'] / 100);
+                $itemTotal     = $materialValue + $makingValue + $vatAmount;
 
                 $invoiceItem = $invoice->items()->create([
-                    'item_name'        => $itemData['item_name'] ?? null,
-                    'product_id'       => $itemData['product_id'] ?? null,
+                    'item_name'        => $itemData['item_name']        ?? null,
+                    'product_id'       => $itemData['product_id']       ?? null,
                     'item_description' => $itemData['item_description'] ?? null,
                     'gross_weight'     => $itemData['gross_weight'],
                     'purity'           => $itemData['purity'],
@@ -245,34 +252,39 @@ class PurchaseInvoiceController extends Controller
                     'material_type'    => $itemData['material_type'],
                     'material_rate'    => $metalRate,
                     'material_value'   => $materialValue,
-                    'taxable_amount'   => $taxable,
+                    'parts_total'      => $itemPartsTotal,
+                    'taxable_amount'   => $taxableAmount,
                     'vat_percent'      => $itemData['vat_percent'],
                     'vat_amount'       => $vatAmount,
                     'item_total'       => $itemTotal,
-                    'barcode_number' => $this->generateBarcodeNumber($invoice, $position),
-                    'is_printed'     => false,
+                    'barcode_number'   => $this->generateBarcodeNumber($invoice, $position),
+                    'is_printed'       => false,
                 ]);
 
-                // Accumulate totals for Accounting
-                $totalVatAed += $vatAmount;
-                $totalMaterialAed += $materialValue;
+                // ── Accumulate into correct material bucket ────────────────────
+                if ($itemData['material_type'] === 'gold') {
+                    $totalGoldMaterialAed    += $materialValue;
+                } else {
+                    $totalDiamondMaterialAed += $materialValue;
+                }
                 $totalMakingAed += $makingValue;
-                $totalPartsAed += $itemPartsTotal;
+                $totalPartsAed  += $itemPartsTotal;
+                $totalVatAed    += $vatAmount;
                 $position++;
 
-                // Save individual parts
+                // ── Create parts ───────────────────────────────────────────────
                 if (!empty($itemData['parts'])) {
                     foreach ($itemData['parts'] as $partData) {
-                        $partTotal = ($partData['qty'] * $partData['rate']) + 
-                                    (($partData['stone_qty'] ?? 0) * ($partData['stone_rate'] ?? 0));
+                        $partTotal = ($partData['qty'] * $partData['rate'])
+                            + (($partData['stone_qty']  ?? 0) * ($partData['stone_rate'] ?? 0));
 
                         $invoiceItem->parts()->create([
-                            'product_id'       => $partData['product_id'] ?? null,
-                            'item_name'        => $partData['item_name'] ?? null,
+                            'product_id'       => $partData['product_id']       ?? null,
+                            'item_name'        => $partData['item_name']        ?? null,
                             'qty'              => $partData['qty'],
                             'rate'             => $partData['rate'],
-                            'stone_qty'        => $partData['stone_qty'] ?? 0,
-                            'stone_rate'       => $partData['stone_rate'] ?? 0,
+                            'stone_qty'        => $partData['stone_qty']        ?? 0,
+                            'stone_rate'       => $partData['stone_rate']       ?? 0,
                             'total'            => $partTotal,
                             'part_description' => $partData['part_description'] ?? null,
                         ]);
@@ -280,7 +292,7 @@ class PurchaseInvoiceController extends Controller
                 }
             }
 
-            // 4. Attachments
+            // ── Attachments ───────────────────────────────────────────────────
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {
                     $path = $file->store('purchase_invoices', 'public');
@@ -288,25 +300,287 @@ class PurchaseInvoiceController extends Controller
                 }
             }
 
-            // 5. Create Accounting Entries
+            // ── Accounting entries ────────────────────────────────────────────
             $this->createPurchaseAccountingEntries(
-                $invoice, 
-                $totalMaterialAed, 
-                $totalMakingAed, 
-                $totalPartsAed, 
+                $invoice,
+                $totalGoldMaterialAed,
+                $totalDiamondMaterialAed,
+                $totalMakingAed,
+                $totalPartsAed,
                 $totalVatAed
             );
 
             DB::commit();
-            return redirect()->route('purchase_invoices.index')
+
+            return redirect()
+                ->route('purchase_invoices.index')
                 ->with('success', 'Invoice #' . $invoiceNo . ' saved successfully.');
 
         } catch (\Throwable $e) {
             DB::rollBack();
-            Log::error("Purchase Invoice Error: " . $e->getMessage(), [
-                'line' => $e->getLine(),
-                'file' => $e->getFile(),
-                'trace' => $e->getTraceAsString()
+            Log::error('Purchase Invoice Store Error', [
+                'message' => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
+            return back()->withInput()->with('error', 'Error: ' . $e->getMessage());
+        }
+    }
+
+    public function update(Request $request, $id)
+    {
+        $invoice = PurchaseInvoice::findOrFail($id);
+
+        // ── Printed-item guard ────────────────────────────────────────────────
+        $incomingBarcodes  = collect($request->items)->pluck('barcode_number')->filter()->values();
+        $printedAndDeleted = $invoice->items()
+            ->where('is_printed', true)
+            ->whereNotIn('barcode_number', $incomingBarcodes->toArray())
+            ->pluck('barcode_number');
+
+        if ($printedAndDeleted->isNotEmpty() && !$request->boolean('confirm_delete_printed')) {
+            return back()
+                ->withInput()
+                ->with('printed_delete_warning', $printedAndDeleted->join(', '));
+        }
+
+        // ── Clear irrelevant payment fields ───────────────────────────────────
+        if ($request->payment_method !== 'cheque') {
+            $request->merge([
+                'bank_name'     => null,
+                'cheque_no'     => null,
+                'cheque_date'   => null,
+                'cheque_amount' => null,
+            ]);
+        }
+
+        if ($request->payment_method !== 'bank_transfer') {
+            $request->merge([
+                'transfer_from_bank' => null,
+                'transfer_to_bank'   => null,
+                'account_title'      => null,
+                'account_no'         => null,
+                'transaction_id'     => null,
+                'transfer_date'      => null,
+                'transfer_amount'    => null,
+            ]);
+        }
+
+        // ── Validation ────────────────────────────────────────────────────────
+        $request->validate([
+            'is_taxable'          => 'required|boolean',
+            'vendor_id'           => 'required|exists:chart_of_accounts,id',
+            'invoice_date'        => 'required|date',
+            'currency'            => 'required|in:AED,USD',
+            'exchange_rate'       => 'nullable|required_if:currency,USD|numeric|min:0',
+            'net_amount'          => 'required|numeric|min:0',
+            'payment_method'      => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
+            'payment_term'        => 'nullable|string',
+            'gold_rate_aed'       => 'nullable|numeric|min:0',
+            'gold_rate_usd'       => 'nullable|numeric|min:0',
+            'diamond_rate_aed'    => 'nullable|numeric|min:0',
+            'diamond_rate_usd'    => 'nullable|numeric|min:0',
+            'bank_name'           => 'nullable|required_if:payment_method,cheque|exists:chart_of_accounts,id',
+            'cheque_no'           => 'nullable|required_if:payment_method,cheque|string',
+            'cheque_date'         => 'nullable|required_if:payment_method,cheque|date',
+            'cheque_amount'       => 'nullable|required_if:payment_method,cheque|numeric|min:0',
+            'transfer_from_bank'  => 'nullable|required_if:payment_method,bank_transfer|exists:chart_of_accounts,id',
+            'transfer_to_bank'    => 'nullable|string',
+            'account_title'       => 'nullable|string',
+            'account_no'          => 'nullable|string',
+            'transaction_id'      => 'nullable|string',
+            'transfer_date'       => 'nullable|required_if:payment_method,bank_transfer|date',
+            'transfer_amount'     => 'nullable|required_if:payment_method,bank_transfer|numeric|min:0',
+            'items'               => 'required|array|min:1',
+            'items.*.item_name'   => 'nullable|string|required_without:items.*.product_id',
+            'items.*.product_id'  => 'nullable|exists:products,id|required_without:items.*.item_name',
+            'items.*.gross_weight'   => 'required|numeric|min:0',
+            'items.*.purity'         => 'required|numeric|min:0|max:1',
+            'items.*.making_rate'    => 'required|numeric|min:0',
+            'items.*.material_type'  => 'required|in:gold,diamond',
+            'items.*.vat_percent'    => 'required|numeric|min:0',
+            'material_given_by'   => 'nullable|required_if:payment_method,material+making cost|string',
+            'material_received_by'=> 'nullable|required_if:payment_method,material+making cost|string',
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            $netAmountAed = $request->currency === 'USD'
+                ? round($request->net_amount * $request->exchange_rate, 2)
+                : $request->net_amount;
+
+            // ── Update invoice header (invoice_no is immutable after creation) ─
+            $invoice->update([
+                'is_taxable'           => $request->boolean('is_taxable'),
+                'vendor_id'            => $request->vendor_id,
+                'invoice_date'         => $request->invoice_date,
+                'remarks'              => $request->remarks,
+                'currency'             => $request->currency,
+                'exchange_rate'        => $request->exchange_rate,
+                'gold_rate_aed'        => $request->gold_rate_aed,
+                'gold_rate_usd'        => $request->gold_rate_usd,
+                'diamond_rate_aed'     => $request->diamond_rate_aed,
+                'diamond_rate_usd'     => $request->diamond_rate_usd,
+                'net_amount'           => $request->net_amount,
+                'net_amount_aed'       => $netAmountAed,
+                'payment_method'       => $request->payment_method,
+                'payment_term'         => $request->payment_term,
+                'bank_name'            => $request->bank_name,
+                'cheque_no'            => $request->cheque_no,
+                'cheque_date'          => $request->cheque_date,
+                'cheque_amount'        => $request->cheque_amount,
+                'transfer_from_bank'   => $request->transfer_from_bank,
+                'transfer_to_bank'     => $request->transfer_to_bank,
+                'account_title'        => $request->account_title,
+                'account_no'           => $request->account_no,
+                'transaction_id'       => $request->transaction_id,
+                'transfer_date'        => $request->transfer_date,
+                'transfer_amount'      => $request->transfer_amount,
+                'material_received_by' => $request->material_received_by,
+                'material_given_by'    => $request->material_given_by,
+            ]);
+
+            // ── Delete old items + parts ───────────────────────────────────────
+            foreach ($invoice->items as $oldItem) {
+                $oldItem->parts()->delete();
+            }
+            $invoice->items()->delete();
+
+            // ── Accumulators ──────────────────────────────────────────────────
+            $totalGoldMaterialAed    = 0.0;
+            $totalDiamondMaterialAed = 0.0;
+            $totalMakingAed          = 0.0;
+            $totalPartsAed           = 0.0;
+            $totalVatAed             = 0.0;
+            $position                = 1;
+
+            // ── Re-create items ───────────────────────────────────────────────
+            foreach ($request->items as $itemData) {
+                $purityWeight = $itemData['gross_weight'] * $itemData['purity'];
+                $col995       = $purityWeight / 0.995;
+                $makingValue  = $itemData['gross_weight'] * $itemData['making_rate'];
+
+                $metalRate = ($itemData['material_type'] === 'gold')
+                    ? ($request->gold_rate_aed ?? 0)
+                    : ($request->diamond_rate_aed ?? 0);
+
+                $materialValue = $purityWeight * $metalRate;
+
+                $itemPartsTotal = 0.0;
+                if (!empty($itemData['parts'])) {
+                    foreach ($itemData['parts'] as $partData) {
+                        $itemPartsTotal += ($partData['qty'] * $partData['rate'])
+                            + (($partData['stone_qty']  ?? 0) * ($partData['stone_rate'] ?? 0));
+                    }
+                }
+
+                $taxableAmount = $makingValue + $itemPartsTotal;
+                $vatAmount     = $taxableAmount * ($itemData['vat_percent'] / 100);
+                $itemTotal     = $materialValue + $makingValue + $vatAmount;
+
+                // Preserve printed status for existing barcodes
+                $existingBarcode   = $itemData['barcode_number'] ?? null;
+                $wasAlreadyPrinted = false;
+                if ($existingBarcode) {
+                    $oldItem           = PurchaseInvoiceItem::where('barcode_number', $existingBarcode)->first();
+                    $wasAlreadyPrinted = $oldItem?->is_printed ?? false;
+                }
+
+                $invoiceItem = $invoice->items()->create([
+                    'item_name'        => $itemData['item_name']        ?? null,
+                    'product_id'       => $itemData['product_id']       ?? null,
+                    'item_description' => $itemData['item_description'] ?? null,
+                    'gross_weight'     => $itemData['gross_weight'],
+                    'purity'           => $itemData['purity'],
+                    'purity_weight'    => $purityWeight,
+                    'col_995'          => $col995,
+                    'making_rate'      => $itemData['making_rate'],
+                    'making_value'     => $makingValue,
+                    'material_type'    => $itemData['material_type'],
+                    'material_rate'    => $metalRate,
+                    'material_value'   => $materialValue,
+                    'parts_total'      => $itemPartsTotal,
+                    'taxable_amount'   => $taxableAmount,
+                    'vat_percent'      => $itemData['vat_percent'],
+                    'vat_amount'       => $vatAmount,
+                    'item_total'       => $itemTotal,
+                    'barcode_number'   => $existingBarcode ?? $this->generateBarcodeNumber($invoice, $position),
+                    'is_printed'       => $wasAlreadyPrinted,
+                ]);
+
+                // ── Accumulate ─────────────────────────────────────────────────
+                if ($itemData['material_type'] === 'gold') {
+                    $totalGoldMaterialAed    += $materialValue;
+                } else {
+                    $totalDiamondMaterialAed += $materialValue;
+                }
+                $totalMakingAed += $makingValue;
+                $totalPartsAed  += $itemPartsTotal;
+                $totalVatAed    += $vatAmount;
+                $position++;
+
+                // ── Re-create parts ────────────────────────────────────────────
+                if (!empty($itemData['parts'])) {
+                    foreach ($itemData['parts'] as $partData) {
+                        $partTotal = ($partData['qty'] * $partData['rate'])
+                            + (($partData['stone_qty']  ?? 0) * ($partData['stone_rate'] ?? 0));
+
+                        $invoiceItem->parts()->create([
+                            'product_id'       => $partData['product_id']       ?? null,
+                            'item_name'        => $partData['item_name']        ?? null,
+                            'qty'              => $partData['qty'],
+                            'rate'             => $partData['rate'],
+                            'stone_qty'        => $partData['stone_qty']        ?? 0,
+                            'stone_rate'       => $partData['stone_rate']       ?? 0,
+                            'total'            => $partTotal,
+                            'part_description' => $partData['part_description'] ?? null,
+                        ]);
+                    }
+                }
+            }
+
+            // ── New attachments ───────────────────────────────────────────────
+            if ($request->hasFile('attachments')) {
+                foreach ($request->file('attachments') as $file) {
+                    $path = $file->store('purchase_invoices', 'public');
+                    $invoice->attachments()->create(['file_path' => $path]);
+                }
+            }
+
+            // ── Reverse old voucher + entries, then recreate ──────────────────
+            $oldVoucher = Voucher::where('reference_type', 'App\Models\PurchaseInvoice')
+                ->where('reference_id', $invoice->id)
+                ->first();
+
+            if ($oldVoucher) {
+                AccountingEntry::where('voucher_id', $oldVoucher->id)->delete();
+                $oldVoucher->delete();
+            }
+
+            $this->createPurchaseAccountingEntries(
+                $invoice,
+                $totalGoldMaterialAed,
+                $totalDiamondMaterialAed,
+                $totalMakingAed,
+                $totalPartsAed,
+                $totalVatAed
+            );
+
+            DB::commit();
+
+            return redirect()
+                ->route('purchase_invoices.index')
+                ->with('success', 'Invoice #' . $invoice->invoice_no . ' updated successfully.');
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('Purchase Invoice Update Error', [
+                'message' => $e->getMessage(),
+                'line'    => $e->getLine(),
+                'file'    => $e->getFile(),
+                'trace'   => $e->getTraceAsString(),
             ]);
             return back()->withInput()->with('error', 'Error: ' . $e->getMessage());
         }
@@ -316,6 +590,7 @@ class PurchaseInvoiceController extends Controller
     {
         $purchaseInvoice = PurchaseInvoice::findOrFail($id);
         $purchaseInvoice->load(['items.parts', 'attachments']);
+        $purities   = Purity::all();
 
         $vendors  = ChartOfAccounts::where('account_type', 'vendor')->get();
         $banks    = ChartOfAccounts::where('account_type', 'bank')->get();
@@ -357,247 +632,7 @@ class PurchaseInvoiceController extends Controller
             ];
         })->values()->toArray();
 
-        return view('purchase.edit', compact('purchaseInvoice', 'vendors', 'banks', 'products', 'itemsData', 'goldAedOunce', 'diamondAedOunce'));
-    }
-
-    public function update(Request $request, $id)
-    {
-        $invoice = PurchaseInvoice::findOrFail($id);
-
-        // Collect incoming item barcode numbers (null for brand-new items)
-        $incomingBarcodes = collect($request->items)->pluck('barcode_number')->filter()->values();
-
-        // Find printed items that are NOT in the incoming request (i.e. being deleted)
-        $printedAndDeleted = $invoice->items()->where('is_printed', true)->whereNotIn('barcode_number', $incomingBarcodes->toArray())->pluck('barcode_number');
-
-        if ($printedAndDeleted->isNotEmpty() && !$request->boolean('confirm_delete_printed')) {
-            return back()->withInput()->with('printed_delete_warning', $printedAndDeleted->join(', '));
-        }
-
-        // Clear cheque fields if not cheque
-        if ($request->payment_method !== 'cheque') {
-            $request->merge([
-                'bank_name'     => null,
-                'cheque_no'     => null,
-                'cheque_date'   => null,
-                'cheque_amount' => null,
-            ]);
-        }
-
-        // Clear bank transfer fields if not bank_transfer
-        if ($request->payment_method !== 'bank_transfer') {
-            $request->merge([
-                'transfer_from_bank' => null,
-                'transfer_to_bank'   => null,
-                'account_title'      => null,
-                'account_no'         => null,
-                'transaction_id'     => null,
-                'transfer_date'      => null,
-                'transfer_amount'    => null,
-            ]);
-        }
-
-        $request->validate([
-            'is_taxable'          => 'required|boolean',
-            'vendor_id'           => 'required|exists:chart_of_accounts,id',
-            'invoice_date'        => 'required|date',
-            'currency'            => 'required|in:AED,USD',
-            'exchange_rate'       => 'nullable|required_if:currency,USD|numeric|min:0',
-            'net_amount'          => 'required|numeric|min:0',
-            'payment_method'      => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
-            'payment_term'        => 'nullable|string',
-            'gold_rate_aed'       => 'nullable|numeric|min:0',
-            'gold_rate_usd'       => 'nullable|numeric|min:0',
-            'diamond_rate_aed'    => 'nullable|numeric|min:0',
-            'diamond_rate_usd'    => 'nullable|numeric|min:0',
-            'bank_name'           => 'nullable|required_if:payment_method,cheque|exists:chart_of_accounts,id',
-            'cheque_no'           => 'nullable|required_if:payment_method,cheque|string',
-            'cheque_date'         => 'nullable|required_if:payment_method,cheque|date',
-            'cheque_amount'       => 'nullable|required_if:payment_method,cheque|numeric|min:0',
-            'transfer_from_bank'  => 'nullable|required_if:payment_method,bank_transfer|exists:chart_of_accounts,id',
-            'transfer_to_bank'    => 'nullable|string',
-            'account_title'       => 'nullable|string',
-            'account_no'          => 'nullable|string',
-            'transaction_id'      => 'nullable|string',
-            'transfer_date'       => 'nullable|required_if:payment_method,bank_transfer|date',
-            'transfer_amount'     => 'nullable|required_if:payment_method,bank_transfer|numeric|min:0',
-            'items'               => 'required|array|min:1',
-            'items.*.item_name'   => 'nullable|string|required_without:items.*.product_id',
-            'items.*.product_id'  => 'nullable|exists:products,id|required_without:items.*.item_name',
-            'items.*.gross_weight'  => 'required|numeric|min:0',
-            'items.*.purity'        => 'required|numeric|min:0|max:1',
-            'items.*.making_rate'   => 'required|numeric|min:0',
-            'items.*.material_type' => 'required|in:gold,diamond',
-            'items.*.vat_percent'   => 'required|numeric|min:0',
-            'material_given_by'   => 'nullable|required_if:payment_method,material+making cost|string',
-            'material_received_by'=> 'nullable|required_if:payment_method,material+making cost|string',
-        ]);
-
-        try {
-            DB::beginTransaction();
-
-            $netAmountAed = $request->currency === 'USD'
-                ? round($request->net_amount * $request->exchange_rate, 2)
-                : $request->net_amount;
-
-            // 1. Update invoice header (invoice_no is NOT changed on edit)
-            $invoice->update([
-                'is_taxable'           => $request->boolean('is_taxable'),
-                'vendor_id'            => $request->vendor_id,
-                'invoice_date'         => $request->invoice_date,
-                'remarks'              => $request->remarks,
-                'currency'             => $request->currency,
-                'exchange_rate'        => $request->exchange_rate,
-                'gold_rate_aed'        => $request->gold_rate_aed,
-                'gold_rate_usd'        => $request->gold_rate_usd,
-                'diamond_rate_aed'     => $request->diamond_rate_aed,
-                'diamond_rate_usd'     => $request->diamond_rate_usd,
-                'net_amount'           => $request->net_amount,
-                'net_amount_aed'       => $netAmountAed,
-                'payment_method'       => $request->payment_method,
-                'payment_term'         => $request->payment_term,
-                'bank_name'            => $request->bank_name,
-                'cheque_no'            => $request->cheque_no,
-                'cheque_date'          => $request->cheque_date,
-                'cheque_amount'        => $request->cheque_amount,
-                'transfer_from_bank'   => $request->transfer_from_bank,
-                'transfer_to_bank'     => $request->transfer_to_bank,
-                'account_title'        => $request->account_title,
-                'account_no'           => $request->account_no,
-                'transaction_id'       => $request->transaction_id,
-                'transfer_date'        => $request->transfer_date,
-                'transfer_amount'      => $request->transfer_amount,
-                'material_received_by' => $request->material_received_by,
-                'material_given_by'    => $request->material_given_by,
-            ]);
-
-            // 2. Delete old items and their parts (cascade if set up, or manually)
-            foreach ($invoice->items as $oldItem) {
-                $oldItem->parts()->delete();
-            }
-            $invoice->items()->delete();
-
-            $totalVatAed      = 0;
-            $totalMaterialAed = 0;
-            $totalMakingAed   = 0;
-            $totalPartsAed    = 0;
-            $position = 1;
-
-            // 3. Re-create items and parts (same logic as store)
-            foreach ($request->items as $itemData) {
-                $purityWeight = $itemData['gross_weight'] * $itemData['purity'];
-                $col995       = $purityWeight / 0.995;
-                $makingValue  = $itemData['gross_weight'] * $itemData['making_rate'];
-
-                $metalRate = ($itemData['material_type'] === 'gold')
-                    ? ($request->gold_rate_aed ?? 0)
-                    : ($request->diamond_rate_aed ?? 0);
-
-                $materialValue = $purityWeight * $metalRate;
-
-                $itemPartsTotal = 0;
-                if (!empty($itemData['parts'])) {
-                    foreach ($itemData['parts'] as $partData) {
-                        $itemPartsTotal += ($partData['qty'] * $partData['rate'])
-                            + (($partData['stone_qty'] ?? 0) * ($partData['stone_rate'] ?? 0));
-                    }
-                }
-
-                $taxable   = $makingValue + $itemPartsTotal;
-                $vatAmount = $taxable * ($itemData['vat_percent'] / 100);
-                $itemTotal = $materialValue + $makingValue + $vatAmount;
-
-                $existingBarcode = $itemData['barcode_number'] ?? null;
-                $wasAlreadyPrinted = false;
-
-                if ($existingBarcode) {
-                    $oldItem = PurchaseInvoiceItem::where('barcode_number', $existingBarcode)->first();
-                    $wasAlreadyPrinted = $oldItem?->is_printed ?? false;
-                }
-
-                $invoiceItem = $invoice->items()->create([
-                    'item_name'         => $itemData['item_name'] ?? null,
-                    'product_id'        => $itemData['product_id'] ?? null,
-                    'item_description'  => $itemData['item_description'] ?? null,
-                    'gross_weight'      => $itemData['gross_weight'],
-                    'purity'            => $itemData['purity'],
-                    'purity_weight'     => $purityWeight,
-                    'col_995'           => $col995,
-                    'making_rate'       => $itemData['making_rate'],
-                    'making_value'      => $makingValue,
-                    'material_type'     => $itemData['material_type'],
-                    'material_rate'     => $metalRate,
-                    'material_value'    => $materialValue,
-                    'taxable_amount'    => $taxable,
-                    'vat_percent'       => $itemData['vat_percent'],
-                    'vat_amount'        => $vatAmount,
-                    'item_total'        => $itemTotal,
-                    'barcode_number'    => $existingBarcode ?? $this->generateBarcodeNumber($invoice, $position),
-                    'is_printed'        => $wasAlreadyPrinted,
-                ]);
-                $position++;
-                $totalVatAed      += $vatAmount;
-                $totalMaterialAed += $materialValue;
-                $totalMakingAed   += $makingValue;
-                $totalPartsAed    += $itemPartsTotal;
-
-                if (!empty($itemData['parts'])) {
-                    foreach ($itemData['parts'] as $partData) {
-                        $partTotal = ($partData['qty'] * $partData['rate'])
-                            + (($partData['stone_qty'] ?? 0) * ($partData['stone_rate'] ?? 0));
-
-                        $invoiceItem->parts()->create([
-                            'product_id'       => $partData['product_id'] ?? null,
-                            'item_name'        => $partData['item_name'] ?? null,
-                            'qty'              => $partData['qty'],
-                            'rate'             => $partData['rate'],
-                            'stone_qty'        => $partData['stone_qty'] ?? 0,
-                            'stone_rate'       => $partData['stone_rate'] ?? 0,
-                            'total'            => $partTotal,
-                            'part_description' => $partData['part_description'] ?? null,
-                        ]);
-                    }
-                }
-            }
-
-            // 4. Handle new attachments (existing ones are kept unless deleted)
-            if ($request->hasFile('attachments')) {
-                foreach ($request->file('attachments') as $file) {
-                    $path = $file->store('purchase_invoices', 'public');
-                    $invoice->attachments()->create(['file_path' => $path]);
-                }
-            }
-
-            // 5. Reverse old accounting entries and recreate
-            $oldVoucher = Voucher::where('reference_type', 'App\Models\PurchaseInvoice')->where('reference_id', $invoice->id)->first();
-
-            if ($oldVoucher) {
-                AccountingEntry::where('voucher_id', $oldVoucher->id)->delete();
-                $oldVoucher->delete();
-            }
-
-            $this->createPurchaseAccountingEntries(
-                $invoice,
-                $totalMaterialAed,
-                $totalMakingAed,
-                $totalPartsAed,
-                $totalVatAed
-            );
-
-            DB::commit();
-
-            return redirect()->route('purchase_invoices.index')
-                ->with('success', 'Invoice #' . $invoice->invoice_no . ' updated successfully.');
-
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            Log::error("Purchase Invoice Update Error: " . $e->getMessage(), [
-                'line'  => $e->getLine(),
-                'file'  => $e->getFile(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-            return back()->withInput()->with('error', 'Error: ' . $e->getMessage());
-        }
+        return view('purchase.edit', compact('purchaseInvoice', 'vendors', 'banks', 'products', 'itemsData', 'goldAedOunce', 'diamondAedOunce', 'purities'));
     }
 
     private function generateBarcodeNumber(PurchaseInvoice $invoice, int $itemPosition): string
@@ -1179,152 +1214,207 @@ class PurchaseInvoiceController extends Controller
         $pdf->SetXY(140, $y); $pdf->Cell(50, 5, "Authorized Signature", 0, 0, 'C');
     }
 
-    protected function createPurchaseAccountingEntries($invoice, $totalMaterialAed, $totalMakingAed, $totalPartsAed, $totalVatAed)
+    protected function createPurchaseAccountingEntries(PurchaseInvoice $invoice,float $totalGoldMaterialAed,float $totalDiamondMaterialAed,float $totalMakingAed,float $totalPartsAed,float $totalVatAed): Voucher 
     {
-        // Helper to get account ID by code
-        $getAccountByCode = function($code) {
+        // ── Account resolver ──────────────────────────────────────────────────
+        $acct = function (string $code) use ($invoice): int {
             $account = ChartOfAccounts::where('account_code', $code)->first();
             if (!$account) {
-                throw new \Exception("Account code {$code} not found in Chart of Accounts");
+                throw new \Exception(
+                    "Account code [{$code}] not found in Chart of Accounts " .
+                    "(Invoice #{$invoice->invoice_no})."
+                );
             }
             return $account->id;
         };
 
-        // ========== CREATE VOUCHER FIRST ==========
-        
+        // ── 1. Create voucher ─────────────────────────────────────────────────
         $voucher = Voucher::create([
-            'voucher_no' => Voucher::generateVoucherNo('purchase'),
-            'voucher_type' => 'purchase',
-            'voucher_date' => $invoice->invoice_date,
+            'voucher_no'     => Voucher::generateVoucherNo('purchase'),
+            'voucher_type'   => 'purchase',
+            'voucher_date'   => $invoice->invoice_date,
             'reference_type' => 'App\Models\PurchaseInvoice',
-            'reference_id' => $invoice->id,
-            'ac_dr_sid' => null, // Complex voucher
-            'ac_cr_sid' => null, // Complex voucher
-            'amount' => null,    // Complex voucher
-            'remarks' => 'Purchase Invoice #' . $invoice->invoice_no,
-            'created_by' => auth()->id(),
+            'reference_id'   => $invoice->id,
+            'ac_dr_sid'      => null,  // multi-line — no single debit/credit sub-head
+            'ac_cr_sid'      => null,
+            'amount'         => null,
+            'remarks'        => 'Purchase Invoice #' . $invoice->invoice_no,
+            'created_by'     => auth()->id(),
         ]);
 
         $entries = [];
 
-        // ========== DEBIT ENTRIES ==========
-        
-        // Determine material type for inventory account
-        $materialType = $invoice->items->first()->material_type;
-        $inventoryAccountCode = $materialType === 'gold' ? '104001' : '104002';
-        
-        // Total inventory value = material + making + parts
-        $totalInventoryValue = $totalMaterialAed + $totalMakingAed + $totalPartsAed;
-        
-        if ($totalInventoryValue > 0) {
+        // ── 2. DEBIT entries ──────────────────────────────────────────────────
+
+        // Gold material purchased — expense directly to P&L (COGS)
+        if ($totalGoldMaterialAed > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $getAccountByCode($inventoryAccountCode),
-                'debit' => round($totalInventoryValue, 2),
-                'credit' => 0,
-                'narration' => ($materialType === 'gold' ? 'Gold' : 'Diamond') . ' Jewelry Purchase',
+                'account_id' => $acct('510001'),           // Material Purchases (Gold)
+                'debit'      => round($totalGoldMaterialAed, 2),
+                'credit'     => 0,
+                'narration'  => 'Gold material purchase — Inv# ' . $invoice->invoice_no,
             ];
         }
 
-        // VAT Input Tax (recoverable)
+        // Diamond material purchased
+        if ($totalDiamondMaterialAed > 0) {
+            $entries[] = [
+                'voucher_id' => $voucher->id,
+                'account_id' => $acct('510002'),           // Material Purchases (Diamond)
+                'debit'      => round($totalDiamondMaterialAed, 2),
+                'credit'     => 0,
+                'narration'  => 'Diamond material purchase — Inv# ' . $invoice->invoice_no,
+            ];
+        }
+
+        // Making / labour charges
+        if ($totalMakingAed > 0) {
+            $entries[] = [
+                'voucher_id' => $voucher->id,
+                'account_id' => $acct('510003'),           // Making Charges Expense
+                'debit'      => round($totalMakingAed, 2),
+                'credit'     => 0,
+                'narration'  => 'Making charges — Inv# ' . $invoice->invoice_no,
+            ];
+        }
+
+        // Parts purchased
+        if ($totalPartsAed > 0) {
+            $entries[] = [
+                'voucher_id' => $voucher->id,
+                'account_id' => $acct('510004'),           // Parts Purchases
+                'debit'      => round($totalPartsAed, 2),
+                'credit'     => 0,
+                'narration'  => 'Parts purchase — Inv# ' . $invoice->invoice_no,
+            ];
+        }
+
+        // Input VAT — recoverable ASSET, not an expense
+        // Net this against Output VAT Payable (208001) when filing VAT return
         if ($totalVatAed > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $getAccountByCode('511001'),
-                'debit' => round($totalVatAed, 2),
-                'credit' => 0,
-                'narration' => 'VAT Input Tax',
+                'account_id' => $acct('105001'),           // VAT Input Tax Recoverable
+                'debit'      => round($totalVatAed, 2),
+                'credit'     => 0,
+                'narration'  => 'Input VAT recoverable — Inv# ' . $invoice->invoice_no,
             ];
         }
 
-        // ========== CREDIT ENTRY (based on payment method) ==========
-        
-        $totalDebit = round($totalInventoryValue + $totalVatAed, 2);
+        // ── 3. Derive credit total from actual debits (never from header field)
+        $totalDebit = round(collect($entries)->sum('debit'), 2);
 
+        if ($totalDebit <= 0) {
+            throw new \Exception(
+                "Invoice #{$invoice->invoice_no} has zero accounting value — no entries created."
+            );
+        }
+
+        // ── 4. CREDIT entry — payment side ────────────────────────────────────
         switch ($invoice->payment_method) {
+
             case 'credit':
+                // Goods received on account — vendor becomes a creditor
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->vendor_id,
-                    'debit' => 0,
-                    'credit' => $totalDebit,
-                    'narration' => 'Purchase on Credit',
+                    'account_id' => $invoice->vendor_id,   // 205001 / 205002 Accounts Payable
+                    'debit'      => 0,
+                    'credit'     => $totalDebit,
+                    'narration'  => 'Purchase on credit — payable to vendor',
                 ];
                 break;
 
             case 'cash':
+                // Immediate cash settlement
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $getAccountByCode('101001'),
-                    'debit' => 0,
-                    'credit' => $totalDebit,
-                    'narration' => 'Cash Payment',
+                    'account_id' => $acct('101001'),        // Cash in Hand
+                    'debit'      => 0,
+                    'credit'     => $totalDebit,
+                    'narration'  => 'Cash paid for purchase — Inv# ' . $invoice->invoice_no,
                 ];
                 break;
 
             case 'cheque':
                 if (!$invoice->bank_name) {
-                    throw new \Exception('Bank account is required for cheque payment');
+                    throw new \Exception(
+                        'Bank account is required for cheque payment (Inv# ' . $invoice->invoice_no . ').'
+                    );
                 }
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->bank_name,
-                    'debit' => 0,
-                    'credit' => $totalDebit,
-                    'narration' => 'Cheque Payment #' . $invoice->cheque_no,
+                    'account_id' => $invoice->bank_name,   // 102001 / 102002 Bank
+                    'debit'      => 0,
+                    'credit'     => $totalDebit,
+                    'narration'  => 'Cheque #' . $invoice->cheque_no . ' — Inv# ' . $invoice->invoice_no,
                 ];
                 break;
 
             case 'bank_transfer':
                 if (!$invoice->transfer_from_bank) {
-                    throw new \Exception('Transfer from bank is required for bank transfer');
+                    throw new \Exception(
+                        'Transfer-from bank is required for bank transfer (Inv# ' . $invoice->invoice_no . ').'
+                    );
                 }
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->transfer_from_bank,
-                    'debit' => 0,
-                    'credit' => $totalDebit,
-                    'narration' => 'Bank Transfer #' . $invoice->transaction_id,
+                    'account_id' => $invoice->transfer_from_bank, // 102001 / 102002 Bank
+                    'debit'      => 0,
+                    'credit'     => $totalDebit,
+                    'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id
+                                    . ' — Inv# ' . $invoice->invoice_no,
                 ];
                 break;
 
             case 'material+making cost':
+                // Vendor supplies raw material + we owe making charges.
+                // Full obligation is credited to the vendor (Accounts Payable).
+                // A separate raw-material-given journal is raised outside this invoice.
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->vendor_id,
-                    'debit' => 0,
-                    'credit' => $totalDebit,
-                    'narration' => 'Material Provided by ' . ($invoice->material_given_by ?? 'Customer'),
+                    'account_id' => $invoice->vendor_id,   // 205001 / 205002 Accounts Payable
+                    'debit'      => 0,
+                    'credit'     => $totalDebit,
+                    'narration'  => 'Material + making cost — payable to '
+                                    . ($invoice->material_given_by ?? 'vendor'),
                 ];
                 break;
 
             default:
-                throw new \Exception('Invalid payment method: ' . $invoice->payment_method);
+                throw new \Exception(
+                    'Unrecognised payment method: "' . $invoice->payment_method . '"'
+                );
         }
 
-        // ========== INSERT ENTRIES ==========
-        
+        // ── 5. Insert all entries ─────────────────────────────────────────────
         foreach ($entries as $entry) {
             AccountingEntry::create($entry);
         }
 
-        // Validate balanced entries
-        $totalDebits = collect($entries)->sum('debit');
-        $totalCredits = collect($entries)->sum('credit');
-        
-        if (round($totalDebits, 2) !== round($totalCredits, 2)) {
-            throw new \Exception("Accounting entry imbalance: Debits ({$totalDebits}) ≠ Credits ({$totalCredits})");
+        // ── 6. Balance check — must balance to the penny ──────────────────────
+        $sumDebits  = round(collect($entries)->sum('debit'),  2);
+        $sumCredits = round(collect($entries)->sum('credit'), 2);
+
+        if ($sumDebits !== $sumCredits) {
+            // Roll back is handled by the caller's DB transaction
+            throw new \Exception(
+                "Accounting imbalance on Invoice #{$invoice->invoice_no}: " .
+                "Debits {$sumDebits} ≠ Credits {$sumCredits}. " .
+                "Voucher #{$voucher->voucher_no} rolled back."
+            );
         }
 
-        Log::info('Purchase Accounting Entries Created', [
-            'invoice_no' => $invoice->invoice_no,
-            'voucher_no' => $voucher->voucher_no,
-            'material' => $totalMaterialAed,
-            'making' => $totalMakingAed,
-            'parts' => $totalPartsAed,
-            'vat' => $totalVatAed,
-            'total_debit' => $totalDebits,
-            'total_credit' => $totalCredits,
+        Log::info('Purchase accounting entries created', [
+            'invoice_no'      => $invoice->invoice_no,
+            'voucher_no'      => $voucher->voucher_no,
+            'gold_material'   => $totalGoldMaterialAed,
+            'diamond_material'=> $totalDiamondMaterialAed,
+            'making'          => $totalMakingAed,
+            'parts'           => $totalPartsAed,
+            'vat_input'       => $totalVatAed,
+            'total_debit'     => $sumDebits,
+            'total_credit'    => $sumCredits,
         ]);
 
         return $voucher;
