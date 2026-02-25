@@ -5,7 +5,7 @@
 @section('content')
 <div class="row">
   <div class="col">
-    <form action="{{ route('purchase_invoices.update', $purchaseInvoice->id) }}" method="POST" enctype="multipart/form-data">
+    <form id="main-form" action="{{ route('purchase_invoices.update', $purchaseInvoice->id) }}" method="POST" enctype="multipart/form-data">
       @csrf
       @method('PUT')
 
@@ -326,7 +326,7 @@
             </div>
             <div class="col-md-2">
               <label>Transfer Date</label>
-              <input type="date" name="transfer_date" class="form-control" value="{{ \Carbon\Carbon::parse($purchaseInvoice->transfer_date)->format('Y-m-d') }}">
+              <input type="date" name="transfer_date" class="form-control" value="{{ $purchaseInvoice->transfer_date ? \Carbon\Carbon::parse($purchaseInvoice->transfer_date)->format('Y-m-d') : '' }}">
             </div>
             <div class="col-md-2 mt-2">
               <label>Transfer Amount</label>
@@ -867,17 +867,23 @@
         };
         reader.readAsArrayBuffer(file);
     });
+  });
 
-    function resubmitWithConfirm() {
-      // Add hidden field to the main form and resubmit
-      const form = document.querySelector('form[action*="update"]');
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'confirm_delete_printed';
-      input.value = '1';
-      form.appendChild(input);
-      form.submit();
-    }
+  function resubmitWithConfirm() {
+    // Add hidden field to the main form and resubmit
+    const form = document.querySelector('form[action*="update"]');
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'confirm_delete_printed';
+    input.value = '1';
+    form.appendChild(input);
+    form.submit();
+  }
+
+  document.getElementById('main-form').addEventListener('submit', function() {
+      const btn = this.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
   });
 </script>
 @endsection

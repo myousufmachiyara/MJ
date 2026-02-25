@@ -157,22 +157,11 @@ class PurchaseInvoiceController extends Controller
             $isTaxable = $request->boolean('is_taxable');
             $prefix    = $isTaxable ? 'PUR-TAX-' : 'PUR-';
 
-            $lastInvoice = PurchaseInvoice::withTrashed()
-                ->where('invoice_no', 'LIKE', $prefix . '%')
-                ->orderBy('id', 'desc')
-                ->first();
+            $lastInvoice = PurchaseInvoice::withTrashed()->where('invoice_no', 'LIKE', $prefix . '%')->orderBy('id', 'desc')->first();
+            $nextNumber  = $lastInvoice ? (int) str_replace($prefix, '', $lastInvoice->invoice_no) + 1 : 1;
+            $invoiceNo   = $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
 
-            $nextNumber = $lastInvoice
-                ? (int) str_replace($prefix, '', $lastInvoice->invoice_no) + 1
-                : 1;
-
-            $invoiceNo = $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
-
-            $netAmountAed = $request->currency === 'USD'
-                ? round($request->net_amount * $request->exchange_rate, 2)
-                : $request->net_amount;
-
-            // ── Create invoice header ─────────────────────────────────────────
+            // ── Create invoice header with placeholder amounts (will update after items) ─
             $invoice = PurchaseInvoice::create([
                 'invoice_no'           => $invoiceNo,
                 'is_taxable'           => $isTaxable,
@@ -185,8 +174,8 @@ class PurchaseInvoiceController extends Controller
                 'gold_rate_usd'        => $request->gold_rate_usd,
                 'diamond_rate_aed'     => $request->diamond_rate_aed,
                 'diamond_rate_usd'     => $request->diamond_rate_usd,
-                'net_amount'           => $request->net_amount,
-                'net_amount_aed'       => $netAmountAed,
+                'net_amount'           => 0,
+                'net_amount_aed'       => 0,
                 'payment_method'       => $request->payment_method,
                 'payment_term'         => $request->payment_term,
                 'bank_name'            => $request->bank_name,
@@ -205,7 +194,7 @@ class PurchaseInvoiceController extends Controller
                 'created_by'           => auth()->id(),
             ]);
 
-            // ── Accumulate totals for accounting (split by material type) ─────
+            // ── Accumulators ──────────────────────────────────────────────────
             $totalGoldMaterialAed    = 0.0;
             $totalDiamondMaterialAed = 0.0;
             $totalMakingAed          = 0.0;
@@ -225,7 +214,7 @@ class PurchaseInvoiceController extends Controller
 
                 $materialValue = $purityWeight * $metalRate;
 
-                // Parts total for this item
+                // Parts total for this item (stored for reference, not included in taxable/net)
                 $itemPartsTotal = 0.0;
                 if (!empty($itemData['parts'])) {
                     foreach ($itemData['parts'] as $partData) {
@@ -234,8 +223,8 @@ class PurchaseInvoiceController extends Controller
                     }
                 }
 
-                // UAE VAT: making charges + parts are taxable, material is zero-rated
-                $taxableAmount = $makingValue + $itemPartsTotal;
+                // Only making is taxable; parts excluded
+                $taxableAmount = $makingValue;
                 $vatAmount     = $taxableAmount * ($itemData['vat_percent'] / 100);
                 $itemTotal     = $materialValue + $makingValue + $vatAmount;
 
@@ -261,7 +250,7 @@ class PurchaseInvoiceController extends Controller
                     'is_printed'       => false,
                 ]);
 
-                // ── Accumulate into correct material bucket ────────────────────
+                // ── Accumulate ─────────────────────────────────────────────────
                 if ($itemData['material_type'] === 'gold') {
                     $totalGoldMaterialAed    += $materialValue;
                 } else {
@@ -291,6 +280,17 @@ class PurchaseInvoiceController extends Controller
                     }
                 }
             }
+
+            // ── Calculate net amount server-side (material + making + VAT, no parts) ──
+            $calculatedNet    = ($totalGoldMaterialAed + $totalDiamondMaterialAed) + $totalMakingAed + $totalVatAed;
+            $calculatedNetAed = $request->currency === 'USD'
+                ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
+                : $calculatedNet;
+
+            $invoice->update([
+                'net_amount'     => round($calculatedNet, 2),
+                'net_amount_aed' => $calculatedNetAed,
+            ]);
 
             // ── Attachments ───────────────────────────────────────────────────
             if ($request->hasFile('attachments')) {
@@ -407,11 +407,7 @@ class PurchaseInvoiceController extends Controller
         try {
             DB::beginTransaction();
 
-            $netAmountAed = $request->currency === 'USD'
-                ? round($request->net_amount * $request->exchange_rate, 2)
-                : $request->net_amount;
-
-            // ── Update invoice header (invoice_no is immutable after creation) ─
+            // ── Update invoice header (net_amount will be overwritten after items) ─
             $invoice->update([
                 'is_taxable'           => $request->boolean('is_taxable'),
                 'vendor_id'            => $request->vendor_id,
@@ -423,8 +419,8 @@ class PurchaseInvoiceController extends Controller
                 'gold_rate_usd'        => $request->gold_rate_usd,
                 'diamond_rate_aed'     => $request->diamond_rate_aed,
                 'diamond_rate_usd'     => $request->diamond_rate_usd,
-                'net_amount'           => $request->net_amount,
-                'net_amount_aed'       => $netAmountAed,
+                'net_amount'           => $invoice->net_amount, // keep old until recalculated
+                'net_amount_aed'       => $invoice->net_amount_aed,
                 'payment_method'       => $request->payment_method,
                 'payment_term'         => $request->payment_term,
                 'bank_name'            => $request->bank_name,
@@ -468,6 +464,7 @@ class PurchaseInvoiceController extends Controller
 
                 $materialValue = $purityWeight * $metalRate;
 
+                // Parts total for this item (stored for reference, not included in taxable/net)
                 $itemPartsTotal = 0.0;
                 if (!empty($itemData['parts'])) {
                     foreach ($itemData['parts'] as $partData) {
@@ -476,7 +473,8 @@ class PurchaseInvoiceController extends Controller
                     }
                 }
 
-                $taxableAmount = $makingValue + $itemPartsTotal;
+                // Only making is taxable; parts excluded
+                $taxableAmount = $makingValue;
                 $vatAmount     = $taxableAmount * ($itemData['vat_percent'] / 100);
                 $itemTotal     = $materialValue + $makingValue + $vatAmount;
 
@@ -540,6 +538,17 @@ class PurchaseInvoiceController extends Controller
                     }
                 }
             }
+
+            // ── Calculate net amount server-side (material + making + VAT, no parts) ──
+            $calculatedNet    = ($totalGoldMaterialAed + $totalDiamondMaterialAed) + $totalMakingAed + $totalVatAed;
+            $calculatedNetAed = $request->currency === 'USD'
+                ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
+                : $calculatedNet;
+
+            $invoice->update([
+                'net_amount'     => round($calculatedNet, 2),
+                'net_amount_aed' => $calculatedNetAed,
+            ]);
 
             // ── New attachments ───────────────────────────────────────────────
             if ($request->hasFile('attachments')) {
@@ -877,7 +886,7 @@ class PurchaseInvoiceController extends Controller
             <tr><td>Material Given By</td><td>'.($invoice->material_given_by ?? '-').'</td></tr>
             <tr><td>Material Received By</td><td>'.($invoice->material_received_by ?? '-').'</td></tr>
             <tr><td>Total Pure Weight</td><td>'.number_format($totalPureWeight, 3).' gms</td></tr>
-            <tr><td>Making + Parts</td><td>'.number_format($totalMakingAed + $totalPartsAed, 2).' AED</td></tr>';
+            <tr><td>Making Charges</td><td>'.number_format($totalMakingAed, 2).' AED</td></tr>';
         }
 
         $summaryHtml .= '</table>
@@ -888,7 +897,6 @@ class PurchaseInvoiceController extends Controller
                         <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary ('.$invoice->currency.')</b></td></tr>
                         <tr><td width="60%">Material Value</td><td width="40%" align="right">'.number_format($totalMaterialAed, 2).'</td></tr>
                         <tr><td>Making Charges</td><td align="right">'.number_format($totalMakingAed, 2).'</td></tr>
-                        <tr><td>Parts Value</td><td align="right">'.number_format($totalPartsAed, 2).'</td></tr>
                         <tr><td>Taxable Amount</td><td align="right">'.number_format($totalTaxableAed, 2).'</td></tr>
                         <tr><td>Total VAT</td><td align="right">'.number_format($totalVatAed, 2).'</td></tr>
                         <tr style="font-weight:bold; background-color:#eeeeee;">
@@ -1103,9 +1111,8 @@ class PurchaseInvoiceController extends Controller
 
         // 3. Convert to AED if USD
         $makingAED = $invoice->currency === 'USD' ? round($totalMaking * $invoice->exchange_rate, 2) : $totalMaking;
-        $partsAED = $invoice->currency === 'USD' ? round($totalParts * $invoice->exchange_rate, 2) : $totalParts;
         $vatAED = $invoice->currency === 'USD' ? round($totalVat * $invoice->exchange_rate, 2) : $totalVat;
-        $payableAmount = $makingAED + $partsAED + $vatAED;
+        $payableAmount = $makingAED + $vatAED;
 
         // 4. MASTER DETAILS
         $pdf->SetFont('helvetica', '', 9);
@@ -1121,7 +1128,7 @@ class PurchaseInvoiceController extends Controller
                 </td>
                 <td width="40%">
                     <table border="1" cellpadding="3" width="100%">
-                        <tr><td><b>PAY NO</b></td><td><b>'.$invoice->invoice_no.'</b></td></tr>
+                        <tr><td><b>REF DOC. NO#</b></td><td><b>'.$invoice->invoice_no.'</b></td></tr>
                         <tr><td><b>DATE</b></td><td><b>'.\Carbon\Carbon::parse($invoice->invoice_date)->format('d/m/Y').'</b></td></tr>
                     </table>
                 </td>
@@ -1143,8 +1150,8 @@ class PurchaseInvoiceController extends Controller
             <tr style="text-align:center;">
                 <td>1</td>
                 <td align="left">
-                    <b>Labour, Making Charges & Parts</b><br>
-                    (Making: '.number_format($makingAED, 2).' + Parts: '.number_format($partsAED, 2).' + VAT: '.number_format($vatAED, 2).')<br>
+                    <b>Labour, Making Charges</b><br>
+                    (Making: '.number_format($makingAED, 2).' + VAT: '.number_format($vatAED, 2).')<br>
                     Against Purchase Invoice # '.$invoice->invoice_no.'
                 </td>
                 <td>'.number_format($payableAmount, 2).'</td>
