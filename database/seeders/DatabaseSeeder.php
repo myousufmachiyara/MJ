@@ -191,7 +191,7 @@ class DatabaseSeeder extends Seeder
             ['label' => '21K (88%)',   'value' => 0.88, 'sort_order' => 3],
             ['label' => '18K (75%)',   'value' => 0.75, 'sort_order' => 4],
             ['label' => '14K (60%)',   'value' => 0.60, 'sort_order' => 5],
-            ['label' => '9K (37.5%)', 'value' => 0.37, 'sort_order' => 6],
+            ['label' => '9K (37.5%)',  'value' => 0.375, 'sort_order' => 6],
         ];
 
         foreach ($purities as $row) {

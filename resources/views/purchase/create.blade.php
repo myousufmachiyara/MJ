@@ -463,8 +463,8 @@
             <td>
                 <select name="items[${nextIndex}][purity]" class="form-control purity">
                   @foreach($purities as $p)
-                    <option value="{{ $p->value }}">{{ $p->label }}</option>
-                  @endforeach
+                      <option value="{{ $p->value }}">{{ $p->label }}</option>
+                    @endforeach
                 </select>
             </td>
             <td><input type="number" name="items[${nextIndex}][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>

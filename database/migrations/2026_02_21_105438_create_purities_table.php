@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('purities', function (Blueprint $table) {
             $table->id();
             $table->string('label');        // e.g. "22K (92%)"
-            $table->decimal('value', 5, 4); // e.g. 0.9200
+            $table->decimal('value', 5, 2); // e.g. 0.9200
             $table->unsignedSmallInteger('sort_order')->default(0);
             $table->timestamps();
         });
