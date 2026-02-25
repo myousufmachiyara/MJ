@@ -1221,9 +1221,8 @@ class PurchaseInvoiceController extends Controller
         $pdf->SetXY(140, $y); $pdf->Cell(50, 5, "Authorized Signature", 0, 0, 'C');
     }
 
-    protected function createPurchaseAccountingEntries(PurchaseInvoice $invoice,float $totalGoldMaterialAed,float $totalDiamondMaterialAed,float $totalMakingAed,float $totalPartsAed,float $totalVatAed): Voucher 
+    protected function createPurchaseAccountingEntries( PurchaseInvoice $invoice, float $totalGoldMaterialAed, float $totalDiamondMaterialAed, float $totalMakingAed, float $totalPartsAed, float $totalVatAed): Voucher 
     {
-        // ── Account resolver ──────────────────────────────────────────────────
         $acct = function (string $code) use ($invoice): int {
             $account = ChartOfAccounts::where('account_code', $code)->first();
             if (!$account) {
@@ -1235,14 +1234,13 @@ class PurchaseInvoiceController extends Controller
             return $account->id;
         };
 
-        // ── 1. Create voucher ─────────────────────────────────────────────────
         $voucher = Voucher::create([
             'voucher_no'     => Voucher::generateVoucherNo('purchase'),
             'voucher_type'   => 'purchase',
             'voucher_date'   => $invoice->invoice_date,
             'reference_type' => 'App\Models\PurchaseInvoice',
             'reference_id'   => $invoice->id,
-            'ac_dr_sid'      => null,  // multi-line — no single debit/credit sub-head
+            'ac_dr_sid'      => null,
             'ac_cr_sid'      => null,
             'amount'         => null,
             'remarks'        => 'Purchase Invoice #' . $invoice->invoice_no,
@@ -1251,65 +1249,50 @@ class PurchaseInvoiceController extends Controller
 
         $entries = [];
 
-        // ── 2. DEBIT entries ──────────────────────────────────────────────────
+        // ── DEBIT entries ─────────────────────────────────────────────────────────
 
-        // Gold material purchased — expense directly to P&L (COGS)
         if ($totalGoldMaterialAed > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('510001'),           // Material Purchases (Gold)
+                'account_id' => $acct('510001'),        // Material Purchases (Gold)
                 'debit'      => round($totalGoldMaterialAed, 2),
                 'credit'     => 0,
                 'narration'  => 'Gold material purchase — Inv# ' . $invoice->invoice_no,
             ];
         }
 
-        // Diamond material purchased
         if ($totalDiamondMaterialAed > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('510002'),           // Material Purchases (Diamond)
+                'account_id' => $acct('510002'),        // Material Purchases (Diamond)
                 'debit'      => round($totalDiamondMaterialAed, 2),
                 'credit'     => 0,
                 'narration'  => 'Diamond material purchase — Inv# ' . $invoice->invoice_no,
             ];
         }
 
-        // Making / labour charges
         if ($totalMakingAed > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('510003'),           // Making Charges Expense
+                'account_id' => $acct('510003'),        // Making Charges Expense
                 'debit'      => round($totalMakingAed, 2),
                 'credit'     => 0,
                 'narration'  => 'Making charges — Inv# ' . $invoice->invoice_no,
             ];
         }
 
-        // Parts purchased
-        if ($totalPartsAed > 0) {
-            $entries[] = [
-                'voucher_id' => $voucher->id,
-                'account_id' => $acct('510004'),           // Parts Purchases
-                'debit'      => round($totalPartsAed, 2),
-                'credit'     => 0,
-                'narration'  => 'Parts purchase — Inv# ' . $invoice->invoice_no,
-            ];
-        }
+        // Parts are NOT journalized — they are informational only on the invoice
 
-        // Input VAT — recoverable ASSET, not an expense
-        // Net this against Output VAT Payable (208001) when filing VAT return
         if ($totalVatAed > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('105001'),           // VAT Input Tax Recoverable
+                'account_id' => $acct('105001'),        // VAT Input Tax Recoverable
                 'debit'      => round($totalVatAed, 2),
                 'credit'     => 0,
                 'narration'  => 'Input VAT recoverable — Inv# ' . $invoice->invoice_no,
             ];
         }
 
-        // ── 3. Derive credit total from actual debits (never from header field)
         $totalDebit = round(collect($entries)->sum('debit'), 2);
 
         if ($totalDebit <= 0) {
@@ -1318,14 +1301,13 @@ class PurchaseInvoiceController extends Controller
             );
         }
 
-        // ── 4. CREDIT entry — payment side ────────────────────────────────────
-        switch ($invoice->payment_method) {
+        // ── CREDIT entry — payment side ───────────────────────────────────────────
 
+        switch ($invoice->payment_method) {
             case 'credit':
-                // Goods received on account — vendor becomes a creditor
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->vendor_id,   // 205001 / 205002 Accounts Payable
+                    'account_id' => $invoice->vendor_id,        // 205001/205002 Accounts Payable
                     'debit'      => 0,
                     'credit'     => $totalDebit,
                     'narration'  => 'Purchase on credit — payable to vendor',
@@ -1333,10 +1315,9 @@ class PurchaseInvoiceController extends Controller
                 break;
 
             case 'cash':
-                // Immediate cash settlement
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $acct('101001'),        // Cash in Hand
+                    'account_id' => $acct('101001'),            // Cash in Hand
                     'debit'      => 0,
                     'credit'     => $totalDebit,
                     'narration'  => 'Cash paid for purchase — Inv# ' . $invoice->invoice_no,
@@ -1345,13 +1326,11 @@ class PurchaseInvoiceController extends Controller
 
             case 'cheque':
                 if (!$invoice->bank_name) {
-                    throw new \Exception(
-                        'Bank account is required for cheque payment (Inv# ' . $invoice->invoice_no . ').'
-                    );
+                    throw new \Exception('Bank account is required for cheque payment (Inv# ' . $invoice->invoice_no . ').');
                 }
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->bank_name,   // 102001 / 102002 Bank
+                    'account_id' => $invoice->bank_name,        // 102001/102002 Bank
                     'debit'      => 0,
                     'credit'     => $totalDebit,
                     'narration'  => 'Cheque #' . $invoice->cheque_no . ' — Inv# ' . $invoice->invoice_no,
@@ -1360,51 +1339,39 @@ class PurchaseInvoiceController extends Controller
 
             case 'bank_transfer':
                 if (!$invoice->transfer_from_bank) {
-                    throw new \Exception(
-                        'Transfer-from bank is required for bank transfer (Inv# ' . $invoice->invoice_no . ').'
-                    );
+                    throw new \Exception('Transfer-from bank is required for bank transfer (Inv# ' . $invoice->invoice_no . ').');
                 }
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->transfer_from_bank, // 102001 / 102002 Bank
+                    'account_id' => $invoice->transfer_from_bank, // 102001/102002 Bank
                     'debit'      => 0,
                     'credit'     => $totalDebit,
-                    'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id
-                                    . ' — Inv# ' . $invoice->invoice_no,
+                    'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id . ' — Inv# ' . $invoice->invoice_no,
                 ];
                 break;
 
             case 'material+making cost':
-                // Vendor supplies raw material + we owe making charges.
-                // Full obligation is credited to the vendor (Accounts Payable).
-                // A separate raw-material-given journal is raised outside this invoice.
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->vendor_id,   // 205001 / 205002 Accounts Payable
+                    'account_id' => $invoice->vendor_id,        // 205001/205002 Accounts Payable
                     'debit'      => 0,
                     'credit'     => $totalDebit,
-                    'narration'  => 'Material + making cost — payable to '
-                                    . ($invoice->material_given_by ?? 'vendor'),
+                    'narration'  => 'Material + making cost — payable to ' . ($invoice->material_given_by ?? 'vendor'),
                 ];
                 break;
 
             default:
-                throw new \Exception(
-                    'Unrecognised payment method: "' . $invoice->payment_method . '"'
-                );
+                throw new \Exception('Unrecognised payment method: "' . $invoice->payment_method . '"');
         }
 
-        // ── 5. Insert all entries ─────────────────────────────────────────────
         foreach ($entries as $entry) {
             AccountingEntry::create($entry);
         }
 
-        // ── 6. Balance check — must balance to the penny ──────────────────────
         $sumDebits  = round(collect($entries)->sum('debit'),  2);
         $sumCredits = round(collect($entries)->sum('credit'), 2);
 
         if ($sumDebits !== $sumCredits) {
-            // Roll back is handled by the caller's DB transaction
             throw new \Exception(
                 "Accounting imbalance on Invoice #{$invoice->invoice_no}: " .
                 "Debits {$sumDebits} ≠ Credits {$sumCredits}. " .
@@ -1413,15 +1380,15 @@ class PurchaseInvoiceController extends Controller
         }
 
         Log::info('Purchase accounting entries created', [
-            'invoice_no'      => $invoice->invoice_no,
-            'voucher_no'      => $voucher->voucher_no,
-            'gold_material'   => $totalGoldMaterialAed,
-            'diamond_material'=> $totalDiamondMaterialAed,
-            'making'          => $totalMakingAed,
-            'parts'           => $totalPartsAed,
-            'vat_input'       => $totalVatAed,
-            'total_debit'     => $sumDebits,
-            'total_credit'    => $sumCredits,
+            'invoice_no'       => $invoice->invoice_no,
+            'voucher_no'       => $voucher->voucher_no,
+            'gold_material'    => $totalGoldMaterialAed,
+            'diamond_material' => $totalDiamondMaterialAed,
+            'making'           => $totalMakingAed,
+            'parts'            => $totalPartsAed,   // logged for reference only
+            'vat_input'        => $totalVatAed,
+            'total_debit'      => $sumDebits,
+            'total_credit'     => $sumCredits,
         ]);
 
         return $voucher;

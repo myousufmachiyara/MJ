@@ -5,7 +5,7 @@
 @section('content')
 <div class="row">
   <div class="col">
-    <form action="{{ route('sale_invoices.update', $saleInvoice->id) }}" method="POST" enctype="multipart/form-data">
+    <form id="main-form" action="{{ route('sale_invoices.update', $saleInvoice->id) }}" method="POST" enctype="multipart/form-data">
       @csrf
       @method('PUT')
 
@@ -262,7 +262,7 @@
             <div class="col-md-2"><label>Account Title</label><input type="text" name="account_title" class="form-control" value="{{ $saleInvoice->account_title }}"></div>
             <div class="col-md-2"><label>Account Number</label><input type="text" name="account_no" class="form-control" value="{{ $saleInvoice->account_no }}"></div>
             <div class="col-md-2"><label>Transaction Ref No</label><input type="text" name="transaction_id" class="form-control" value="{{ $saleInvoice->transaction_id }}"></div>
-            <div class="col-md-2"><label>Transfer Date</label><input type="date" name="transfer_date" class="form-control" value="{{ \Carbon\Carbon::parse($saleInvoice->transfer_date)->format('Y-m-d') }}"></div>
+            <div class="col-md-2"><label>Transfer Date</label><input type="date" name="transfer_date" class="form-control" value="{{ $saleInvoice->transfer_date ? \Carbon\Carbon::parse($saleInvoice->transfer_date)->format('Y-m-d') : '' }}"></div>
             <div class="col-md-2 mt-2"><label>Transfer Amount</label><input type="number" step="any" name="transfer_amount" class="form-control" value="{{ $saleInvoice->transfer_amount }}"></div>
           </div>
 
@@ -300,7 +300,7 @@
 </div>
 
 <script>
-$(document).ready(function () {
+  $(document).ready(function () {
     const products           = @json($products);
     const existingItems      = @json($itemsData);
     const TROY_OUNCE_TO_GRAM = 31.1034768;
@@ -612,6 +612,7 @@ $(document).ready(function () {
         const pct = ((sale - cost) / cost) * 100;
         return { pct, label: pct.toFixed(2) + '%' };
     }
+
     function colourProfitInput(el, pct) {
         el.css('color', pct === null ? '#6c757d' : pct >= 0 ? '#198754' : '#dc3545');
     }
@@ -736,55 +737,64 @@ $(document).ready(function () {
     });
 
     $(document).on('input', '.part-qty, .part-rate, .part-stone-qty, .part-stone-rate', function() {
-        const row = $(this).closest('tr');
-        row.find('.part-total').val(((parseFloat(row.find('.part-qty').val())||0)*(parseFloat(row.find('.part-rate').val())||0)
-            + (parseFloat(row.find('.part-stone-qty').val())||0)*(parseFloat(row.find('.part-stone-rate').val())||0)).toFixed(2));
-        recalcItemGrossWeight(row.closest('.parts-row').prev('.item-row'));
+      const row = $(this).closest('tr');
+      row.find('.part-total').val(((parseFloat(row.find('.part-qty').val())||0)*(parseFloat(row.find('.part-rate').val())||0)
+          + (parseFloat(row.find('.part-stone-qty').val())||0)*(parseFloat(row.find('.part-stone-rate').val())||0)).toFixed(2));
+      recalcItemGrossWeight(row.closest('.parts-row').prev('.item-row'));
     });
 
     $('#excel_import').on('change', function(e) {
-        const file = e.target.files[0]; if (!file) return;
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-            if (!rows.length) return;
-            let cur = null;
-            rows.forEach(r => {
-                if (r['Item Name'] && r['Item Name'].trim()) {
-                    addNewRow(); cur = $('#SaleTable tr.item-row').last();
-                    const bg = parseFloat(r['Gross Wt'])||0;
-                    cur.find('.gross-weight').data('base-gross', bg).val(bg);
-                    cur.find('.item-name-input').val(r['Item Name']);
-                    cur.find('input[name*="[item_description]"]').val(r['Description']||'');
-                    cur.find('.purity').val(r['Purity']||'0.92');
-                    cur.find('.making-rate').val(r['Making Rate']||0);
-                    cur.find('.material-type').val((r['Material']||'gold').toLowerCase());
-                    cur.find('.vat-percent').val(r['VAT %']||0);
-                    calculateRow(cur);
-                }
-                if (r['Part Name'] && r['Part Name'].trim() && cur) {
-                    const pr = cur.next('.parts-row'); pr.show(); pr.find('.add-part').click();
-                    const cp = pr.find('.part-item-row').last();
-                    cp.find('.item-name-input').val(r['Part Name']);
-                    cp.find('input[name*="[part_description]"]').val(r['Part Desc']||'');
-                    cp.find('.part-qty').val(r['Part Qty']||0).trigger('input');
-                    cp.find('.part-rate').val(r['Part Rate']||0);
-                    cp.find('.part-stone-qty').val(r['Stone Qty']||0);
-                    cp.find('.part-stone-rate').val(r['Stone Rate']||0);
-                }
-            });
-            calculateTotals(); alert('Items Imported Successfully!'); $('#excel_import').val('');
-        };
-        reader.readAsArrayBuffer(file);
+      const file = e.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+          const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+          if (!rows.length) return;
+          let cur = null;
+          rows.forEach(r => {
+              if (r['Item Name'] && r['Item Name'].trim()) {
+                  addNewRow(); cur = $('#SaleTable tr.item-row').last();
+                  const bg = parseFloat(r['Gross Wt'])||0;
+                  cur.find('.gross-weight').data('base-gross', bg).val(bg);
+                  cur.find('.item-name-input').val(r['Item Name']);
+                  cur.find('input[name*="[item_description]"]').val(r['Description']||'');
+                  cur.find('.purity').val(r['Purity']||'0.92');
+                  cur.find('.making-rate').val(r['Making Rate']||0);
+                  cur.find('.material-type').val((r['Material']||'gold').toLowerCase());
+                  cur.find('.vat-percent').val(r['VAT %']||0);
+                  calculateRow(cur);
+              }
+              if (r['Part Name'] && r['Part Name'].trim() && cur) {
+                  const pr = cur.next('.parts-row'); pr.show(); pr.find('.add-part').click();
+                  const cp = pr.find('.part-item-row').last();
+                  cp.find('.item-name-input').val(r['Part Name']);
+                  cp.find('input[name*="[part_description]"]').val(r['Part Desc']||'');
+                  cp.find('.part-qty').val(r['Part Qty']||0).trigger('input');
+                  cp.find('.part-rate').val(r['Part Rate']||0);
+                  cp.find('.part-stone-qty').val(r['Stone Qty']||0);
+                  cp.find('.part-stone-rate').val(r['Stone Rate']||0);
+              }
+          });
+          calculateTotals(); alert('Items Imported Successfully!'); $('#excel_import').val('');
+      };
+      reader.readAsArrayBuffer(file);
     });
+  });
 
-    function resubmitWithConfirm() {
-        const form  = document.querySelector('form[action*="update"]');
-        const input = document.createElement('input');
-        input.type = 'hidden'; input.name = 'confirm_delete_printed'; input.value = '1';
-        form.appendChild(input); form.submit();
-    }
-});
+  function resubmitWithConfirm() {
+    const form  = document.querySelector('form[action*="update"]');
+    const input = document.createElement('input');
+    input.type  = 'hidden';
+    input.name  = 'confirm_delete_printed';
+    input.value = '1';
+    form.appendChild(input);
+    form.submit();
+  }
+
+  document.getElementById('main-form').addEventListener('submit', function() {
+    const btn = this.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+  });
 </script>
 @endsection

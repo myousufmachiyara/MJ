@@ -340,161 +340,182 @@ class SaleInvoiceController extends Controller
         }
 
         $request->validate([
-            'is_taxable'                => 'required|boolean',
-            'customer_id'               => 'required|exists:chart_of_accounts,id',
-            'invoice_date'              => 'required|date',
-            'currency'                  => 'required|in:AED,USD',
-            'exchange_rate'             => 'nullable|required_if:currency,USD|numeric|min:0',
-            'net_amount'                => 'required|numeric|min:0',
-            'payment_method'            => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
-            'payment_term'              => 'nullable|string',
-            'gold_rate_aed'             => 'nullable|numeric|min:0',
-            'gold_rate_usd'             => 'nullable|numeric|min:0',
-            'diamond_rate_aed'          => 'nullable|numeric|min:0',
-            'diamond_rate_usd'          => 'nullable|numeric|min:0',
-            'purchase_gold_rate_aed'    => 'nullable|numeric|min:0',
-            'purchase_making_rate_aed'  => 'nullable|numeric|min:0',
-            'bank_name'                 => 'nullable|required_if:payment_method,cheque|exists:chart_of_accounts,id',
-            'cheque_no'                 => 'nullable|required_if:payment_method,cheque|string',
-            'cheque_date'               => 'nullable|required_if:payment_method,cheque|date',
-            'cheque_amount'             => 'nullable|required_if:payment_method,cheque|numeric|min:0',
-            'transfer_from_bank'        => 'nullable|required_if:payment_method,bank_transfer|exists:chart_of_accounts,id',
-            'transfer_to_bank'          => 'nullable|string',
-            'account_title'             => 'nullable|string',
-            'account_no'                => 'nullable|string',
-            'transaction_id'            => 'nullable|string',
-            'transfer_date'             => 'nullable|required_if:payment_method,bank_transfer|date',
-            'transfer_amount'           => 'nullable|required_if:payment_method,bank_transfer|numeric|min:0',
-            'items'                     => 'required|array|min:1',
-            'items.*.item_name'         => 'nullable|string|required_without:items.*.product_id',
-            'items.*.product_id'        => 'nullable|exists:products,id|required_without:items.*.item_name',
-            'items.*.gross_weight'      => 'required|numeric|min:0',
-            'items.*.purity'            => 'required|numeric|min:0|max:1',
-            'items.*.making_rate'       => 'required|numeric|min:0',
-            'items.*.material_type'     => 'required|in:gold,diamond',
-            'items.*.vat_percent'       => 'required|numeric|min:0',
-            'material_given_by'         => 'nullable|required_if:payment_method,material+making cost|string',
-            'material_received_by'      => 'nullable|required_if:payment_method,material+making cost|string',
+            'is_taxable'               => 'required|boolean',
+            'customer_id'              => 'required|exists:chart_of_accounts,id',
+            'invoice_date'             => 'required|date',
+            'currency'                 => 'required|in:AED,USD',
+            'exchange_rate'            => 'nullable|required_if:currency,USD|numeric|min:0',
+            'net_amount'               => 'required|numeric|min:0',
+            'payment_method'           => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
+            'payment_term'             => 'nullable|string',
+            'gold_rate_aed'            => 'nullable|numeric|min:0',
+            'gold_rate_usd'            => 'nullable|numeric|min:0',
+            'diamond_rate_aed'         => 'nullable|numeric|min:0',
+            'diamond_rate_usd'         => 'nullable|numeric|min:0',
+            'purchase_gold_rate_aed'   => 'nullable|numeric|min:0',
+            'purchase_making_rate_aed' => 'nullable|numeric|min:0',
+            'bank_name'                => 'nullable|required_if:payment_method,cheque|exists:chart_of_accounts,id',
+            'cheque_no'                => 'nullable|required_if:payment_method,cheque|string',
+            'cheque_date'              => 'nullable|required_if:payment_method,cheque|date',
+            'cheque_amount'            => 'nullable|required_if:payment_method,cheque|numeric|min:0',
+            'transfer_from_bank'       => 'nullable|required_if:payment_method,bank_transfer|exists:chart_of_accounts,id',
+            'transfer_to_bank'         => 'nullable|string',
+            'account_title'            => 'nullable|string',
+            'account_no'               => 'nullable|string',
+            'transaction_id'           => 'nullable|string',
+            'transfer_date'            => 'nullable|required_if:payment_method,bank_transfer|date',
+            'transfer_amount'          => 'nullable|required_if:payment_method,bank_transfer|numeric|min:0',
+            'items'                    => 'required|array|min:1',
+            'items.*.item_name'        => 'nullable|string|required_without:items.*.product_id',
+            'items.*.product_id'       => 'nullable|exists:products,id|required_without:items.*.item_name',
+            'items.*.gross_weight'     => 'required|numeric|min:0',
+            'items.*.purity'           => 'required|numeric|min:0|max:1',
+            'items.*.making_rate'      => 'required|numeric|min:0',
+            'items.*.material_type'    => 'required|in:gold,diamond',
+            'items.*.vat_percent'      => 'required|numeric|min:0',
+            'material_given_by'        => 'nullable|required_if:payment_method,material+making cost|string',
+            'material_received_by'     => 'nullable|required_if:payment_method,material+making cost|string',
         ]);
 
         try {
             DB::beginTransaction();
 
-            $netAmountAed = $request->currency === 'USD'
-                ? round($request->net_amount * $request->exchange_rate, 2)
-                : $request->net_amount;
-
-            // 1. Update header
+            // ── 1. Update header (net_amount placeholder — recalculated below) ───
             $invoice->update([
-                'is_taxable'              => $request->boolean('is_taxable'),
-                'customer_id'             => $request->customer_id,
-                'invoice_date'            => $request->invoice_date,
-                'remarks'                 => $request->remarks,
-                'currency'                => $request->currency,
-                'exchange_rate'           => $request->exchange_rate,
-                'gold_rate_aed'           => $request->gold_rate_aed,
-                'gold_rate_usd'           => $request->gold_rate_usd,
-                'diamond_rate_aed'        => $request->diamond_rate_aed,
-                'diamond_rate_usd'        => $request->diamond_rate_usd,
-                'purchase_gold_rate_aed'  => $request->purchase_gold_rate_aed,
-                'purchase_making_rate_aed'=> $request->purchase_making_rate_aed,
-                'net_amount'              => $request->net_amount,
-                'net_amount_aed'          => $netAmountAed,
-                'payment_method'          => $request->payment_method,
-                'payment_term'            => $request->payment_term,
-                'bank_name'               => $request->bank_name,
-                'cheque_no'               => $request->cheque_no,
-                'cheque_date'             => $request->cheque_date,
-                'cheque_amount'           => $request->cheque_amount,
-                'transfer_from_bank'      => $request->transfer_from_bank,
-                'transfer_to_bank'        => $request->transfer_to_bank,
-                'account_title'           => $request->account_title,
-                'account_no'              => $request->account_no,
-                'transaction_id'          => $request->transaction_id,
-                'transfer_date'           => $request->transfer_date,
-                'transfer_amount'         => $request->transfer_amount,
-                'material_received_by'    => $request->material_received_by,
-                'material_given_by'       => $request->material_given_by,
+                'is_taxable'               => $request->boolean('is_taxable'),
+                'customer_id'              => $request->customer_id,
+                'invoice_date'             => $request->invoice_date,
+                'remarks'                  => $request->remarks,
+                'currency'                 => $request->currency,
+                'exchange_rate'            => $request->exchange_rate,
+                'gold_rate_aed'            => $request->gold_rate_aed,
+                'gold_rate_usd'            => $request->gold_rate_usd,
+                'diamond_rate_aed'         => $request->diamond_rate_aed,
+                'diamond_rate_usd'         => $request->diamond_rate_usd,
+                'purchase_gold_rate_aed'   => $request->purchase_gold_rate_aed,
+                'purchase_making_rate_aed' => $request->purchase_making_rate_aed,
+                'net_amount'               => 0,        // recalculated after items
+                'net_amount_aed'           => 0,
+                'payment_method'           => $request->payment_method,
+                'payment_term'             => $request->payment_term,
+                'received_by'              => $request->received_by,
+                'bank_name'                => $request->bank_name,
+                'cheque_no'                => $request->cheque_no,
+                'cheque_date'              => $request->cheque_date,
+                'cheque_amount'            => $request->cheque_amount,
+                'transfer_from_bank'       => $request->transfer_from_bank,
+                'transfer_to_bank'         => $request->transfer_to_bank,
+                'account_title'            => $request->account_title,
+                'account_no'               => $request->account_no,
+                'transaction_id'           => $request->transaction_id,
+                'transfer_date'            => $request->transfer_date,
+                'transfer_amount'          => $request->transfer_amount,
+                'material_weight'          => $request->material_weight,
+                'material_purity'          => $request->material_purity,
+                'material_value'           => $request->material_value,
+                'making_charges'           => $request->making_charges,
+                'material_given_by'        => $request->material_given_by,
+                'material_received_by'     => $request->material_received_by,
             ]);
 
-            // 2. Delete old items and parts
+            // ── 2. Delete old items and parts ─────────────────────────────────────
             foreach ($invoice->items as $oldItem) {
                 $oldItem->parts()->delete();
             }
             $invoice->items()->delete();
 
-            $totalVatAed      = 0;
-            $totalMaterialAed = 0;
-            $totalMakingAed   = 0;
-            $totalPartsAed    = 0;
+            // ── 3. Accumulators ───────────────────────────────────────────────────
+            $totalGoldMaterialAed    = 0.0;
+            $totalDiamondMaterialAed = 0.0;
+            $totalMakingAed          = 0.0;
+            $totalPartsAed           = 0.0;
+            $totalVatAed             = 0.0;
 
-            // 3. Re-create items and parts
+            $purchaseGoldRate   = (float) ($request->purchase_gold_rate_aed  ?? 0);
+            $purchaseMakingRate = (float) ($request->purchase_making_rate_aed ?? 0);
+
+            // ── 4. Re-create items ────────────────────────────────────────────────
             foreach ($request->items as $itemData) {
-                $purityWeight = $itemData['gross_weight'] * $itemData['purity'];
-                $col995       = $purityWeight / 0.995;
-                $makingValue  = $itemData['gross_weight'] * $itemData['making_rate'];
 
-                $metalRate = ($itemData['material_type'] === 'gold')
-                    ? ($request->gold_rate_aed ?? 0)
-                    : ($request->diamond_rate_aed ?? 0);
+                $grossWeight  = (float) $itemData['gross_weight'];
+                $purity       = (float) $itemData['purity'];
+                $makingRate   = (float) $itemData['making_rate'];
+                $vatPercent   = (float) $itemData['vat_percent'];
+                $materialType =         $itemData['material_type'];
+
+                $purityWeight = $grossWeight * $purity;
+                $col995       = $purityWeight / 0.995;
+                $makingValue  = $grossWeight * $makingRate;
+
+                $metalRate = ($materialType === 'gold')
+                    ? (float) ($request->gold_rate_aed    ?? 0)
+                    : (float) ($request->diamond_rate_aed ?? 0);
 
                 $materialValue = $purityWeight * $metalRate;
 
-                $itemPartsTotal = 0;
+                // Parts total — informational only, NOT included in taxable/VAT
+                $itemPartsTotal = 0.0;
                 if (!empty($itemData['parts'])) {
                     foreach ($itemData['parts'] as $partData) {
-                        $itemPartsTotal += ($partData['qty'] * $partData['rate'])
-                            + (($partData['stone_qty'] ?? 0) * ($partData['stone_rate'] ?? 0));
+                        $itemPartsTotal += ((float) $partData['qty'] * (float) $partData['rate'])
+                            + ((float) ($partData['stone_qty']  ?? 0) * (float) ($partData['stone_rate'] ?? 0));
                     }
                 }
 
-                $taxable   = $makingValue + $itemPartsTotal;
-                $vatAmount = $taxable * ($itemData['vat_percent'] / 100);
+                // Taxable = making only (parts excluded)
+                $taxableAmount = $makingValue;
+                $vatAmount     = $taxableAmount * ($vatPercent / 100);
+
+                // Item total = material + making + VAT (no parts)
                 $itemTotal = $materialValue + $makingValue + $vatAmount;
 
-                // Profit % calculation
-                $purchaseGoldRate   = $request->purchase_gold_rate_aed   ?? 0;
-                $purchaseMakingRate = $request->purchase_making_rate_aed  ?? 0;
-                $costTotal          = ($purchaseGoldRate * $purityWeight) + ($itemData['gross_weight'] * $purchaseMakingRate);
-                $profitPct          = ($costTotal > 0) ? (($itemTotal - $costTotal) / $costTotal) * 100 : null;
+                // Profit %
+                $costTotal = ($purchaseGoldRate * $purityWeight) + ($grossWeight * $purchaseMakingRate);
+                $profitPct = ($costTotal > 0) ? (($itemTotal - $costTotal) / $costTotal) * 100 : null;
 
                 $invoiceItem = $invoice->items()->create([
-                    'item_name'         => $itemData['item_name'] ?? null,
-                    'product_id'        => $itemData['product_id'] ?? null,
-                    'item_description'  => $itemData['item_description'] ?? null,
-                    'gross_weight'      => $itemData['gross_weight'],
-                    'purity'            => $itemData['purity'],
-                    'purity_weight'     => $purityWeight,
-                    'col_995'           => $col995,
-                    'making_rate'       => $itemData['making_rate'],
-                    'making_value'      => $makingValue,
-                    'material_type'     => $itemData['material_type'],
-                    'material_rate'     => $metalRate,
-                    'material_value'    => $materialValue,
-                    'taxable_amount'    => $taxable,
-                    'vat_percent'       => $itemData['vat_percent'],
-                    'vat_amount'        => $vatAmount,
-                    'item_total'        => $itemTotal,
-                    'profit_pct'        => $profitPct !== null ? round($profitPct, 2) : null,
+                    'item_name'        => $itemData['item_name']        ?? null,
+                    'product_id'       => $itemData['product_id']       ?? null,
+                    'item_description' => $itemData['item_description']  ?? null,
+                    'gross_weight'     => $grossWeight,
+                    'purity'           => $purity,
+                    'purity_weight'    => $purityWeight,
+                    'col_995'          => $col995,
+                    'making_rate'      => $makingRate,
+                    'making_value'     => $makingValue,
+                    'material_type'    => $materialType,
+                    'material_rate'    => $metalRate,
+                    'material_value'   => $materialValue,
+                    'taxable_amount'   => $taxableAmount,
+                    'vat_percent'      => $vatPercent,
+                    'vat_amount'       => $vatAmount,
+                    'item_total'       => $itemTotal,
+                    'profit_pct'       => $profitPct !== null ? round($profitPct, 2) : null,
                 ]);
 
-                $totalVatAed      += $vatAmount;
-                $totalMaterialAed += $materialValue;
-                $totalMakingAed   += $makingValue;
-                $totalPartsAed    += $itemPartsTotal;
+                // Accumulate — gold and diamond split for accounting
+                if ($materialType === 'gold') {
+                    $totalGoldMaterialAed    += $materialValue;
+                } else {
+                    $totalDiamondMaterialAed += $materialValue;
+                }
+                $totalMakingAed += $makingValue;
+                $totalVatAed    += $vatAmount;
+                $totalPartsAed  += $itemPartsTotal;
 
+                // ── 5. Re-create parts (informational) ───────────────────────────
                 if (!empty($itemData['parts'])) {
                     foreach ($itemData['parts'] as $partData) {
-                        $partTotal = ($partData['qty'] * $partData['rate'])
-                            + (($partData['stone_qty'] ?? 0) * ($partData['stone_rate'] ?? 0));
+                        $partTotal = ((float) $partData['qty'] * (float) $partData['rate'])
+                            + ((float) ($partData['stone_qty']  ?? 0) * (float) ($partData['stone_rate'] ?? 0));
 
                         $invoiceItem->parts()->create([
-                            'product_id'       => $partData['product_id'] ?? null,
-                            'item_name'        => $partData['item_name'] ?? null,
+                            'product_id'       => $partData['product_id']       ?? null,
+                            'item_name'        => $partData['item_name']        ?? null,
                             'qty'              => $partData['qty'],
                             'rate'             => $partData['rate'],
-                            'stone_qty'        => $partData['stone_qty'] ?? 0,
-                            'stone_rate'       => $partData['stone_rate'] ?? 0,
+                            'stone_qty'        => $partData['stone_qty']        ?? 0,
+                            'stone_rate'       => $partData['stone_rate']       ?? 0,
                             'total'            => $partTotal,
                             'part_description' => $partData['part_description'] ?? null,
                         ]);
@@ -502,7 +523,19 @@ class SaleInvoiceController extends Controller
                 }
             }
 
-            // 4. New attachments
+            // ── 6. Recalculate and update net_amount server-side ─────────────────
+            $calculatedNet    = $totalGoldMaterialAed + $totalDiamondMaterialAed
+                            + $totalMakingAed + $totalVatAed;
+            $calculatedNetAed = $request->currency === 'USD'
+                ? round($calculatedNet * ((float) ($request->exchange_rate ?? 1)), 2)
+                : $calculatedNet;
+
+            $invoice->update([
+                'net_amount'     => round($calculatedNet, 2),
+                'net_amount_aed' => $calculatedNetAed,
+            ]);
+
+            // ── 7. Attachments ────────────────────────────────────────────────────
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {
                     $path = $file->store('sale_invoices', 'public');
@@ -510,7 +543,7 @@ class SaleInvoiceController extends Controller
                 }
             }
 
-            // 5. Reverse old accounting entries and recreate
+            // ── 8. Reverse old accounting entries and recreate ────────────────────
             $oldVoucher = Voucher::where('reference_type', 'App\Models\SaleInvoice')
                 ->where('reference_id', $invoice->id)
                 ->first();
@@ -522,9 +555,10 @@ class SaleInvoiceController extends Controller
 
             $this->createSaleAccountingEntries(
                 $invoice,
-                $totalMaterialAed,
+                $totalGoldMaterialAed,
+                $totalDiamondMaterialAed,
                 $totalMakingAed,
-                $totalPartsAed,
+                $totalPartsAed,     // passed for logging only
                 $totalVatAed
             );
 
@@ -534,7 +568,7 @@ class SaleInvoiceController extends Controller
 
         } catch (\Throwable $e) {
             DB::rollBack();
-            Log::error("Sale Invoice Update Error: " . $e->getMessage(), [
+            Log::error('Sale Invoice Update Error: ' . $e->getMessage(), [
                 'line'  => $e->getLine(),
                 'file'  => $e->getFile(),
                 'trace' => $e->getTraceAsString(),
@@ -1031,223 +1065,130 @@ class SaleInvoiceController extends Controller
         $pdf->Cell(40, 5, "AUTHORISED SIGNATORY", 0, 0, 'C');
     }
 
-protected function createSaleAccountingEntries($invoice,$material,$making,$parts,$vat)
-{
-    $voucher = Voucher::create([
-        'voucher_no'     => Voucher::generateVoucherNo('sale'),
-        'voucher_type'   => 'sale',
-        'voucher_date'   => $invoice->invoice_date,
-        'reference_type' => SaleInvoice::class,
-        'reference_id'   => $invoice->id,
-        'remarks'        => 'Sale Invoice #'.$invoice->invoice_no,
-        'created_by'     => auth()->id(),
-    ]);
+    protected function createSaleAccountingEntries(SaleInvoice $invoice,float $totalGoldMaterialAed,float $totalDiamondMaterialAed,float $totalMakingAed,float $totalPartsAed,float $totalVatAed): Voucher {
+        $acct = function (string $code) use ($invoice): int {
+            $account = ChartOfAccounts::where('account_code', $code)->first();
+            if (!$account) {
+                throw new \Exception(
+                    "Account code [{$code}] not found in Chart of Accounts " .
+                    "(Invoice #{$invoice->invoice_no})."
+                );
+            }
+            return $account->id;
+        };
 
-    $entries=[];
+        $voucher = Voucher::create([
+            'voucher_no'     => Voucher::generateVoucherNo('sale'),
+            'voucher_type'   => 'sale',
+            'voucher_date'   => $invoice->invoice_date,
+            'reference_type' => 'App\Models\SaleInvoice',
+            'reference_id'   => $invoice->id,
+            'ac_dr_sid'      => null,
+            'ac_cr_sid'      => null,
+            'amount'         => null,
+            'remarks'        => 'Sale Invoice #' . $invoice->invoice_no,
+            'created_by'     => auth()->id(),
+        ]);
 
-    $total = round($material+$making+$parts+$vat,2);
+        $entries = [];
 
-    /* ------------------ DEBIT ------------------ */
+        // ── Total receivable = material + making + VAT (no parts) ────────────────
+        $totalDebit = round($totalGoldMaterialAed + $totalDiamondMaterialAed + $totalMakingAed + $totalVatAed, 2);
 
-    $debitAccount = match ($invoice->payment_method) {
-        'credit'        => $invoice->customer_id,
-        'cash'          => $this->coa('cash'),
-        'cheque'        => $invoice->bank_name,
-        'bank_transfer' => $invoice->transfer_from_bank,
-        default         => $invoice->customer_id,
-    };
+        if ($totalDebit <= 0) {
+            throw new \Exception(
+                "Invoice #{$invoice->invoice_no} has zero accounting value — no entries created."
+            );
+        }
 
-    $entries[]=[
-        'voucher_id'=>$voucher->id,
-        'account_id'=>$debitAccount,
-        'debit'=>$total,
-        'credit'=>0,
-        'narration'=>'Invoice '.$invoice->invoice_no
-    ];
+        // ── DEBIT entry — receivable/payment side ─────────────────────────────────
 
-    /* ------------------ CREDIT REVENUE ------------------ */
+        $debitAccountId = match ($invoice->payment_method) {
+            'cash'          => $acct('101001'),                 // Cash in Hand
+            'cheque'        => $invoice->bank_name,             // 102001/102002 Bank
+            'bank_transfer' => $invoice->transfer_from_bank,    // 102001/102002 Bank
+            default         => $invoice->customer_id,           // 103001/103002 Accounts Receivable
+        };
 
-    if($material>0){
-        $entries[]=[
-            'voucher_id'=>$voucher->id,
-            'account_id'=>$this->coa('gold_sale'),
-            'debit'=>0,'credit'=>round($material,2)
+        $entries[] = [
+            'voucher_id' => $voucher->id,
+            'account_id' => $debitAccountId,
+            'debit'      => $totalDebit,
+            'credit'     => 0,
+            'narration'  => 'Sale Invoice #' . $invoice->invoice_no,
         ];
+
+        // ── CREDIT entries — revenue side ─────────────────────────────────────────
+
+        if ($totalGoldMaterialAed > 0) {
+            $entries[] = [
+                'voucher_id' => $voucher->id,
+                'account_id' => $acct('401001'),                // Gold Sales Revenue
+                'debit'      => 0,
+                'credit'     => round($totalGoldMaterialAed, 2),
+                'narration'  => 'Gold material revenue — Inv# ' . $invoice->invoice_no,
+            ];
+        }
+
+        if ($totalDiamondMaterialAed > 0) {
+            $entries[] = [
+                'voucher_id' => $voucher->id,
+                'account_id' => $acct('401002'),                // Diamond Sales Revenue
+                'debit'      => 0,
+                'credit'     => round($totalDiamondMaterialAed, 2),
+                'narration'  => 'Diamond material revenue — Inv# ' . $invoice->invoice_no,
+            ];
+        }
+
+        if ($totalMakingAed > 0) {
+            $entries[] = [
+                'voucher_id' => $voucher->id,
+                'account_id' => $acct('402001'),                // Making Charges Income
+                'debit'      => 0,
+                'credit'     => round($totalMakingAed, 2),
+                'narration'  => 'Making charges income — Inv# ' . $invoice->invoice_no,
+            ];
+        }
+
+        // Parts are NOT journalized — removed from revenue entries
+
+        if ($totalVatAed > 0) {
+            $entries[] = [
+                'voucher_id' => $voucher->id,
+                'account_id' => $acct('208001'),                // Output VAT Payable
+                'debit'      => 0,
+                'credit'     => round($totalVatAed, 2),
+                'narration'  => 'Output VAT payable — Inv# ' . $invoice->invoice_no,
+            ];
+        }
+
+        foreach ($entries as $entry) {
+            AccountingEntry::create($entry);
+        }
+
+        $sumDebits  = round(collect($entries)->sum('debit'),  2);
+        $sumCredits = round(collect($entries)->sum('credit'), 2);
+
+        if ($sumDebits !== $sumCredits) {
+            throw new \Exception(
+                "Accounting imbalance on Invoice #{$invoice->invoice_no}: " .
+                "Debits {$sumDebits} ≠ Credits {$sumCredits}. " .
+                "Voucher #{$voucher->voucher_no} rolled back."
+            );
+        }
+
+        Log::info('Sale accounting entries created', [
+            'invoice_no'       => $invoice->invoice_no,
+            'voucher_no'       => $voucher->voucher_no,
+            'gold_material'    => $totalGoldMaterialAed,
+            'diamond_material' => $totalDiamondMaterialAed,
+            'making'           => $totalMakingAed,
+            'parts'            => $totalPartsAed,   // logged for reference only
+            'vat_output'       => $totalVatAed,
+            'total_debit'      => $sumDebits,
+            'total_credit'     => $sumCredits,
+        ]);
+
+        return $voucher;
     }
-
-    if($making>0){
-        $entries[]=[
-            'voucher_id'=>$voucher->id,
-            'account_id'=>$this->coa('making_income'),
-            'debit'=>0,'credit'=>round($making,2)
-        ];
-    }
-
-    if($parts>0){
-        $entries[]=[
-            'voucher_id'=>$voucher->id,
-            'account_id'=>$this->coa('parts_sale'),
-            'debit'=>0,'credit'=>round($parts,2)
-        ];
-    }
-
-    if($vat>0){
-        $entries[]=[
-            'voucher_id'=>$voucher->id,
-            'account_id'=>$this->coa('output_vat'),
-            'debit'=>0,'credit'=>round($vat,2)
-        ];
-    }
-
-    foreach($entries as $e){
-        AccountingEntry::create($e);
-    }
-
-    // Balance check
-    if(round(collect($entries)->sum('debit'),2)
-        != round(collect($entries)->sum('credit'),2)){
-        throw new Exception("Journal imbalance");
-    }
-
-    return $voucher;
-}
-    // protected function createSaleAccountingEntries($invoice, $totalMaterialAed, $totalMakingAed, $totalPartsAed, $totalVatAed)
-    // {
-    //     $getAccountByCode = function ($code) {
-    //         $account = ChartOfAccounts::where('account_code', $code)->first();
-    //         if (!$account) {
-    //             throw new \Exception("Account code {$code} not found in Chart of Accounts");
-    //         }
-    //         return $account->id;
-    //     };
-
-    //     $voucher = Voucher::create([
-    //         'voucher_no'     => Voucher::generateVoucherNo('sale'),
-    //         'voucher_type'   => 'sale',
-    //         'voucher_date'   => $invoice->invoice_date,
-    //         'reference_type' => 'App\Models\SaleInvoice',
-    //         'reference_id'   => $invoice->id,
-    //         'ac_dr_sid'      => null,
-    //         'ac_cr_sid'      => null,
-    //         'amount'         => null,
-    //         'remarks'        => 'Sale Invoice #' . $invoice->invoice_no,
-    //         'created_by'     => auth()->id(),
-    //     ]);
-
-    //     $entries = [];
-
-    //     // Total sale revenue = material + making + parts
-    //     $totalRevenueValue  = $totalMaterialAed + $totalMakingAed + $totalPartsAed;
-    //     $totalReceivable    = $totalRevenueValue + $totalVatAed;
-
-    //     // DEBIT: Receivable / Payment account
-    //     switch ($invoice->payment_method) {
-    //         case 'credit':
-    //             $entries[] = [
-    //                 'voucher_id' => $voucher->id,
-    //                 'account_id' => $invoice->customer_id,
-    //                 'debit'      => round($totalReceivable, 2),
-    //                 'credit'     => 0,
-    //                 'narration'  => 'Sale on Credit',
-    //             ];
-    //             break;
-
-    //         case 'cash':
-    //             $entries[] = [
-    //                 'voucher_id' => $voucher->id,
-    //                 'account_id' => $getAccountByCode('101001'),
-    //                 'debit'      => round($totalReceivable, 2),
-    //                 'credit'     => 0,
-    //                 'narration'  => 'Cash Receipt',
-    //             ];
-    //             break;
-
-    //         case 'cheque':
-    //             if (!$invoice->bank_name) {
-    //                 throw new \Exception('Bank account is required for cheque payment');
-    //             }
-    //             $entries[] = [
-    //                 'voucher_id' => $voucher->id,
-    //                 'account_id' => $invoice->bank_name,
-    //                 'debit'      => round($totalReceivable, 2),
-    //                 'credit'     => 0,
-    //                 'narration'  => 'Cheque Receipt #' . $invoice->cheque_no,
-    //             ];
-    //             break;
-
-    //         case 'bank_transfer':
-    //             if (!$invoice->transfer_from_bank) {
-    //                 throw new \Exception('Transfer bank is required for bank transfer');
-    //             }
-    //             $entries[] = [
-    //                 'voucher_id' => $voucher->id,
-    //                 'account_id' => $invoice->transfer_from_bank,
-    //                 'debit'      => round($totalReceivable, 2),
-    //                 'credit'     => 0,
-    //                 'narration'  => 'Bank Transfer #' . $invoice->transaction_id,
-    //             ];
-    //             break;
-
-    //         case 'material+making cost':
-    //             $entries[] = [
-    //                 'voucher_id' => $voucher->id,
-    //                 'account_id' => $invoice->customer_id,
-    //                 'debit'      => round($totalReceivable, 2),
-    //                 'credit'     => 0,
-    //                 'narration'  => 'Material Received from ' . ($invoice->material_given_by ?? 'Customer'),
-    //             ];
-    //             break;
-
-    //         default:
-    //             throw new \Exception('Invalid payment method: ' . $invoice->payment_method);
-    //     }
-
-    //     // CREDIT: Sales Revenue
-    //     $materialType     = $invoice->items->first()->material_type;
-    //     $revenueAccountCode = $materialType === 'gold' ? '401001' : '401002'; // adjust to your COA
-
-    //     if ($totalRevenueValue > 0) {
-    //         $entries[] = [
-    //             'voucher_id' => $voucher->id,
-    //             'account_id' => $getAccountByCode($revenueAccountCode),
-    //             'debit'      => 0,
-    //             'credit'     => round($totalRevenueValue, 2),
-    //         ];
-    //     }
-
-    //     // CREDIT: VAT Output Tax
-    //     if ($totalVatAed > 0) {
-    //         $entries[] = [
-    //             'voucher_id' => $voucher->id,
-    //             'account_id' => $getAccountByCode('511002'), // VAT Output account — adjust to your COA
-    //             'debit'      => 0,
-    //             'credit'     => round($totalVatAed, 2),
-    //             'narration'  => 'VAT Output Tax',
-    //         ];
-    //     }
-
-    //     foreach ($entries as $entry) {
-    //         AccountingEntry::create($entry);
-    //     }
-
-    //     $totalDebits  = collect($entries)->sum('debit');
-    //     $totalCredits = collect($entries)->sum('credit');
-
-    //     if (round($totalDebits, 2) !== round($totalCredits, 2)) {
-    //         throw new \Exception("Accounting entry imbalance: Debits ({$totalDebits}) ≠ Credits ({$totalCredits})");
-    //     }
-
-    //     Log::info('Sale Accounting Entries Created', [
-    //         'invoice_no'    => $invoice->invoice_no,
-    //         'voucher_no'    => $voucher->voucher_no,
-    //         'material'      => $totalMaterialAed,
-    //         'making'        => $totalMakingAed,
-    //         'parts'         => $totalPartsAed,
-    //         'vat'           => $totalVatAed,
-    //         'total_debit'   => $totalDebits,
-    //         'total_credit'  => $totalCredits,
-    //     ]);
-
-    //     return $voucher;
-    // }
 }

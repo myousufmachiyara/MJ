@@ -17,7 +17,7 @@
       </header>
 
       {{-- ── Permission-aware tab bar ───────────────────────────────────────── --}}
-      <div class="card-body pb-0 pt-2">
+      <div class="tabs pb-0 pt-2">
         <ul class="nav nav-tabs">
 
           {{-- Purchase tab: only users who can create purchase invoices --}}
