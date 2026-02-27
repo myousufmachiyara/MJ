@@ -768,6 +768,7 @@
 
         $('#sum_gold_gross_weight').val(calculatedGoldGrossTotal.toFixed(3));
         $('#sum_diamond_cts').val(totalDiamondCTS.toFixed(3));
+        $('#sum_stone_qty').val(totalStoneQty.toFixed(2));
         $('#sum_purity_weight').val(sumPurity.toFixed(3));
         $('#sum_995').val(sum995.toFixed(3));
         $('#sum_making_value').val(makingTotalWithVat.toFixed(2));
