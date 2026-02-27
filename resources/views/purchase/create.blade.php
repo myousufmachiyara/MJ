@@ -626,13 +626,15 @@
 
     // ================= CALCULATIONS =================
 
-    // When user manually edits gross weight, update the base-gross data attribute
+    // When user manually edits gross weight
     $(document).on('input', '.gross-weight', function() {
         const grossInput = $(this);
+        // Store as base for future part contributions
         grossInput.data('base-gross', parseFloat(grossInput.val()) || 0);
+        // Just recalculate the row — do NOT call recalcItemGrossWeight here
         const itemRow = grossInput.closest('tr.item-row');
-        // Recalc using new base, incorporating any existing parts
-        recalcItemGrossWeight(itemRow);
+        calculateRow(itemRow);
+        calculateTotals();
     });
 
     // When any other item field changes, just recalculate the row
