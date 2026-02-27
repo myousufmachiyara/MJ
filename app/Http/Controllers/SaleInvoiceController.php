@@ -695,6 +695,8 @@ class SaleInvoiceController extends Controller
         // =========================================================================
         // PAGE 1: SALE INVOICE
         // =========================================================================
+        $pdf->SetFont('helvetica', '', 7.5);
+
         $pdf->AddPage();
 
         $logoPath = public_path('assets/img/mj-logo.jpeg');
@@ -746,30 +748,30 @@ class SaleInvoiceController extends Controller
         $pdf->writeHTML($customerHtml, true, false, false, false);
 
         $html = '
-        <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
-            <thead>
-                <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
-                    <th width="3%" rowspan="2">#</th>
-                    <th width="10%" rowspan="2">Item Name</th>
-                    <th width="10%" rowspan="2">Description</th>
-                    <th width="7%" rowspan="2">Gross Wt</th>
-                    <th width="6%" rowspan="2">Purity</th>
-                    <th width="7%" rowspan="2">Purity Wt</th>
-                    <th width="6%" rowspan="2">995</th>
-                    <th width="14%" colspan="2">Making</th>
-                    <th width="8%" rowspan="2">Material</th>
-                    <th width="8%" rowspan="2">Material Val</th>
-                    <th width="7%" rowspan="2">Taxable</th>
-                    <th width="6%" rowspan="2">VAT %</th>
-                    <th width="8%" rowspan="2">Item Total</th>
-                    <th width="6%" rowspan="2">Profit %</th>
-                </tr>
-                <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
-                    <th width="7%">Rate</th>
-                    <th width="7%">Value</th>
-                </tr>
-            </thead>
-            <tbody>';
+            <table border="1" cellpadding="2" width="100%" style="font-size:7.5px;">
+                <thead>
+                    <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
+                        <th width="3%"  rowspan="2">#</th>
+                        <th width="9%"  rowspan="2">Item Name</th>
+                        <th width="14%"  rowspan="2">Description</th>
+                        <th width="6%"  rowspan="2">Gross Wt</th>
+                        <th width="5%"  rowspan="2">Purity</th>
+                        <th width="6%"  rowspan="2">Purity Wt</th>
+                        <th width="5%"  rowspan="2">995</th>
+                        <th width="12%" colspan="2">Making</th>
+                        <th width="7%"  rowspan="2">Material</th>
+                        <th width="7%"  rowspan="2">Material Val</th>
+                        <th width="6%"  rowspan="2">Taxable</th>
+                        <th width="5%"  rowspan="2">VAT%</th>
+                        <th width="8%"  rowspan="2">Item Total</th>
+                        <th width="7%"  rowspan="2">Profit%</th>
+                    </tr>
+                    <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
+                        <th width="6%">Rate</th>
+                        <th width="6%">Value</th>
+                    </tr>
+                </thead>
+                <tbody>';
 
         foreach ($invoice->items as $index => $item) {
             $hasParts    = $item->parts && $item->parts->count() > 0;
@@ -784,21 +786,21 @@ class SaleInvoiceController extends Controller
 
             $html .= '
                 <tr style="text-align:center; background-color:#ffffff;">
-                    <td width="3%">' . ($index + 1) . '</td>
-                    <td width="10%">' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
-                    <td width="10%">' . ($item->item_description ?? '-') . '</td>
-                    <td width="7%">' . number_format($item->gross_weight, 3) . '</td>
-                    <td width="6%">' . number_format($item->purity, 3) . '</td>
-                    <td width="7%">' . number_format($item->purity_weight, 3) . '</td>
-                    <td width="6%">' . number_format($item->col_995 ?? 0, 3) . '</td>
-                    <td width="7%">' . number_format($item->making_rate ?? 0, 2) . '</td>
-                    <td width="7%">' . number_format($item->making_value, 2) . '</td>
-                    <td width="8%">' . ucfirst($item->material_type) . '</td>
-                    <td width="8%">' . number_format($item->material_value, 2) . '</td>
-                    <td width="7%">' . number_format($item->taxable_amount, 2) . '</td>
-                    <td width="6%">' . round($vatPercent, 0) . '%</td>
-                    <td width="8%" style="font-weight:bold;">' . number_format($itemOnlyTotal, 2) . '</td>
-                    <td width="6%" style="font-weight:bold;">' . $profitDisplay . '</td>
+                    <td width="3%">'  . ($index + 1) . '</td>
+                    <td width="9%">'  . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
+                    <td width="14%">'  . ($item->item_description ?? '-') . '</td>
+                    <td width="6%">'  . number_format($item->gross_weight, 3) . '</td>
+                    <td width="5%">'  . number_format($item->purity, 3) . '</td>
+                    <td width="6%">'  . number_format($item->purity_weight, 3) . '</td>
+                    <td width="5%">'  . number_format($item->col_995 ?? 0, 3) . '</td>
+                    <td width="6%">'  . number_format($item->making_rate ?? 0, 2) . '</td>
+                    <td width="6%">'  . number_format($item->making_value, 2) . '</td>
+                    <td width="7%">'  . ucfirst($item->material_type) . '</td>
+                    <td width="7%">'  . number_format($item->material_value, 2) . '</td>
+                    <td width="6%">'  . number_format($item->taxable_amount, 2) . '</td>
+                    <td width="5%">'  . round($vatPercent, 0) . '%</td>
+                    <td width="8%"  style="font-weight:bold;">' . number_format($itemOnlyTotal, 2) . '</td>
+                    <td width="7%"  style="font-weight:bold;' . ($item->profit_pct >= 0 ? 'color:green;' : 'color:red;') . '">' . $profitDisplay . '</td>
                 </tr>';
 
             if ($hasParts) {
@@ -838,11 +840,11 @@ class SaleInvoiceController extends Controller
             : 'N/A';
 
         $html .= '
-                <tr style="font-weight:bold; background-color:#f5f5f5;">
-                    <td colspan="10" align="right">Net Invoice Amount (Incl. VAT)</td>
-                    <td colspan="2" align="right">' . number_format($invoice->net_amount, 2) . '</td>
-                    <td colspan="2" align="right">Overall Profit: ' . $overallProfitDisplay . '</td>
-                </tr>
+            <tr style="font-weight:bold; background-color:#f5f5f5;">
+                <td colspan="8" align="right">Net Invoice Amount (Incl. VAT)</td>
+                <td colspan="2"  align="right">' . number_format($invoice->net_amount, 2) . '</td>
+                <td colspan="2"  align="right">Profit: ' . $overallProfitDisplay . '</td>
+            </tr>
             </tbody>
         </table>';
 
@@ -949,10 +951,35 @@ class SaleInvoiceController extends Controller
         $pdf->writeHTML($termsHtml, true, false, false, false);
 
         // Signatures
-        $pdf->Ln(40); $y = $pdf->GetY();
-        $pdf->Line(20, $y, 80, $y); $pdf->Line(130, $y, 190, $y);
-        $pdf->SetXY(20, $y); $pdf->Cell(60, 5, "Receiver's Signature", 0, 0, 'C');
-        $pdf->SetXY(130, $y); $pdf->Cell(60, 5, "Authorized Signature", 0, 0, 'C');
+        $pdf->Ln(12);
+
+        $pageW   = $pdf->getPageWidth();
+        $margin  = $pdf->getMargins();
+        $left    = $margin['left'];
+        $right   = $pageW - $margin['right'];
+        $lineLen = 60;
+
+        // Check AFTER accounting for the space needed (signing gap + line + label = ~30mm)
+        if ($pdf->GetY() + 15 > $pdf->getPageHeight() - $margin['bottom']) {
+            $pdf->AddPage();
+            $pdf->Ln(10);
+        }
+
+        $y = $pdf->GetY() + 15; // signing space above line
+
+        $leftLineStart  = $left;
+        $leftLineEnd    = $left + $lineLen;
+        $rightLineStart = $right - $lineLen;
+        $rightLineEnd   = $right;
+
+        $pdf->Line($leftLineStart,  $y, $leftLineEnd,  $y);
+        $pdf->Line($rightLineStart, $y, $rightLineEnd, $y);
+
+        $pdf->SetXY($leftLineStart,  $y + 1);
+        $pdf->Cell($lineLen, 5, "Receiver's Signature", 0, 0, 'C');
+
+        $pdf->SetXY($rightLineStart, $y + 1);
+        $pdf->Cell($lineLen, 5, "Authorized Signature", 0, 0, 'C');
 
         // Currency payment pages (Making + Parts + VAT)
         $pdf->AddPage();
