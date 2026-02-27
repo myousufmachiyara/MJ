@@ -222,7 +222,7 @@
               <label>Total Material Val.</label>
               <input type="text" id="sum_material_value" class="form-control" readonly>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-2 mt-3">
               <label>Total VAT</label>
               <input type="text" id="sum_vat_amount" class="form-control" readonly>
             </div>
