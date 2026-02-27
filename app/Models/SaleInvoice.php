@@ -77,7 +77,7 @@ class SaleInvoice extends Model
 
     public function attachments()
     {
-        return $this->hasMany(SaleInvoiceAttachment::class);
+        return $this->hasMany(SaleInvoiceAttachment::class, 'sale_invoice_id');
     }
 
     public function vouchers()

@@ -14,7 +14,9 @@
 
       <header class="card-header d-flex justify-content-between align-items-center">
         <h2 class="card-title">All Sale Invoices</h2>
-        <a href="{{ route('sale_invoices.create') }}" class="btn btn-primary"><i class="fas fa-plus"></i> Sale Invoice</a>
+        <a href="{{ route('sale_invoices.create') }}" class="btn btn-primary">
+          <i class="fas fa-plus"></i> Sale Invoice
+        </a>
       </header>
 
       <div class="card-body">
@@ -23,54 +25,88 @@
             <thead class="thead-dark">
               <tr>
                 <th>#</th>
+                <th>Invoice No</th>
                 <th>Date</th>
-                <th>Account</th>
+                <th>Customer</th>
+                <th>Payment Method</th>
+                <th>Currency</th>
+                <th>Net Amount</th>
                 <th>Type</th>
-                <th>Total Amount</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-            @foreach ($invoices as $invoice)
-            <tr>
+              @foreach ($invoices as $invoice)
+              <tr>
                 <td>{{ $loop->iteration }}</td>
-                <td>{{ $invoice->date }}</td>
-                <td>{{ $invoice->account->name ?? 'POS Customer' }}</td>
+                <td>{{ $invoice->invoice_no }}</td>
+                <td>{{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d M Y') }}</td>
+                <td>{{ $invoice->customer->name ?? '—' }}</td>
                 <td>
-                    <span class="badge {{ $invoice->type === 'credit' ? 'bg-warning' : 'bg-success' }}">{{ ucfirst($invoice->type) }}</span>
+                  @php
+                    $methodColors = [
+                      'cash'                => 'bg-success',
+                      'cheque'              => 'bg-info',
+                      'bank_transfer'       => 'bg-primary',
+                      'credit'              => 'bg-warning',
+                      'material+making cost'=> 'bg-secondary',
+                    ];
+                    $color = $methodColors[$invoice->payment_method] ?? 'bg-dark';
+                  @endphp
+                  <span class="badge {{ $color }}">
+                    {{ ucwords(str_replace('_', ' ', $invoice->payment_method)) }}
+                  </span>
+                </td>
+                <td>{{ $invoice->currency }}</td>
+                <td>
+                  {{ number_format($invoice->net_amount, 2) }} {{ $invoice->currency }}
+                  @if ($invoice->currency === 'USD')
+                    <br><small class="text-muted">≈ {{ number_format($invoice->net_amount_aed, 2) }} AED</small>
+                  @endif
                 </td>
                 <td>
-                  {{ number_format(
-                      $invoice->items->sum(function($item) {
-                          $disc = $item->discount ?? 0;
-                          $discountedPrice = $item->sale_price - ($item->sale_price * $disc / 100);
-                          return $discountedPrice * $item->quantity;
-                      })
-                      - $invoice->discount
-                  , 2) }}
+                  @if ($invoice->is_taxable)
+                    <span class="badge bg-danger">Taxable</span>
+                  @else
+                    <span class="badge bg-secondary">Non-Taxable</span>
+                  @endif
                 </td>
-                <td>
-                  <a href="{{ route('sale_invoices.edit', $invoice->id) }}" class="text-primary"><i class="fas fa-edit"></i></a>
-                  <a href="{{ route('sale_invoices.print', $invoice->id) }}" target="_blank" class="text-success"><i class="fas fa-print"></i></a>
+                <td class="text-nowrap">
+                  <a href="{{ route('sale_invoices.show', $invoice->id) }}" class="text-info" title="View">
+                    <i class="fas fa-eye"></i>
+                  </a>
+                  <a href="{{ route('sale_invoices.edit', $invoice->id) }}" class="text-primary ms-1" title="Edit">
+                    <i class="fas fa-edit"></i>
+                  </a>
+                  <a href="{{ route('sale_invoices.print', $invoice->id) }}" target="_blank" class="text-success ms-1" title="Print">
+                    <i class="fas fa-print"></i>
+                  </a>
                   <form action="{{ route('sale_invoices.destroy', $invoice->id) }}" method="POST" style="display:inline;">
                     @csrf
                     @method('DELETE')
-                    <button class="text-danger" style="border:none" onclick="return confirm('Are you sure?')"><i class="fas fa-trash"></i></button>
+                    <button type="submit" class="text-danger ms-1" style="border:none; background:none;"
+                      onclick="return confirm('Delete Invoice {{ $invoice->invoice_no }}? This will also reverse accounting entries.')">
+                      <i class="fas fa-trash"></i>
+                    </button>
                   </form>
                 </td>
-            </tr>
-            @endforeach
+              </tr>
+              @endforeach
             </tbody>
-
           </table>
         </div>
       </div>
+
     </section>
   </div>
 </div>
+
 <script>
   $(document).ready(function () {
-    $('.datatable').DataTable(); // if you are using DataTables
+    $('.datatable').DataTable({
+      order: [[0, 'desc']],
+      pageLength: 25,
+    });
   });
 </script>
 @endsection

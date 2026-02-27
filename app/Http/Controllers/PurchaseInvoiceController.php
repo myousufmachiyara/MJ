@@ -1208,19 +1208,6 @@ class PurchaseInvoiceController extends Controller
         $pdf->Cell(40, 5, "AUTHORISED SIGNATORY", 0, 0, 'C');
     }
 
-    private function drawCommonHeader($pdf) {
-        $logoPath = public_path('assets/img/mj-logo.jpeg');
-        $logoHtml = file_exists($logoPath) ? '<img src="'.$logoPath.'" width="85">' : '';
-        $pdf->writeHTML('<table width="100%"><tr><td width="40%">'.$logoHtml.'</td><td width="60%" align="right" style="font-size:9px;"><strong>MUSFIRA JEWELRY L.L.C</strong><br>Gold Souq, Dubai. TRN: 104902647700003</td></tr></table><hr>', true, false, false, false);
-    }
-
-    private function drawCommonSignatures($pdf) {
-        $pdf->Ln(25); $y = $pdf->GetY();
-        $pdf->Line(20, $y, 70, $y); $pdf->Line(140, $y, 190, $y);
-        $pdf->SetXY(20, $y); $pdf->Cell(50, 5, "Customer Signature", 0, 0, 'C');
-        $pdf->SetXY(140, $y); $pdf->Cell(50, 5, "Authorized Signature", 0, 0, 'C');
-    }
-
     protected function createPurchaseAccountingEntries( PurchaseInvoice $invoice, float $totalGoldMaterialAed, float $totalDiamondMaterialAed, float $totalMakingAed, float $totalPartsAed, float $totalVatAed): Voucher 
     {
         $acct = function (string $code) use ($invoice): int {

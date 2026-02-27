@@ -152,10 +152,11 @@ class SaleInvoiceController extends Controller
                 'created_by'              => auth()->id(),
             ]);
 
-            $totalVatAed      = 0;
-            $totalMaterialAed = 0;
-            $totalMakingAed   = 0;
-            $totalPartsAed    = 0;
+            $totalVatAed             = 0;
+            $totalGoldMaterialAed    = 0;
+            $totalDiamondMaterialAed = 0;
+            $totalMakingAed          = 0;
+            $totalPartsAed           = 0;
 
             // 3. Create Items and Parts
             foreach ($request->items as $itemData) {
@@ -208,7 +209,11 @@ class SaleInvoiceController extends Controller
                 ]);
 
                 $totalVatAed      += $vatAmount;
-                $totalMaterialAed += $materialValue;
+                if ($itemData['material_type'] === 'gold') {
+                    $totalGoldMaterialAed    += $materialValue;
+                } else {
+                    $totalDiamondMaterialAed += $materialValue;
+                }
                 $totalMakingAed   += $makingValue;
                 $totalPartsAed    += $itemPartsTotal;
 
@@ -242,7 +247,8 @@ class SaleInvoiceController extends Controller
             // 5. Accounting Entries
             $this->createSaleAccountingEntries(
                 $invoice,
-                $totalMaterialAed,
+                $totalGoldMaterialAed,
+                $totalDiamondMaterialAed,
                 $totalMakingAed,
                 $totalPartsAed,
                 $totalVatAed
@@ -943,14 +949,10 @@ class SaleInvoiceController extends Controller
         $pdf->writeHTML($termsHtml, true, false, false, false);
 
         // Signatures
-        $pdf->Ln(40);
-        $y = $pdf->GetY();
-        $pdf->Line(20, $y, 80, $y);
-        $pdf->Line(130, $y, 190, $y);
-        $pdf->SetXY(20, $y);
-        $pdf->Cell(60, 5, "Customer's Signature", 0, 0, 'C');
-        $pdf->SetXY(130, $y);
-        $pdf->Cell(60, 5, "Authorized Signature", 0, 0, 'C');
+        $pdf->Ln(40); $y = $pdf->GetY();
+        $pdf->Line(20, $y, 80, $y); $pdf->Line(130, $y, 190, $y);
+        $pdf->SetXY(20, $y); $pdf->Cell(60, 5, "Receiver's Signature", 0, 0, 'C');
+        $pdf->SetXY(130, $y); $pdf->Cell(60, 5, "Authorized Signature", 0, 0, 'C');
 
         // Currency payment pages (Making + Parts + VAT)
         $pdf->AddPage();
@@ -962,6 +964,7 @@ class SaleInvoiceController extends Controller
         return $pdf->Output($invoice->invoice_no . '.pdf', 'I');
     }
 
+    
     private function renderCurrencyReceiptPage($pdf, $invoice, $totalMaking, $totalParts, $totalVat, $copyType = 'CUSTOMER COPY')
     {
         $logoPath = public_path('assets/img/mj-logo.jpeg');
