@@ -703,9 +703,16 @@
         const col995        = purityWt / 0.995;
         const makingValue   = gross * makingRate;
         const materialValue = rate * purityWt;
-        const taxableAmount = makingValue;
+
+        // Sum all parts totals for this item
+        let partsTotal = 0;
+        row.next('.parts-row').find('.part-item-row').each(function () {
+            partsTotal += parseFloat($(this).find('.part-total').val()) || 0;
+        });
+
+        const taxableAmount = makingValue + partsTotal; // parts included in taxable
         const vatAmount     = taxableAmount * vatPercent / 100;
-        const itemTotal     = taxableAmount + materialValue + vatAmount;
+        const itemTotal     = materialValue + taxableAmount + vatAmount;
 
         row.find('.purity-weight').val(purityWt.toFixed(3));
         row.find('.col-995').val(col995.toFixed(3));
