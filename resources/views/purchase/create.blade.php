@@ -207,6 +207,10 @@
                 <input type="text" id="sum_diamond_cts" class="form-control text-warning fw-bold" readonly>
             </div>
             <div class="col-md-2">
+                <label>Total Stone Qty <small class="text-muted">(All Parts)</small></label>
+                <input type="text" id="sum_stone_qty" class="form-control text-info fw-bold" readonly>
+            </div>
+            <div class="col-md-2">
                 <label>Total Purity Wt</label>
                 <input type="text" id="sum_purity_weight" class="form-control" readonly>
             </div>
@@ -720,6 +724,7 @@
         let sumMaterial      = 0;
         let sumVAT           = 0;
         let netTotal         = 0;
+        let totalStoneQty = 0;
 
         let sumGoldBaseGross = 0;
         let totalGoldItemCTS = 0;
@@ -744,6 +749,7 @@
             let itemCTS = 0;
             itemRow.next('.parts-row').find('.part-item-row').each(function () {
                 itemCTS += parseFloat($(this).find('.part-qty').val()) || 0;
+                totalStoneQty += parseFloat($(this).find('.part-stone-qty').val()) || 0;  // ← ADD THIS LINE
             });
 
             if (materialType === 'gold') {
