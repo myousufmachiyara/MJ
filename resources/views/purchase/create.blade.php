@@ -199,12 +199,16 @@
           {{-- SUMMARY --}}
           <div class="row mt-5 mb-5">
             <div class="col-md-2">
-              <label>Total Gross Wt</label>
-              <input type="text" id="sum_gross_weight" class="form-control" readonly>
+                <label>Gold Gross Wt <small class="text-muted">(Purity Wt + CTS/5)</small></label>
+                <input type="text" id="sum_gold_gross_weight" class="form-control text-primary fw-bold" readonly>
             </div>
             <div class="col-md-2">
-              <label>Total Purity Wt</label>
-              <input type="text" id="sum_purity_weight" class="form-control" readonly>
+                <label>Diamond CTS <small class="text-muted">(Total Parts)</small></label>
+                <input type="text" id="sum_diamond_cts" class="form-control text-warning fw-bold" readonly>
+            </div>
+            <div class="col-md-2">
+                <label>Total Purity Wt</label>
+                <input type="text" id="sum_purity_weight" class="form-control" readonly>
             </div>
             <div class="col-md-2">
               <label>Total 995</label>
@@ -709,22 +713,55 @@
     }
 
     function calculateTotals() {
-        let sumGross = 0, sumPurity = 0, sum995 = 0, sumMakingTaxable = 0,
-            sumMaterial = 0, sumVAT = 0, netTotal = 0;
+        let sumGross         = 0;
+        let sumPurity        = 0;
+        let sum995           = 0;
+        let sumMakingTaxable = 0;
+        let sumMaterial      = 0;
+        let sumVAT           = 0;
+        let netTotal         = 0;
+
+        let sumGoldBaseGross = 0;
+        let totalGoldItemCTS = 0;
+        let totalDiamondCTS  = 0;
 
         $('#PurchaseTable tr.item-row').each(function () {
-            sumGross         += parseFloat($(this).find('.gross-weight').val())   || 0;
-            sumPurity        += parseFloat($(this).find('.purity-weight').val())  || 0;
-            sum995           += parseFloat($(this).find('.col-995').val())        || 0;
-            sumMakingTaxable += parseFloat($(this).find('.taxable-amount').val()) || 0;
-            sumMaterial      += parseFloat($(this).find('.material-value').val()) || 0;
-            sumVAT           += parseFloat($(this).find('.vat-amount').val())     || 0;
-            netTotal         += parseFloat($(this).find('.item-total').val())     || 0;
+            const itemRow      = $(this);
+            const materialType = itemRow.find('.material-type').val();
+            const grossInput   = itemRow.find('.gross-weight');
+            const grossVal     = parseFloat(grossInput.val())                         || 0;
+            const purityVal    = parseFloat(itemRow.find('.purity-weight').val())     || 0;
+
+            sumGross         += grossVal;
+            sumPurity        += purityVal;
+            sum995           += parseFloat(itemRow.find('.col-995').val())            || 0;
+            sumMakingTaxable += parseFloat(itemRow.find('.taxable-amount').val())     || 0;
+            sumMaterial      += parseFloat(itemRow.find('.material-value').val())     || 0;
+            sumVAT           += parseFloat(itemRow.find('.vat-amount').val())         || 0;
+            netTotal         += parseFloat(itemRow.find('.item-total').val())         || 0;
+
+            // Sum this item's parts CTS
+            let itemCTS = 0;
+            itemRow.next('.parts-row').find('.part-item-row').each(function () {
+                itemCTS += parseFloat($(this).find('.part-qty').val()) || 0;
+            });
+
+            if (materialType === 'gold') {
+                // Use stored base gross (user-typed value, without CTS contribution)
+                const baseGross = parseFloat(grossInput.data('base-gross'));
+                sumGoldBaseGross += isNaN(baseGross) ? grossVal : baseGross;
+                totalGoldItemCTS += itemCTS;
+            } else {
+                totalDiamondCTS += itemCTS;
+            }
         });
 
-        const makingTotalWithVat = sumMakingTaxable + sumVAT;
+        // Gold Gross Weight = sum of gold base gross weights + (gold parts CTS / 5)
+        const calculatedGoldGrossTotal = sumGoldBaseGross + (totalGoldItemCTS / 5);
+        const makingTotalWithVat       = sumMakingTaxable + sumVAT;
 
-        $('#sum_gross_weight').val(sumGross.toFixed(3));
+        $('#sum_gold_gross_weight').val(calculatedGoldGrossTotal.toFixed(3));
+        $('#sum_diamond_cts').val(totalDiamondCTS.toFixed(3));
         $('#sum_purity_weight').val(sumPurity.toFixed(3));
         $('#sum_995').val(sum995.toFixed(3));
         $('#sum_making_value').val(makingTotalWithVat.toFixed(2));
@@ -735,7 +772,9 @@
 
         const currency = $('#currency').val();
         const exRate   = parseFloat($('#exchange_rate').val()) || 1;
-        $('#converted_total').val(currency === 'USD' ? (netTotal * exRate).toFixed(2) : netTotal.toFixed(2));
+        $('#converted_total').val(
+            currency === 'USD' ? (netTotal * exRate).toFixed(2) : netTotal.toFixed(2)
+        );
 
         if ($('#payment_method').val() === 'material+making cost') {
             $('input[name="material_weight"]').val(sum995.toFixed(3));
