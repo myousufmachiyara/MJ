@@ -410,7 +410,7 @@
         partsRow.fadeToggle(200);
     });
 
-    const TROY_OUNCE_TO_GRAM = 31.1034768;
+    const TROY_OUNCE_TO_GRAM = 31.1035;
 
     $('#currency').on('change', function() {
         const isUSD = $(this).val() === 'USD';
