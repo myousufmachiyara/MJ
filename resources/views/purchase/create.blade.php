@@ -657,38 +657,43 @@
      * base gross (user entered) + sum of (part carat qty / 5)
      * Then triggers a full row recalculation.
      */
-      function recalcItemGrossWeight(itemRow) {
-        if (!itemRow || !itemRow.length) return;
+    function recalcItemGrossWeight(itemRow) {
+      if (!itemRow || !itemRow.length) return;
 
-        const grossInput = itemRow.find('.gross-weight');
-        const purity     = parseFloat(itemRow.find('.purity').val()) || 0;
+      const grossInput = itemRow.find('.gross-weight');
+      const purity     = parseFloat(itemRow.find('.purity').val()) || 0;
 
-        // Retrieve stored base gross (user-typed value)
-        let baseGross = parseFloat(grossInput.data('base-gross'));
-        if (isNaN(baseGross)) {
-            baseGross = parseFloat(grossInput.val()) || 0;
-            grossInput.data('base-gross', baseGross);
-        }
+      // Retrieve stored base gross (user-typed value)
+      let baseGross = parseFloat(grossInput.data('base-gross'));
+      if (isNaN(baseGross)) {
+          baseGross = parseFloat(grossInput.val()) || 0;
+          grossInput.data('base-gross', baseGross);
+      }
 
-        // Purity weight from base gross
-        const purityWt = baseGross * purity;
+      // Purity weight from base gross
+      const purityWt = baseGross * purity;
 
-        // Sum Diamond CTS (part-qty) and Stone CTS (part-stone-qty) from all parts
-        const partsRow = itemRow.next('.parts-row');
-        let totalDiamondCTS = 0;
-        let totalStoneCTS   = 0;
-        partsRow.find('.part-item-row').each(function() {
-            totalDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
-            totalStoneCTS   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
-        });
+      // Sum Diamond CTS (part-qty) and Stone CTS (part-stone-qty) from all parts
+      const partsRow = itemRow.next('.parts-row');
+      let totalDiamondCTS = 0;
+      let totalStoneCTS   = 0;
+      partsRow.find('.part-item-row').each(function() {
+          totalDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
+          totalStoneCTS   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
+      });
 
-        // New formula: Purity Weight + (Diamond CTS / 5) + (Stone CTS / 5)
-        const newGross = purityWt + (totalDiamondCTS / 5) + (totalStoneCTS / 5);
-        grossInput.val(newGross.toFixed(3));
+      // Formula: (diamondCTS/5 + purityWt) + (stoneCTS/5 + purityWt)
+      // Only include each bracket if that CTS value is non-zero
+      let newGross = 0;
+      if (totalDiamondCTS > 0) newGross += (totalDiamondCTS / 5) + purityWt;
+      if (totalStoneCTS   > 0) newGross += (totalStoneCTS   / 5) + purityWt;
+      if (totalDiamondCTS === 0 && totalStoneCTS === 0) newGross = purityWt;
 
-        // Now recalculate the item row with updated gross
-        calculateRow(itemRow);
-        calculateTotals();
+      grossInput.val(newGross.toFixed(3));
+
+      // Now recalculate the item row with updated gross
+      calculateRow(itemRow);
+      calculateTotals();
     }
 
     function calculateRow(row) {
