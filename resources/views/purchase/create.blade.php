@@ -380,7 +380,7 @@
                 </div>
                 <div class="col-md-2" id="exchangeRateBox" style="display:none;">
                     <label class="form-label">USD → AED Rate <span class="text-danger">*</span></label>
-                    <input type="number" step="0.000001" name="exchange_rate" id="exchange_rate" class="form-control" placeholder="3.6725">
+                    <input type="number" step="0.000001" name="exchange_rate" id="exchange_rate" class="form-control" placeholder="3.674">
                 </div>
                 <div class="col-md-2">
                   <label class="form-label">Converted Total (AED)</label>
@@ -801,7 +801,7 @@
     // ================= OUNCE TO GRAM & CURRENCY CONVERSION =================
     $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #diamond_rate_aed_ounce, #exchange_rate', function() {
         const id     = $(this).attr('id');
-        const exRate = parseFloat($('#exchange_rate').val()) || 3.6725;
+        const exRate = parseFloat($('#exchange_rate').val()) || 3.674;
 
         // Gold
         if (id === 'gold_rate_usd' || id === 'exchange_rate') {
