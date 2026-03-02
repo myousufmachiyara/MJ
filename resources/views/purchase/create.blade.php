@@ -417,7 +417,7 @@
         if (isUSD) {
             $('#exchangeRateBox').show();
             $('#exchange_rate').attr('required', true);
-            if(!$('#exchange_rate').val()) $('#exchange_rate').val('3.6725');
+            if(!$('#exchange_rate').val()) $('#exchange_rate').val('3.674');
         } else {
             $('#exchangeRateBox').hide();
             $('#exchange_rate').removeAttr('required');
