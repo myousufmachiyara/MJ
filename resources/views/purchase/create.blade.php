@@ -657,29 +657,33 @@
      * base gross (user entered) + sum of (part carat qty / 5)
      * Then triggers a full row recalculation.
      */
-    function recalcItemGrossWeight(itemRow) {
+      function recalcItemGrossWeight(itemRow) {
         if (!itemRow || !itemRow.length) return;
 
         const grossInput = itemRow.find('.gross-weight');
+        const purity     = parseFloat(itemRow.find('.purity').val()) || 0;
 
-        // Retrieve stored base gross (set when user types in the field)
+        // Retrieve stored base gross (user-typed value)
         let baseGross = parseFloat(grossInput.data('base-gross'));
         if (isNaN(baseGross)) {
-            // First time: treat current value as base and store it
             baseGross = parseFloat(grossInput.val()) || 0;
             grossInput.data('base-gross', baseGross);
         }
 
-        // Sum carat contribution from ALL parts: each part's qty / 5
+        // Purity weight from base gross
+        const purityWt = baseGross * purity;
+
+        // Sum Diamond CTS (part-qty) and Stone CTS (part-stone-qty) from all parts
         const partsRow = itemRow.next('.parts-row');
-        let totalCaratContribution = 0;
+        let totalDiamondCTS = 0;
+        let totalStoneCTS   = 0;
         partsRow.find('.part-item-row').each(function() {
-            const caratQty = parseFloat($(this).find('.part-qty').val()) || 0;
-            totalCaratContribution += caratQty / 5;
+            totalDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
+            totalStoneCTS   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
         });
 
-        // New gross = base gross + total carat contribution
-        const newGross = baseGross + totalCaratContribution;
+        // New formula: Purity Weight + (Diamond CTS / 5) + (Stone CTS / 5)
+        const newGross = purityWt + (totalDiamondCTS / 5) + (totalStoneCTS / 5);
         grossInput.val(newGross.toFixed(3));
 
         // Now recalculate the item row with updated gross
@@ -759,18 +763,40 @@
                 totalStoneQty += parseFloat($(this).find('.part-stone-qty').val()) || 0;  // ← ADD THIS LINE
             });
 
+            // if (materialType === 'gold') {
+            //     // Use stored base gross (user-typed value, without CTS contribution)
+            //     const baseGross = parseFloat(grossInput.data('base-gross'));
+            //     sumGoldBaseGross += isNaN(baseGross) ? grossVal : baseGross;
+            //     totalGoldItemCTS += itemCTS;
+            // } else {
+            //     totalDiamondCTS += itemCTS;
+            // }
+
             if (materialType === 'gold') {
-                // Use stored base gross (user-typed value, without CTS contribution)
                 const baseGross = parseFloat(grossInput.data('base-gross'));
-                sumGoldBaseGross += isNaN(baseGross) ? grossVal : baseGross;
-                totalGoldItemCTS += itemCTS;
+                const safeBase  = isNaN(baseGross) ? grossVal : baseGross;
+                const purity    = parseFloat(itemRow.find('.purity').val()) || 0;
+
+                // Purity weight of this gold item
+                sumGoldBaseGross += safeBase * purity;
+
+                // Diamond CTS and Stone CTS each contribute separately
+                let itemDiamondCTS = 0;
+                let itemStoneCTS   = 0;
+                itemRow.next('.parts-row').find('.part-item-row').each(function() {
+                    itemDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
+                    itemStoneCTS   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
+                });
+                totalGoldItemCTS += itemDiamondCTS + itemStoneCTS; // combined for /5 calc below
             } else {
                 totalDiamondCTS += itemCTS;
             }
         });
 
         // Gold Gross Weight = sum of gold base gross weights + (gold parts CTS / 5)
+        // const calculatedGoldGrossTotal = sumGoldBaseGross + (totalGoldItemCTS / 5);
         const calculatedGoldGrossTotal = sumGoldBaseGross + (totalGoldItemCTS / 5);
+
         const makingTotalWithVat       = sumMakingTaxable + sumVAT;
 
         $('#sum_gold_gross_weight').val(calculatedGoldGrossTotal.toFixed(3));
