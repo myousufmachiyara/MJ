@@ -110,11 +110,14 @@
               <table class="table table-bordered">
                 <thead>
                   <tr>
-                    <th width="12%" rowspan="2">Item Name</th>
-                    <th width="13%" rowspan="2">Item Description</th>
-                    <th width="9%" rowspan="2">Purity</th>
-                    <th rowspan="2">Gross Wt</th>
-                    <th rowspan="2">Purity Wt</th>
+                    <th width="10%" rowspan="2">Item Name</th>
+                    <th width="10%" rowspan="2">Item Description</th>
+                    <th width="6%" rowspan="2">Purity</th>
+                    {{-- Base Gross Wt: user-entered value, never auto-modified --}}
+                    <th rowspan="2">Base Gross Wt<br><small class="text-muted">(User Input)</small></th>
+                    {{-- Gross Wt: auto-calculated = base + CTS contributions --}}
+                    <th rowspan="2">Gross Wt<br><small class="text-muted">(Calculated)</small></th>
+                    <th rowspan="2">Net Wt<br><small class="text-muted">(Purity Wt)</small></th>
                     <th rowspan="2">995</th>
                     <th colspan="2" class="text-center">Making</th>
                     <th width="6%" rowspan="2">Material</th>
@@ -123,7 +126,7 @@
                     <th rowspan="2">VAT %</th>
                     <th rowspan="2">VAT Amt</th>
                     <th rowspan="2">Gross Total</th>
-                    <th width="6%" rowspan="2">Action</th>
+                    <th width="5%" rowspan="2">Action</th>
                   </tr>
                   <tr>
                     <th>Rate</th>
@@ -147,7 +150,10 @@
                         @endforeach
                       </select>
                     </td>
-                    <td><input type="number" name="items[0][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>
+                    {{-- Base Gross Wt: editable by user --}}
+                    <td><input type="number" name="items[0][base_gross_weight]" step="any" value="0" class="form-control base-gross-weight"></td>
+                    {{-- Gross Wt: readonly, auto-calculated --}}
+                    <td><input type="number" name="items[0][gross_weight]" step="any" value="0" class="form-control gross-weight bg-light text-primary fw-bold" readonly></td>
                     <td><input type="number" name="items[0][purity_weight]" step="any" value="0" class="form-control purity-weight" readonly></td>
                     <td><input type="number" name="items[0][995]" step="any" value="0" class="form-control col-995" readonly></td>
                     <td><input type="number" name="items[0][making_rate]" step="any" value="0" class="form-control making-rate"></td>
@@ -169,7 +175,7 @@
                     </td>
                   </tr>
                   <tr class="parts-row" style="display:none;background:#efefef">
-                    <td colspan="15">
+                    <td colspan="17">
                       <div class="parts-wrapper">
                         <table class="table table-sm table-bordered parts-table">
                           <thead>
@@ -199,8 +205,12 @@
           {{-- SUMMARY --}}
           <div class="row mt-5 mb-5">
             <div class="col-md-2">
-                <label>Gold Gross Wt <small class="text-muted">(Purity Wt + CTS/5)</small></label>
+                <label>Gold Gross Wt <small class="text-muted">(Calculated)</small></label>
                 <input type="text" id="sum_gold_gross_weight" class="form-control text-primary fw-bold" readonly>
+            </div>
+            <div class="col-md-2">
+                <label>Total Net Wt <small class="text-muted">(Purity Wt)</small></label>
+                <input type="text" id="sum_purity_weight" class="form-control text-success fw-bold" readonly>
             </div>
             <div class="col-md-2">
                 <label>Diamond CTS <small class="text-muted">(Total Parts)</small></label>
@@ -209,10 +219,6 @@
             <div class="col-md-2">
                 <label>Total Stone Qty <small class="text-muted">(All Parts)</small></label>
                 <input type="text" id="sum_stone_qty" class="form-control text-info fw-bold" readonly>
-            </div>
-            <div class="col-md-2">
-                <label>Total Purity Wt</label>
-                <input type="text" id="sum_purity_weight" class="form-control" readonly>
             </div>
             <div class="col-md-2">
               <label>Total 995</label>
@@ -475,7 +481,8 @@
                     @endforeach
                 </select>
             </td>
-            <td><input type="number" name="items[${nextIndex}][gross_weight]" step="any" value="0" class="form-control gross-weight"></td>
+            <td><input type="number" name="items[${nextIndex}][base_gross_weight]" step="any" value="0" class="form-control base-gross-weight"></td>
+            <td><input type="number" name="items[${nextIndex}][gross_weight]" step="any" value="0" class="form-control gross-weight bg-light text-primary fw-bold" readonly></td>
             <td><input type="number" name="items[${nextIndex}][purity_weight]" step="any" value="0" class="form-control purity-weight" readonly></td>
             <td><input type="number" name="items[${nextIndex}][995]" step="any" value="0" class="form-control col-995" readonly></td>
             <td><input type="number" name="items[${nextIndex}][making_rate]" step="any" value="0" class="form-control making-rate"></td>
@@ -497,7 +504,7 @@
             </td>
         </tr>
         <tr class="parts-row" style="display:none;background:#efefef">
-            <td colspan="15">
+            <td colspan="17">
                 <div class="parts-wrapper">
                     <table class="table table-sm table-bordered parts-table">
                         <thead>
@@ -561,7 +568,6 @@
     $(document).on('click', '.remove-part', function() {
         const itemRow = $(this).closest('.parts-row').prev('.item-row');
         $(this).closest('tr').remove();
-        // Recalculate gross weight after removing a part
         recalcItemGrossWeight(itemRow);
         calculateTotals();
     });
@@ -634,68 +640,74 @@
 
     // ================= CALCULATIONS =================
 
-    // When user manually edits gross weight
-    $(document).on('input', '.gross-weight', function() {
-        const grossInput = $(this);
-        // Store as base for future part contributions
-        grossInput.data('base-gross', parseFloat(grossInput.val()) || 0);
-        // Just recalculate the row — do NOT call recalcItemGrossWeight here
-        const itemRow = grossInput.closest('tr.item-row');
-        calculateRow(itemRow);
-        calculateTotals();
+    // User types into Base Gross Wt — recalc gross wt + all row values
+    $(document).on('input', '.base-gross-weight', function() {
+        const itemRow = $(this).closest('tr.item-row');
+        recalcItemGrossWeight(itemRow);
     });
 
-    // When any other item field changes, just recalculate the row
+    // Purity or other item fields changed — re-derive gross wt (purity affects the formula) then recalc row
     $(document).on('input change', '.purity, .making-rate, .vat-percent, .material-type, #gold_rate_aed, #diamond_rate_aed_gram', function() {
         const row = $(this).closest('tr.item-row');
-        if(row.length) calculateRow(row);
+        if (row.length) {
+            recalcItemGrossWeight(row);
+        }
         calculateTotals();
     });
 
     /**
-     * Recalculates gross weight for an item row based on:
-     * base gross (user entered) + sum of (part carat qty / 5)
-     * Then triggers a full row recalculation.
+     * Derives the calculated Gross Wt from Base Gross Wt and writes it to the readonly column.
+     *
+     * Base Gross Wt (.base-gross-weight) — user input, never auto-modified.
+     * Gross Wt      (.gross-weight)      — readonly, computed here.
+     *
+     * Formula:
+     *   netWt         = baseGross x purity
+     *   dIntermediate = baseGross + (diamondCTS / 5)
+     *   grossWt       = baseGross
+     *                   + dIntermediate x (1 + purity)   [if diamondCTS > 0]
+     *                   + (stoneCTS / 5 + netWt)          [if stoneCTS   > 0]
+     *
+     * No parts: grossWt = baseGross.
      */
     function recalcItemGrossWeight(itemRow) {
-      if (!itemRow || !itemRow.length) return;
+        if (!itemRow || !itemRow.length) return;
 
-      const grossInput = itemRow.find('.gross-weight');
-      const purity     = parseFloat(itemRow.find('.purity').val()) || 0;
+        const purity    = parseFloat(itemRow.find('.purity').val())          || 0;
+        const baseGross = parseFloat(itemRow.find('.base-gross-weight').val()) || 0;
+        const netWt     = baseGross * purity;
 
-      // Retrieve stored base gross (user-typed value)
-      let baseGross = parseFloat(grossInput.data('base-gross'));
-      if (isNaN(baseGross)) {
-          baseGross = parseFloat(grossInput.val()) || 0;
-          grossInput.data('base-gross', baseGross);
-      }
+        const partsRow = itemRow.next('.parts-row');
+        let totalDiamondCTS = 0;
+        let totalStoneCTS   = 0;
+        partsRow.find('.part-item-row').each(function() {
+            totalDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
+            totalStoneCTS   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
+        });
 
-      // Purity weight from base gross
-      const purityWt = baseGross * purity;
+        let newGross = baseGross;
+        if (totalDiamondCTS > 0) {
+            const dIntermediate = baseGross + (totalDiamondCTS / 5);
+            newGross += dIntermediate * (1 + purity);
+        }
+        if (totalStoneCTS > 0) {
+            newGross += (totalStoneCTS / 5) + netWt;
+        }
 
-      // Sum Diamond CTS (part-qty) and Stone CTS (part-stone-qty) from all parts
-      const partsRow = itemRow.next('.parts-row');
-      let totalDiamondCTS = 0;
-      let totalStoneCTS   = 0;
-      partsRow.find('.part-item-row').each(function() {
-          totalDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
-          totalStoneCTS   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
-      });
+        // Gross Wt is readonly so .val() does not trigger any input event — no guard needed
+        itemRow.find('.gross-weight').val(newGross.toFixed(3));
 
-      // Formula: (diamondCTS/5 + purityWt) + (stoneCTS/5 + purityWt)
-      // Only include each bracket if that CTS value is non-zero
-      let newGross = 0;
-      if (totalDiamondCTS > 0) newGross += (totalDiamondCTS / 5) + purityWt;
-      if (totalStoneCTS   > 0) newGross += (totalStoneCTS   / 5) + purityWt;
-      if (totalDiamondCTS === 0 && totalStoneCTS === 0) newGross = purityWt;
-
-      grossInput.val(newGross.toFixed(3));
-
-      // Now recalculate the item row with updated gross
-      calculateRow(itemRow);
-      calculateTotals();
+        calculateRow(itemRow);
+        calculateTotals();
     }
 
+    /**
+     * Calculates all derived fields for a single item row using the computed Gross Wt.
+     *
+     * Net Wt  = gross_wt x purity
+     * Making  = making_rate x gross_wt  (Gold)
+     *         = making_rate x net_wt    (Diamond)
+     */
     function calculateRow(row) {
         const purity       = parseFloat(row.find('.purity').val())       || 0;
         const gross        = parseFloat(row.find('.gross-weight').val())  || 0;
@@ -708,22 +720,25 @@
             : parseFloat($('#diamond_rate_aed_gram').val());
         rate = rate || 0;
 
-        const purityWt      = gross * purity;
-        const col995        = purityWt / 0.995;
-        const makingValue   = gross * makingRate;
-        const materialValue = rate * purityWt;
+        const netWt  = gross * purity;
+        const col995 = netWt / 0.995;
 
-        // Sum all parts totals for this item
+        const makingValue = (materialType === 'gold')
+            ? gross * makingRate
+            : netWt * makingRate;
+
+        const materialValue = rate * netWt;
+
         let partsTotal = 0;
         row.next('.parts-row').find('.part-item-row').each(function () {
             partsTotal += parseFloat($(this).find('.part-total').val()) || 0;
         });
 
-        const taxableAmount = makingValue + partsTotal; // parts included in taxable
+        const taxableAmount = makingValue + partsTotal;
         const vatAmount     = taxableAmount * vatPercent / 100;
         const itemTotal     = materialValue + taxableAmount + vatAmount;
 
-        row.find('.purity-weight').val(purityWt.toFixed(3));
+        row.find('.purity-weight').val(netWt.toFixed(3));
         row.find('.col-995').val(col995.toFixed(3));
         row.find('.making-value').val(makingValue.toFixed(2));
         row.find('.material-value').val(materialValue.toFixed(2));
@@ -733,81 +748,48 @@
     }
 
     function calculateTotals() {
-        let sumGross         = 0;
-        let sumPurity        = 0;
+        let sumNetWt         = 0;
         let sum995           = 0;
         let sumMakingTaxable = 0;
         let sumMaterial      = 0;
         let sumVAT           = 0;
         let netTotal         = 0;
-        let totalStoneQty = 0;
-
-        let sumGoldBaseGross = 0;
-        let totalGoldItemCTS = 0;
+        let totalStoneQty    = 0;
+        let sumGoldGross     = 0;
         let totalDiamondCTS  = 0;
 
         $('#PurchaseTable tr.item-row').each(function () {
             const itemRow      = $(this);
             const materialType = itemRow.find('.material-type').val();
-            const grossInput   = itemRow.find('.gross-weight');
-            const grossVal     = parseFloat(grossInput.val())                         || 0;
-            const purityVal    = parseFloat(itemRow.find('.purity-weight').val())     || 0;
+            const grossVal     = parseFloat(itemRow.find('.gross-weight').val())  || 0;
+            const netWtVal     = parseFloat(itemRow.find('.purity-weight').val()) || 0;
 
-            sumGross         += grossVal;
-            sumPurity        += purityVal;
-            sum995           += parseFloat(itemRow.find('.col-995').val())            || 0;
-            sumMakingTaxable += parseFloat(itemRow.find('.taxable-amount').val())     || 0;
-            sumMaterial      += parseFloat(itemRow.find('.material-value').val())     || 0;
-            sumVAT           += parseFloat(itemRow.find('.vat-amount').val())         || 0;
-            netTotal         += parseFloat(itemRow.find('.item-total').val())         || 0;
+            sumNetWt         += netWtVal;
+            sum995           += parseFloat(itemRow.find('.col-995').val())        || 0;
+            sumMakingTaxable += parseFloat(itemRow.find('.taxable-amount').val()) || 0;
+            sumMaterial      += parseFloat(itemRow.find('.material-value').val()) || 0;
+            sumVAT           += parseFloat(itemRow.find('.vat-amount').val())     || 0;
+            netTotal         += parseFloat(itemRow.find('.item-total').val())     || 0;
 
-            // Sum this item's parts CTS
-            let itemCTS = 0;
+            let itemDiamondCTS = 0;
             itemRow.next('.parts-row').find('.part-item-row').each(function () {
-                itemCTS += parseFloat($(this).find('.part-qty').val()) || 0;
-                totalStoneQty += parseFloat($(this).find('.part-stone-qty').val()) || 0;  // ← ADD THIS LINE
+                itemDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
+                totalStoneQty  += parseFloat($(this).find('.part-stone-qty').val()) || 0;
             });
 
-            // if (materialType === 'gold') {
-            //     // Use stored base gross (user-typed value, without CTS contribution)
-            //     const baseGross = parseFloat(grossInput.data('base-gross'));
-            //     sumGoldBaseGross += isNaN(baseGross) ? grossVal : baseGross;
-            //     totalGoldItemCTS += itemCTS;
-            // } else {
-            //     totalDiamondCTS += itemCTS;
-            // }
-
             if (materialType === 'gold') {
-                const baseGross = parseFloat(grossInput.data('base-gross'));
-                const safeBase  = isNaN(baseGross) ? grossVal : baseGross;
-                const purity    = parseFloat(itemRow.find('.purity').val()) || 0;
-
-                // Purity weight of this gold item
-                sumGoldBaseGross += safeBase * purity;
-
-                // Diamond CTS and Stone CTS each contribute separately
-                let itemDiamondCTS = 0;
-                let itemStoneCTS   = 0;
-                itemRow.next('.parts-row').find('.part-item-row').each(function() {
-                    itemDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
-                    itemStoneCTS   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
-                });
-                totalGoldItemCTS += itemDiamondCTS + itemStoneCTS; // combined for /5 calc below
+                sumGoldGross += grossVal;
             } else {
-                totalDiamondCTS += itemCTS;
+                totalDiamondCTS += itemDiamondCTS;
             }
         });
 
-        // Gold Gross Weight = sum of gold base gross weights + (gold parts CTS / 5)
-        // const calculatedGoldGrossTotal = sumGoldBaseGross + (totalGoldItemCTS / 5);
-        const calculatedGoldGrossTotal = sumGoldBaseGross + (totalGoldItemCTS / 5);
+        const makingTotalWithVat = sumMakingTaxable + sumVAT;
 
-        const makingTotalWithVat       = sumMakingTaxable + sumVAT;
-
-        $('#sum_gold_gross_weight').val(calculatedGoldGrossTotal.toFixed(3));
+        $('#sum_gold_gross_weight').val(sumGoldGross.toFixed(3));
         $('#sum_diamond_cts').val(totalDiamondCTS.toFixed(3));
         $('#sum_stone_qty').val(totalStoneQty.toFixed(2));
-        $('#sum_purity_weight').val(sumPurity.toFixed(3));
+        $('#sum_purity_weight').val(sumNetWt.toFixed(3));
         $('#sum_995').val(sum995.toFixed(3));
         $('#sum_making_value').val(makingTotalWithVat.toFixed(2));
         $('#sum_material_value').val(sumMaterial.toFixed(2));
@@ -823,7 +805,7 @@
 
         if ($('#payment_method').val() === 'material+making cost') {
             $('input[name="material_weight"]').val(sum995.toFixed(3));
-            $('input[name="material_purity"]').val(sumPurity.toFixed(3));
+            $('input[name="material_purity"]').val(sumNetWt.toFixed(3));
             $('input[name="material_value"]').val(sumMaterial.toFixed(2));
             $('input[name="making_charges"]').val(makingTotalWithVat.toFixed(2));
         }
@@ -834,7 +816,6 @@
         const id     = $(this).attr('id');
         const exRate = parseFloat($('#exchange_rate').val()) || 3.674;
 
-        // Gold
         if (id === 'gold_rate_usd' || id === 'exchange_rate') {
             const goldUsd = parseFloat($('#gold_rate_usd').val()) || 0;
             $('#gold_rate_aed_ounce').val((goldUsd * exRate).toFixed(2));
@@ -842,7 +823,6 @@
         const goldAedOunceFinal = parseFloat($('#gold_rate_aed_ounce').val()) || 0;
         $('#gold_rate_aed').val((goldAedOunceFinal / TROY_OUNCE_TO_GRAM).toFixed(4));
 
-        // Diamond
         if (id === 'diamond_rate_usd' || id === 'exchange_rate') {
             const diaUsd = parseFloat($('#diamond_rate_usd').val()) || 0;
             $('#diamond_rate_aed_ounce').val((diaUsd * exRate).toFixed(2));
@@ -869,16 +849,14 @@
     // ================= PARTS ROW CALCULATION =================
     $(document).on('input', '.part-qty, .part-rate, .part-stone-qty, .part-stone-rate', function() {
         const row       = $(this).closest('tr');
-        const qty       = parseFloat(row.find('.part-qty').val())        || 0;
-        const rate      = parseFloat(row.find('.part-rate').val())        || 0;
-        const stoneQty  = parseFloat(row.find('.part-stone-qty').val())  || 0;
+        const qty       = parseFloat(row.find('.part-qty').val())       || 0;
+        const rate      = parseFloat(row.find('.part-rate').val())       || 0;
+        const stoneQty  = parseFloat(row.find('.part-stone-qty').val()) || 0;
         const stoneRate = parseFloat(row.find('.part-stone-rate').val()) || 0;
 
-        // Part total: (carat qty * rate) + (stone qty * stone rate)
         const total = (qty * rate) + (stoneQty * stoneRate);
         row.find('.part-total').val(total.toFixed(2));
 
-        // Update parent item's gross weight: base gross + sum(all part carats / 5)
         const itemRow = row.closest('.parts-row').prev('.item-row');
         recalcItemGrossWeight(itemRow);
     });
@@ -909,18 +887,16 @@
                     addNewRow();
                     currentItemRow = $('#PurchaseTable tr.item-row').last();
 
-                    const baseGross = parseFloat(row['Gross Wt']) || 0;
-                    currentItemRow.find('.gross-weight').data('base-gross', baseGross);
-
                     currentItemRow.find('.item-name-input').val(row['Item Name']);
                     currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
                     currentItemRow.find('.purity').val(row['Purity'] || '0.92');
-                    currentItemRow.find('.gross-weight').val(baseGross);
+                    // Set base gross wt — calculated gross wt will be derived by recalcItemGrossWeight
+                    currentItemRow.find('.base-gross-weight').val(parseFloat(row['Gross Wt']) || 0);
                     currentItemRow.find('.making-rate').val(row['Making Rate'] || 0);
                     currentItemRow.find('.material-type').val((row['Material'] || 'gold').toLowerCase());
                     currentItemRow.find('.vat-percent').val(row['VAT %'] || 0);
 
-                    calculateRow(currentItemRow);
+                    recalcItemGrossWeight(currentItemRow);
                 }
 
                 if (row['Part Name'] && row['Part Name'].trim() !== "" && currentItemRow) {
@@ -936,7 +912,6 @@
                     currentPartRow.find('.part-stone-qty').val(row['Stone Qty'] || 0);
                     currentPartRow.find('.part-stone-rate').val(row['Stone Rate'] || 0);
 
-                    // Trigger part qty input to update total AND recalc gross
                     currentPartRow.find('.part-qty').trigger('input');
                 }
             });
