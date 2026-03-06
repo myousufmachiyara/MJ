@@ -771,16 +771,14 @@
             sumVAT           += parseFloat(itemRow.find('.vat-amount').val())     || 0;
             netTotal         += parseFloat(itemRow.find('.item-total').val())     || 0;
 
-            let itemDiamondCTS = 0;
+            // Sum diamond CTS and stone qty from all parts regardless of material type
             itemRow.next('.parts-row').find('.part-item-row').each(function () {
-                itemDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
-                totalStoneQty  += parseFloat($(this).find('.part-stone-qty').val()) || 0;
+                totalDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
+                totalStoneQty   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
             });
 
             if (materialType === 'gold') {
                 sumGoldGross += grossVal;
-            } else {
-                totalDiamondCTS += itemDiamondCTS;
             }
         });
 
