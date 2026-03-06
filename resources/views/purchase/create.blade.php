@@ -114,10 +114,10 @@
                     <th width="10%" rowspan="2">Item Description</th>
                     <th width="6%" rowspan="2">Purity</th>
                     {{-- Base Gross Wt: user-entered value, never auto-modified --}}
-                    <th rowspan="2">Base Gross Wt<br><small class="text-muted">(User Input)</small></th>
+                    <th rowspan="2">Net Wt<br><small class="text-muted">(User Input)</small></th>
                     {{-- Gross Wt: auto-calculated = base + CTS contributions --}}
-                    <th rowspan="2">Gross Wt<br><small class="text-muted">(Calculated)</small></th>
-                    <th rowspan="2">Net Wt<br><small class="text-muted">(Purity Wt)</small></th>
+                    <th rowspan="2">Gold Gross Wt<br><small class="text-muted">(Calculated)</small></th>
+                    <th rowspan="2">Purity Wt</th>
                     <th rowspan="2">995</th>
                     <th colspan="2" class="text-center">Making</th>
                     <th width="6%" rowspan="2">Material</th>
@@ -151,7 +151,7 @@
                       </select>
                     </td>
                     {{-- Base Gross Wt: editable by user --}}
-                    <td><input type="number" name="items[0][base_gross_weight]" step="any" value="0" class="form-control base-gross-weight"></td>
+                    <td><input type="number" name="items[0][net_weight]" step="any" value="0" class="form-control net-weight"></td>
                     {{-- Gross Wt: readonly, auto-calculated --}}
                     <td><input type="number" name="items[0][gross_weight]" step="any" value="0" class="form-control gross-weight bg-light text-primary fw-bold" readonly></td>
                     <td><input type="number" name="items[0][purity_weight]" step="any" value="0" class="form-control purity-weight" readonly></td>
@@ -205,11 +205,11 @@
           {{-- SUMMARY --}}
           <div class="row mt-5 mb-5">
             <div class="col-md-2">
-                <label>Gold Gross Wt <small class="text-muted">(Calculated)</small></label>
+                <label>Gold Gross Wt <small class="text-muted">(Net Wt + CTS/5)</small></label>
                 <input type="text" id="sum_gold_gross_weight" class="form-control text-primary fw-bold" readonly>
             </div>
             <div class="col-md-2">
-                <label>Total Net Wt <small class="text-muted">(Purity Wt)</small></label>
+                <label>Total Purity Wt</label>
                 <input type="text" id="sum_purity_weight" class="form-control text-success fw-bold" readonly>
             </div>
             <div class="col-md-2">
@@ -481,7 +481,7 @@
                     @endforeach
                 </select>
             </td>
-            <td><input type="number" name="items[${nextIndex}][base_gross_weight]" step="any" value="0" class="form-control base-gross-weight"></td>
+            <td><input type="number" name="items[${nextIndex}][net_weight]" step="any" value="0" class="form-control net-weight"></td>
             <td><input type="number" name="items[${nextIndex}][gross_weight]" step="any" value="0" class="form-control gross-weight bg-light text-primary fw-bold" readonly></td>
             <td><input type="number" name="items[${nextIndex}][purity_weight]" step="any" value="0" class="form-control purity-weight" readonly></td>
             <td><input type="number" name="items[${nextIndex}][995]" step="any" value="0" class="form-control col-995" readonly></td>
@@ -641,7 +641,7 @@
     // ================= CALCULATIONS =================
 
     // User types into Base Gross Wt — recalc gross wt + all row values
-    $(document).on('input', '.base-gross-weight', function() {
+    $(document).on('input', '.net-weight', function() {
         const itemRow = $(this).closest('tr.item-row');
         recalcItemGrossWeight(itemRow);
     });
@@ -658,23 +658,19 @@
     /**
      * Derives the calculated Gross Wt from Base Gross Wt and writes it to the readonly column.
      *
-     * Base Gross Wt (.base-gross-weight) — user input, never auto-modified.
+     * Base Gross Wt (.net-weight) — user input, never auto-modified.
      * Gross Wt      (.gross-weight)      — readonly, computed here.
      *
      * Formula:
-     *   netWt         = baseGross x purity
-     *   dIntermediate = baseGross + (diamondCTS / 5)
-     *   grossWt       = baseGross
-     *                   + dIntermediate x (1 + purity)   [if diamondCTS > 0]
-     *                   + (stoneCTS / 5 + netWt)          [if stoneCTS   > 0]
+     *   Gold Gross Wt = Net Wt + (diamondCTS / 5) + (stoneCTS / 5)
      *
-     * No parts: grossWt = baseGross.
+     * No parts: Gold Gross Wt = Net Wt.
      */
     function recalcItemGrossWeight(itemRow) {
         if (!itemRow || !itemRow.length) return;
 
         const purity    = parseFloat(itemRow.find('.purity').val())          || 0;
-        const baseGross = parseFloat(itemRow.find('.base-gross-weight').val()) || 0;
+        const baseGross = parseFloat(itemRow.find('.net-weight').val()) || 0;
         const netWt     = baseGross * purity;
 
         const partsRow = itemRow.next('.parts-row');
@@ -685,14 +681,8 @@
             totalStoneCTS   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
         });
 
-        let newGross = baseGross;
-        if (totalDiamondCTS > 0) {
-            const dIntermediate = baseGross + (totalDiamondCTS / 5);
-            newGross += dIntermediate * (1 + purity);
-        }
-        if (totalStoneCTS > 0) {
-            newGross += (totalStoneCTS / 5) + netWt;
-        }
+        // Gold Gross Wt = Net Wt + (diamondCTS / 5) + (stoneCTS / 5)
+        let newGross = baseGross + (totalDiamondCTS / 5) + (totalStoneCTS / 5);
 
         // Gross Wt is readonly so .val() does not trigger any input event — no guard needed
         itemRow.find('.gross-weight').val(newGross.toFixed(3));
@@ -889,7 +879,7 @@
                     currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
                     currentItemRow.find('.purity').val(row['Purity'] || '0.92');
                     // Set base gross wt — calculated gross wt will be derived by recalcItemGrossWeight
-                    currentItemRow.find('.base-gross-weight').val(parseFloat(row['Gross Wt']) || 0);
+                    currentItemRow.find('.net-weight').val(parseFloat(row['Gross Wt']) || 0);
                     currentItemRow.find('.making-rate').val(row['Making Rate'] || 0);
                     currentItemRow.find('.material-type').val((row['Material'] || 'gold').toLowerCase());
                     currentItemRow.find('.vat-percent').val(row['VAT %'] || 0);
