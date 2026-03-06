@@ -77,6 +77,11 @@
               <input type="number" step="any" id="diamond_rate_aed_ounce" name="diamond_rate_aed_ounce" class="form-control" value="0">
             </div>
 
+            <div class="col-md-4 mt-2">
+              <label>Attachments</label>
+              <input type="file" name="attachments[]" class="form-control" multiple accept=".pdf,.jpg,.jpeg,.png,.zip">
+            </div>
+
             {{-- Diamond rate AED/Ct. entered directly — no gram conversion needed --}}
             <input type="hidden" id="diamond_rate_aed_gram" name="diamond_rate_aed_gram_hidden">
 
@@ -85,10 +90,6 @@
               <textarea name="remarks" class="form-control"></textarea>
             </div>
 
-            <div class="col-md-4 mt-2">
-              <label>Attachments</label>
-              <input type="file" name="attachments[]" class="form-control" multiple accept=".pdf,.jpg,.jpeg,.png,.zip">
-            </div>
           </div>
 
           {{-- TABLE --}}
