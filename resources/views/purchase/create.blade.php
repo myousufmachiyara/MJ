@@ -68,20 +68,17 @@
             </div>
 
             <div class="col-12 col-md-2 mt-2">
-              <label>Diamond Rate (USD)  / Ounce</label>
+              <label>Diamond Rate (USD) / Ct.</label>
               <input type="number" step="any" id="diamond_rate_usd" name="diamond_rate_usd" class="form-control" value="0">
             </div>
 
             <div class="col-12 col-md-2 mt-2">
-              <label>Diamond Rate (AED) / Ounce</label>
+              <label>Diamond Rate (AED) / Ct.</label>
               <input type="number" step="any" id="diamond_rate_aed_ounce" name="diamond_rate_aed_ounce" class="form-control" value="0">
             </div>
 
-            <div class="col-12 col-md-3">
-              <label class="text-primary">Diamond Converted Rate (AED / <b>Gram</b>)</label>
-              <input type="number" step="any" id="diamond_rate_aed_gram" name="diamond_rate_aed" class="form-control" value="0" readonly>
-              <small class="text-danger text-bold">Used for calculations</small>
-            </div>
+            {{-- Diamond rate AED/Ct. entered directly — no gram conversion needed --}}
+            <input type="hidden" id="diamond_rate_aed_gram" name="diamond_rate_aed_gram_hidden">
 
             <div class="col-md-4 mt-2">
               <label>Remarks</label>
@@ -701,16 +698,18 @@
     function calculateRow(row) {
         const purity       = parseFloat(row.find('.purity').val())       || 0;
         const gross        = parseFloat(row.find('.gross-weight').val())  || 0;
+        const userNetWt    = parseFloat(row.find('.net-weight').val())    || 0;
         const makingRate   = parseFloat(row.find('.making-rate').val())   || 0;
         const vatPercent   = parseFloat(row.find('.vat-percent').val())   || 0;
         const materialType = row.find('.material-type').val();
 
         let rate = (materialType === 'gold')
             ? parseFloat($('#gold_rate_aed').val())
-            : parseFloat($('#diamond_rate_aed_gram').val());
+            : parseFloat($('#diamond_rate_aed_ounce').val());
         rate = rate || 0;
 
-        const netWt  = gross * purity;
+        // Purity Wt = purity % x Net Wt (user-entered), NOT gross wt
+        const netWt  = userNetWt * purity;
         const col995 = netWt / 0.995;
 
         const makingValue = (materialType === 'gold')
@@ -811,12 +810,14 @@
         const goldAedOunceFinal = parseFloat($('#gold_rate_aed_ounce').val()) || 0;
         $('#gold_rate_aed').val((goldAedOunceFinal / TROY_OUNCE_TO_GRAM).toFixed(4));
 
+        // Diamond: AED/Ct. entered directly — USD/Ct converts at exchange rate, no gram division
         if (id === 'diamond_rate_usd' || id === 'exchange_rate') {
             const diaUsd = parseFloat($('#diamond_rate_usd').val()) || 0;
-            $('#diamond_rate_aed_ounce').val((diaUsd * exRate).toFixed(2));
+            $('#diamond_rate_aed_ounce').val((diaUsd * exRate).toFixed(4));
         }
-        const diaAedOunceFinal = parseFloat($('#diamond_rate_aed_ounce').val()) || 0;
-        $('#diamond_rate_aed_gram').val((diaAedOunceFinal / TROY_OUNCE_TO_GRAM).toFixed(4));
+        // diamond_rate_aed_ounce now holds AED/Ct directly — pass it through to the hidden field
+        const diaAedCt = parseFloat($('#diamond_rate_aed_ounce').val()) || 0;
+        $('#diamond_rate_aed_gram').val(diaAedCt.toFixed(4));
 
         $('#PurchaseTable tr.item-row').each(function() {
             calculateRow($(this));
