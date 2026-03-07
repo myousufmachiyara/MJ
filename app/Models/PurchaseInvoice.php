@@ -14,39 +14,61 @@ class PurchaseInvoice extends Model
         'invoice_no', 'is_taxable', 'vendor_id', 'invoice_date', 'remarks',
         'currency', 'exchange_rate', 'net_amount', 'net_amount_aed',
         'payment_method', 'payment_term', 'received_by',
+
+        // Gold rates
+        'gold_rate_usd',          // USD / oz  (user input)
+        'gold_rate_aed_ounce',    // AED / oz  (display; derived from USD × exRate)
+        'gold_rate_aed',          // AED / gram ← used in all calculations (÷ 31.1035)
+
+        // Diamond rates
+        'diamond_rate_usd',       // USD / Ct  (user input)
+        'diamond_rate_aed',       // AED / Ct  ← used in all calculations (direct, no conversion)
+
+        // Cheque
         'cheque_no', 'cheque_date', 'bank_name', 'cheque_amount',
+
+        // Bank transfer
+        'transfer_from_bank', 'transfer_to_bank', 'account_title',
+        'account_no', 'transaction_id', 'transfer_date', 'transfer_amount',
+
+        // Material + making cost method
         'material_weight', 'material_purity', 'material_value',
         'material_given_by', 'material_received_by', 'making_charges',
-        'transfer_from_bank', 'transfer_to_bank', 'account_title', 
-        'account_no', 'transaction_id', 'transfer_date', 'transfer_amount',
-        'gold_rate_aed', 'gold_rate_usd', 'diamond_rate_aed', 'diamond_rate_usd',
+
         'created_by',
     ];
 
     protected $casts = [
-        'is_taxable' => 'boolean',
-        'invoice_date' => 'date',
-        'cheque_date' => 'date',
-        'transfer_date' => 'date',
-        'net_amount' => 'decimal:2',
-        'net_amount_aed' => 'decimal:2',
-        'exchange_rate' => 'decimal:4',
-        'gold_rate_aed' => 'decimal:2',
-        'gold_rate_usd' => 'decimal:2',
-        'diamond_rate_aed' => 'decimal:2',
-        'diamond_rate_usd' => 'decimal:2',
-        'cheque_amount' => 'decimal:2',
-        'transfer_amount' => 'decimal:2',
-        'material_weight' => 'decimal:3',
-        'material_purity' => 'decimal:3',
-        'material_value' => 'decimal:2',
-        'making_charges' => 'decimal:2',
+        'is_taxable'           => 'boolean',
+        'invoice_date'         => 'date',
+        'cheque_date'          => 'date',
+        'transfer_date'        => 'date',
+        'net_amount'           => 'decimal:2',
+        'net_amount_aed'       => 'decimal:2',
+        'exchange_rate'        => 'decimal:6',
+
+        // Gold
+        'gold_rate_usd'        => 'decimal:2',
+        'gold_rate_aed_ounce'  => 'decimal:2',
+        'gold_rate_aed'        => 'decimal:4',   // AED/gram — needs 4dp precision
+
+        // Diamond
+        'diamond_rate_usd'       => 'decimal:2',
+        'diamond_rate_aed'       => 'decimal:4', // AED/Ct — 4dp precision
+
+        // Payments
+        'cheque_amount'        => 'decimal:2',
+        'transfer_amount'      => 'decimal:2',
+        'material_weight'      => 'decimal:3',
+        'material_purity'      => 'decimal:3',
+        'material_value'       => 'decimal:2',
+        'making_charges'       => 'decimal:2',
     ];
 
-    // ========================================
+    // =========================================================================
     // RELATIONSHIPS
-    // ========================================
-    
+    // =========================================================================
+
     public function vendor()
     {
         return $this->belongsTo(ChartOfAccounts::class, 'vendor_id');
@@ -57,11 +79,13 @@ class PurchaseInvoice extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /** Bank used for cheque payment */
     public function bank()
     {
         return $this->belongsTo(ChartOfAccounts::class, 'bank_name');
     }
 
+    /** Bank used for bank transfer payment */
     public function transferBank()
     {
         return $this->belongsTo(ChartOfAccounts::class, 'transfer_from_bank');
@@ -91,218 +115,187 @@ class PurchaseInvoice extends Model
             'voucher_id',
             'id',
             'id'
-        )->where('vouchers.reference_type', 'App\Models\PurchaseInvoice');
+        )->where('vouchers.reference_type', self::class);
     }
 
-    // ========================================
+    // =========================================================================
     // SCOPES
-    // ========================================
-    
-    /**
-     * Filter by vendor
-     */
+    // =========================================================================
+
     public function scopeForVendor($query, $vendorId)
     {
         return $query->where('vendor_id', $vendorId);
     }
 
-    /**
-     * Filter by payment method
-     */
     public function scopePaymentMethod($query, $method)
     {
         return $query->where('payment_method', $method);
     }
 
-    /**
-     * Filter by date range
-     */
     public function scopeDateRange($query, $startDate, $endDate)
     {
         return $query->whereBetween('invoice_date', [$startDate, $endDate]);
     }
 
-    /**
-     * Filter taxable invoices
-     */
     public function scopeTaxable($query)
     {
         return $query->where('is_taxable', true);
     }
 
-    /**
-     * Filter non-taxable invoices
-     */
     public function scopeNonTaxable($query)
     {
         return $query->where('is_taxable', false);
     }
 
-    /**
-     * Filter by currency
-     */
     public function scopeCurrency($query, $currency)
     {
         return $query->where('currency', $currency);
     }
 
-    /**
-     * Get credit purchases (unpaid)
-     */
     public function scopeCredit($query)
     {
         return $query->where('payment_method', 'credit');
     }
 
-    // ========================================
-    // HELPER METHODS & ATTRIBUTES
-    // ========================================
-    
-    /**
-     * Get total material value
-     */
+    // =========================================================================
+    // COMPUTED ATTRIBUTES
+    // =========================================================================
+
+    /** Sum of material_value across all items */
     public function getTotalMaterialAttribute()
     {
         return $this->items->sum('material_value');
     }
 
-    /**
-     * Get total making charges
-     */
+    /** Sum of making_value across all items */
     public function getTotalMakingAttribute()
     {
         return $this->items->sum('making_value');
     }
 
-    /**
-     * Get total VAT amount
-     */
+    /** Sum of vat_amount across all items */
     public function getTotalVatAttribute()
     {
         return $this->items->sum('vat_amount');
     }
 
     /**
-     * Get total parts value
+     * Sum of all part totals across all items.
+     * Parts = (diamond CTS × rate) + (stone qty × stone rate)
      */
     public function getTotalPartsAttribute()
     {
-        return $this->items->sum(function ($item) {
-            return $item->parts->sum('total');
-        });
+        return $this->items->sum(fn($item) => $item->parts->sum('total'));
     }
 
     /**
-     * Get gold material value only
+     * Diamond part value only: Σ (part qty × part rate)
      */
+    public function getTotalDiamondPartsValueAttribute()
+    {
+        return $this->items->sum(fn($item) => $item->parts->sum(fn($p) => $p->qty * $p->rate));
+    }
+
+    /**
+     * Stone part value only: Σ (stone qty × stone rate)
+     */
+    public function getTotalStonePartsValueAttribute()
+    {
+        return $this->items->sum(fn($item) => $item->parts->sum(fn($p) => ($p->stone_qty ?? 0) * ($p->stone_rate ?? 0)));
+    }
+
+    /** Gold material value only */
     public function getGoldMaterialValueAttribute()
     {
         return $this->items->where('material_type', 'gold')->sum('material_value');
     }
 
-    /**
-     * Get diamond material value only
-     */
+    /** Diamond material value only */
     public function getDiamondMaterialValueAttribute()
     {
         return $this->items->where('material_type', 'diamond')->sum('material_value');
     }
 
-    /**
-     * Get total purity weight (for metal fixing reports)
-     */
+    /** Total purity weight across all items */
     public function getTotalPurityWeightAttribute()
     {
         return $this->items->sum('purity_weight');
     }
 
-    /**
-     * Check if invoice has accounting entries
-     */
-    public function hasAccountingEntries()
+    /** Total gold gross weight (net_wt + CTS/5) for gold items only */
+    public function getTotalGoldGrossWeightAttribute()
+    {
+        return $this->items->where('material_type', 'gold')->sum('gross_weight');
+    }
+
+    /** Total Net Wt (user-entered) across all items */
+    public function getTotalNetWeightAttribute()
+    {
+        return $this->items->sum('net_weight');
+    }
+
+    // =========================================================================
+    // STATUS HELPERS
+    // =========================================================================
+
+    public function hasAccountingEntries(): bool
     {
         return $this->vouchers()->exists();
     }
 
-    /**
-     * Check if payment is pending (credit purchase)
-     */
-    public function isPending()
+    public function isPending(): bool
     {
         return $this->payment_method === 'credit';
     }
 
-    /**
-     * Check if payment is completed
-     */
-    public function isPaid()
+    public function isPaid(): bool
     {
         return in_array($this->payment_method, ['cash', 'cheque', 'bank_transfer']);
     }
 
-    /**
-     * Check if invoice uses material + making cost method
-     */
-    public function isMaterialMethod()
+    public function isMaterialMethod(): bool
     {
         return str_contains($this->payment_method, 'material');
     }
 
-    /**
-     * Get invoice status badge color
-     */
-    public function getStatusColorAttribute()
+    public function getStatusColorAttribute(): string
     {
-        return match($this->payment_method) {
-            'credit' => 'warning',
-            'cash' => 'success',
-            'cheque' => 'info',
-            'bank_transfer' => 'primary',
-            default => 'secondary',
+        return match ($this->payment_method) {
+            'credit'            => 'warning',
+            'cash'              => 'success',
+            'cheque'            => 'info',
+            'bank_transfer'     => 'primary',
+            default             => 'secondary',
         };
     }
 
-    /**
-     * Get invoice status label
-     */
-    public function getStatusLabelAttribute()
+    public function getStatusLabelAttribute(): string
     {
-        return match($this->payment_method) {
-            'credit' => 'Pending Payment',
-            'cash' => 'Paid - Cash',
-            'cheque' => 'Paid - Cheque',
-            'bank_transfer' => 'Paid - Bank Transfer',
+        return match ($this->payment_method) {
+            'credit'               => 'Pending Payment',
+            'cash'                 => 'Paid - Cash',
+            'cheque'               => 'Paid - Cheque',
+            'bank_transfer'        => 'Paid - Bank Transfer',
             'material+making cost' => 'Material + Making',
-            default => ucfirst($this->payment_method),
+            default                => ucfirst($this->payment_method),
         };
     }
 
-    /**
-     * Get formatted invoice number
-     */
-    public function getFormattedInvoiceNoAttribute()
-    {
-        return $this->invoice_no;
-    }
-
-    /**
-     * Get invoice type (Tax or Non-Tax)
-     */
-    public function getInvoiceTypeAttribute()
+    public function getInvoiceTypeAttribute(): string
     {
         return $this->is_taxable ? 'Tax Invoice' : 'Non-Tax Invoice';
     }
 
     /**
-     * Calculate outstanding amount (for credit purchases)
+     * Outstanding amount for credit purchases.
+     * Checks payment vouchers made against this invoice.
      */
-    public function getOutstandingAmountAttribute()
+    public function getOutstandingAmountAttribute(): float
     {
         if ($this->payment_method !== 'credit') {
             return 0;
         }
 
-        // Get total payments made against this invoice
         $totalPaid = $this->vouchers()
             ->where('voucher_type', 'payment')
             ->sum('amount');
@@ -310,44 +303,32 @@ class PurchaseInvoice extends Model
         return max(0, $this->net_amount_aed - $totalPaid);
     }
 
-    /**
-     * Check if invoice is fully paid
-     */
-    public function isFullyPaid()
+    public function isFullyPaid(): bool
     {
-        return $this->outstanding_amount <= 0.01; // Allow 0.01 rounding difference
+        return $this->outstanding_amount <= 0.01;
     }
 
-    // ========================================
-    // STATIC HELPER METHODS
-    // ========================================
-    
-    /**
-     * Get total purchases for a vendor
-     */
-    public static function getTotalForVendor($vendorId, $startDate = null, $endDate = null)
+    // =========================================================================
+    // STATIC HELPERS
+    // =========================================================================
+
+    public static function getTotalForVendor($vendorId, $startDate = null, $endDate = null): float
     {
         $query = self::where('vendor_id', $vendorId);
-        
+
         if ($startDate && $endDate) {
             $query->whereBetween('invoice_date', [$startDate, $endDate]);
         }
-        
-        return $query->sum('net_amount_aed');
+
+        return (float) $query->sum('net_amount_aed');
     }
 
-    /**
-     * Get total purchases for a date range
-     */
-    public static function getTotalForDateRange($startDate, $endDate)
+    public static function getTotalForDateRange($startDate, $endDate): float
     {
-        return self::whereBetween('invoice_date', [$startDate, $endDate])
+        return (float) self::whereBetween('invoice_date', [$startDate, $endDate])
             ->sum('net_amount_aed');
     }
 
-    /**
-     * Get pending payments (credit purchases)
-     */
     public static function getPendingPayments()
     {
         return self::credit()
@@ -356,25 +337,25 @@ class PurchaseInvoice extends Model
             ->filter(fn($invoice) => !$invoice->isFullyPaid());
     }
 
-    /**
-     * Boot method for model events
-     */
+    // =========================================================================
+    // BOOT
+    // =========================================================================
+
     protected static function boot()
     {
         parent::boot();
 
-        // When deleting invoice, delete related vouchers
         static::deleting(function ($invoice) {
-            // Delete vouchers (cascade will delete entries)
-            $invoice->vouchers()->delete();
-            
-            // Delete items and parts
+            $invoice->vouchers()->each(function ($voucher) {
+                $voucher->entries()->delete();
+                $voucher->delete();
+            });
+
             $invoice->items()->each(function ($item) {
                 $item->parts()->delete();
             });
             $invoice->items()->delete();
-            
-            // Delete attachments
+
             $invoice->attachments()->delete();
         });
     }

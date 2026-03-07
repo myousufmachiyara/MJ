@@ -23,13 +23,13 @@ return new class extends Migration
 
             /* ================= CURRENCY ================= */
             $table->enum('currency', ['AED', 'USD'])->default('AED');
-            $table->decimal('exchange_rate', 15, 6)->nullable(); // e.g., 3.6725
-            $table->decimal('net_amount', 18, 2);               // original currency amount
+            $table->decimal('exchange_rate', 15, 6)->nullable();
+            $table->decimal('net_amount', 18, 2);
             $table->decimal('net_amount_aed', 18, 2)->default(0);
 
             /* ================= PAYMENT ================= */
-            $table->enum('payment_method', ['cash', 'credit', 'bank_transfer' , 'cheque', 'material+making cost'])->nullable();
-            $table->string('payment_term')->nullable(); // Matches your $fillable 'payment_term'
+            $table->enum('payment_method', ['cash', 'credit', 'bank_transfer', 'cheque', 'material+making cost'])->nullable();
+            $table->string('payment_term')->nullable();
 
             /* ================= CHEQUE ================= */
             $table->string('cheque_no', 50)->nullable();
@@ -39,7 +39,7 @@ return new class extends Migration
 
             /* ================= BANK TRANSFER ================= */
             $table->unsignedBigInteger('transfer_from_bank')->nullable();
-            $table->string('transfer_to_bank', 150)->nullable(); // Vendor bank name
+            $table->string('transfer_to_bank', 150)->nullable();
             $table->string('account_title', 150)->nullable();
             $table->string('account_no', 100)->nullable();
             $table->string('transaction_id', 100)->nullable();
@@ -54,26 +54,33 @@ return new class extends Migration
             $table->string('material_received_by', 100)->nullable();
             $table->string('material_given_by', 100)->nullable();
 
-            /* ================= METAL RATES (FIXED) ================= */
-            // Gold Rates
-            $table->decimal('gold_rate_aed', 18, 4)->nullable();
+            /* ================= METAL RATES ================= */
+            // Gold — three columns:
+            //   gold_rate_usd        : user input (USD/oz)
+            //   gold_rate_aed_ounce  : AED/oz — auto-filled (USD × exchange_rate), display only
+            //   gold_rate_aed        : AED/gram — used in all calculations (÷ 31.1035)
             $table->decimal('gold_rate_usd', 18, 4)->nullable();
-            
-            // Other Metal / Silver Rates (renamed to match controller 'metal_rate' logic)
-            $table->decimal('diamond_rate_aed', 18, 4)->nullable();
+            $table->decimal('gold_rate_aed_ounce', 18, 4)->nullable();
+            $table->decimal('gold_rate_aed', 18, 4)->nullable();
+
+            // Diamond — two columns:
+            //   diamond_rate_usd : user input (USD/Ct)
+            //   diamond_rate_aed : AED/Ct — auto-filled (USD × exchange_rate) or direct entry
+            //                      no gram/ounce conversion; used as-is in calculations
             $table->decimal('diamond_rate_usd', 18, 4)->nullable();
+            $table->decimal('diamond_rate_aed', 18, 4)->nullable();
 
             /* ================= META ================= */
             $table->unsignedBigInteger('created_by');
-            $table->string('received_by')->nullable(); // Added to match your model
+            $table->string('received_by')->nullable();
             $table->timestamps();
             $table->softDeletes();
 
             /* ================= FOREIGN KEYS ================= */
-            $table->foreign('bank_name')->references('id')->on('chart_of_accounts')->onDelete('cascade');
             $table->foreign('vendor_id')->references('id')->on('chart_of_accounts')->onDelete('cascade');
-            $table->foreign('created_by')->references('id')->on('users')->onDelete('cascade');
+            $table->foreign('bank_name')->references('id')->on('chart_of_accounts')->onDelete('cascade');
             $table->foreign('transfer_from_bank')->references('id')->on('chart_of_accounts')->onDelete('cascade');
+            $table->foreign('created_by')->references('id')->on('users')->onDelete('cascade');
         });
     }
 

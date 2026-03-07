@@ -12,33 +12,69 @@ class PurchaseInvoiceItem extends Model
     protected $fillable = [
         'purchase_invoice_id',
         'item_name', 'product_id', 'variation_id', 'item_description',
-        'gross_weight', 'purity', 'purity_weight', 'col_995',
-        'making_rate', 'making_value',
-        'material_type', 'material_rate', 'material_value',
-        'taxable_amount', 'vat_percent', 'vat_amount',
-        'item_total', 'remarks', 'barcode_number', 'is_printed',
+
+        // Weight columns
+        'net_weight',      // user-entered weight (.net-weight in blade)
+        'gross_weight',    // calculated: net_wt + (diamondCTS/5) + (stoneCTS/5)  (.gross-weight in blade)
+        'purity',
+        'purity_weight',   // net_weight × purity
+        'col_995',         // purity_weight / 0.995
+
+        // Making
+        'making_rate',
+        'making_value',    // net_weight × making_rate
+
+        // Material
+        'material_type',   // 'gold' | 'diamond'
+        'material_rate',   // gold → AED/gram ; diamond → AED/Ct
+        'material_value',  // material_rate × purity_weight
+
+        // Parts
+        'parts_total',     // Σ part totals (stored for reference; NOT journalized)
+
+        // Totals
+        'taxable_amount',  // making_value + parts_total
+        'vat_percent',
+        'vat_amount',      // taxable_amount × (vat_percent / 100)
+        'item_total',      // material_value + taxable_amount + vat_amount
+
+        'remarks',
+        'barcode_number',
+        'is_printed',
     ];
 
     protected $casts = [
-        'gross_weight' => 'decimal:3',
-        'purity' => 'decimal:3',
+        // Weight
+        'net_weight'    => 'decimal:3',
+        'gross_weight'  => 'decimal:3',
+        'purity'        => 'decimal:3',
         'purity_weight' => 'decimal:3',
-        'col_995' => 'decimal:3',
-        'making_rate' => 'decimal:2',
-        'making_value' => 'decimal:2',
-        'material_rate' => 'decimal:2',
+        'col_995'       => 'decimal:3',
+
+        // Making
+        'making_rate'   => 'decimal:2',
+        'making_value'  => 'decimal:2',
+
+        // Material
+        'material_rate'  => 'decimal:4',  // AED/gram needs 4dp
         'material_value' => 'decimal:2',
+
+        // Parts
+        'parts_total'    => 'decimal:2',
+
+        // Totals
         'taxable_amount' => 'decimal:2',
-        'vat_percent' => 'decimal:2',
-        'vat_amount' => 'decimal:2',
-        'item_total' => 'decimal:2',
-        
+        'vat_percent'    => 'decimal:2',
+        'vat_amount'     => 'decimal:2',
+        'item_total'     => 'decimal:2',
+
+        'is_printed'     => 'boolean',
     ];
 
-    // ========================================
+    // =========================================================================
     // RELATIONSHIPS
-    // ========================================
-    
+    // =========================================================================
+
     public function invoice()
     {
         return $this->belongsTo(PurchaseInvoice::class, 'purchase_invoice_id');
@@ -59,190 +95,176 @@ class PurchaseInvoiceItem extends Model
         return $this->hasMany(PurchaseInvoiceItemPart::class, 'purchase_invoice_item_id');
     }
 
-    // ========================================
-    // ACCESSORS & ATTRIBUTES
-    // ========================================
-    
-    /**
-     * Get display name (custom name or product name)
-     */
-    public function getDisplayNameAttribute()
+    // =========================================================================
+    // ACCESSORS
+    // =========================================================================
+
+    /** Custom name or product name fallback */
+    public function getDisplayNameAttribute(): string
     {
         return $this->item_name ?: ($this->product->name ?? 'N/A');
     }
 
-    /**
-     * Get total parts value
-     */
-    public function getTotalPartsValueAttribute()
+    /** Sum of all part row totals */
+    public function getTotalPartsValueAttribute(): float
     {
-        return $this->parts->sum('total');
+        return (float) $this->parts->sum('total');
     }
 
     /**
-     * Get item grand total (item total + parts)
+     * Item grand total = item_total + parts total.
+     * item_total = material + making + vat (no parts).
+     * Grand total adds parts on top.
      */
-    public function getItemGrandTotalAttribute()
+    public function getItemGrandTotalAttribute(): float
     {
-        return $this->item_total + $this->total_parts_value;
+        return (float) $this->item_total + $this->total_parts_value;
     }
 
-    /**
-     * Get pure gold/diamond weight
-     */
-    public function getPureWeightAttribute()
+    /** Diamond part value: Σ (qty × rate) */
+    public function getDiamondPartsValueAttribute(): float
     {
-        return $this->purity_weight;
+        return (float) $this->parts->sum(fn($p) => $p->qty * $p->rate);
     }
 
-    /**
-     * Check if item has parts
-     */
-    public function hasParts()
+    /** Stone part value: Σ (stone_qty × stone_rate) */
+    public function getStonePartsValueAttribute(): float
+    {
+        return (float) $this->parts->sum(fn($p) => ($p->stone_qty ?? 0) * ($p->stone_rate ?? 0));
+    }
+
+    public function getMaterialTypeLabelAttribute(): string
+    {
+        return ucfirst($this->material_type);
+    }
+
+    public function getVatPercentFormattedAttribute(): string
+    {
+        return number_format($this->vat_percent, 0) . '%';
+    }
+
+    public function getBreakdownAttribute(): array
+    {
+        return [
+            'material'     => $this->material_value,
+            'making'       => $this->making_value,
+            'parts'        => $this->total_parts_value,
+            'vat'          => $this->vat_amount,
+            'item_total'   => $this->item_total,
+            'grand_total'  => $this->item_grand_total,
+        ];
+    }
+
+    // =========================================================================
+    // HELPERS
+    // =========================================================================
+
+    public function isGold(): bool
+    {
+        return $this->material_type === 'gold';
+    }
+
+    public function isDiamond(): bool
+    {
+        return $this->material_type === 'diamond';
+    }
+
+    public function hasParts(): bool
     {
         return $this->parts()->exists();
     }
 
     /**
-     * Get material type label
+     * Recalculate all derived fields from stored net_weight / purity / rates.
+     * Mirrors blade calculateRow() exactly.
+     *
+     * Formula:
+     *   purity_weight  = net_weight × purity
+     *   col_995        = purity_weight / 0.995
+     *   making_value   = net_weight × making_rate     ← net_weight, NOT gross_weight
+     *   material_value = material_rate × purity_weight
+     *   parts_total    = loaded from related parts
+     *   taxable        = making_value + parts_total
+     *   vat_amount     = taxable × (vat_percent / 100)
+     *   item_total     = material_value + taxable + vat_amount
      */
-    public function getMaterialTypeLabelAttribute()
+    public function recalculate(): static
     {
-        return ucfirst($this->material_type);
+        $this->loadMissing('parts');
+
+        $this->purity_weight  = $this->net_weight * $this->purity;
+        $this->col_995        = $this->purity_weight > 0 ? $this->purity_weight / 0.995 : 0;
+        $this->making_value   = $this->net_weight * $this->making_rate;
+        $this->material_value = $this->material_rate * $this->purity_weight;
+
+        $partsTotal = (float) $this->parts->sum('total');
+
+        $this->parts_total    = $partsTotal;
+        $this->taxable_amount = $this->making_value + $partsTotal;
+        $this->vat_amount     = $this->taxable_amount * ($this->vat_percent / 100);
+        $this->item_total     = $this->material_value + $this->taxable_amount + $this->vat_amount;
+
+        return $this;
     }
 
-    /**
-     * Get VAT percentage formatted
-     */
-    public function getVatPercentFormattedAttribute()
-    {
-        return number_format($this->vat_percent, 0) . '%';
-    }
-
-    /**
-     * Check if item is gold
-     */
-    public function isGold()
-    {
-        return $this->material_type === 'gold';
-    }
-
-    /**
-     * Check if item is diamond
-     */
-    public function isDiamond()
-    {
-        return $this->material_type === 'diamond';
-    }
-
-    /**
-     * Get item breakdown for display
-     */
-    public function getBreakdownAttribute()
+    public function getFormattedWeights(): array
     {
         return [
-            'material' => $this->material_value,
-            'making' => $this->making_value,
-            'parts' => $this->total_parts_value,
-            'vat' => $this->vat_amount,
-            'total' => $this->item_grand_total,
+            'net_weight'    => number_format($this->net_weight, 3),
+            'gross_weight'  => number_format($this->gross_weight, 3),
+            'purity'        => number_format($this->purity, 3),
+            'purity_weight' => number_format($this->purity_weight, 3),
+            'col_995'       => number_format($this->col_995, 3),
         ];
     }
 
-    // ========================================
+    // =========================================================================
     // SCOPES
-    // ========================================
-    
-    /**
-     * Filter by material type
-     */
+    // =========================================================================
+
     public function scopeMaterialType($query, $type)
     {
         return $query->where('material_type', $type);
     }
 
-    /**
-     * Get only gold items
-     */
     public function scopeGold($query)
     {
         return $query->where('material_type', 'gold');
     }
 
-    /**
-     * Get only diamond items
-     */
     public function scopeDiamond($query)
     {
         return $query->where('material_type', 'diamond');
     }
 
-    /**
-     * Items with parts
-     */
     public function scopeWithParts($query)
     {
         return $query->has('parts');
     }
 
-    /**
-     * Items without parts
-     */
     public function scopeWithoutParts($query)
     {
         return $query->doesntHave('parts');
     }
 
-    // ========================================
-    // HELPER METHODS
-    // ========================================
-    
-    /**
-     * Calculate item totals (useful for recalculation)
-     */
-    public function calculateTotals()
+    public function scopePrinted($query)
     {
-        $this->purity_weight = $this->gross_weight * $this->purity;
-        $this->col_995 = $this->purity_weight / 0.995;
-        $this->making_value = $this->gross_weight * $this->making_rate;
-        $this->material_value = $this->purity_weight * $this->material_rate;
-        $this->taxable_amount = $this->making_value;
-        $this->vat_amount = $this->taxable_amount * ($this->vat_percent / 100);
-        $this->item_total = $this->taxable_amount + $this->material_value + $this->vat_amount;
-        
-        return $this;
+        return $query->where('is_printed', true);
     }
 
-    /**
-     * Add a part to this item
-     */
-    public function addPart(array $partData)
+    public function scopeNotPrinted($query)
     {
-        return $this->parts()->create($partData);
+        return $query->where('is_printed', false);
     }
 
-    /**
-     * Get formatted weights
-     */
-    public function getFormattedWeights()
-    {
-        return [
-            'gross' => number_format($this->gross_weight, 3),
-            'purity' => number_format($this->purity, 3),
-            'pure' => number_format($this->purity_weight, 3),
-            'col_995' => number_format($this->col_995, 3),
-        ];
-    }
+    // =========================================================================
+    // BOOT
+    // =========================================================================
 
-    // ========================================
-    // BOOT METHOD
-    // ========================================
-    
     protected static function boot()
     {
         parent::boot();
 
-        // When deleting item, delete its parts
         static::deleting(function ($item) {
             $item->parts()->delete();
         });

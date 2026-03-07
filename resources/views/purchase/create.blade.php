@@ -74,11 +74,8 @@
 
             <div class="col-12 col-md-2 mt-2">
               <label>Diamond Rate (AED) / Ct.</label>
-              <input type="number" step="any" id="diamond_rate_aed_ounce" name="diamond_rate_aed_ounce" class="form-control" value="0">
+              <input type="number" step="any" id="diamond_rate_aed" name="diamond_rate_aed" class="form-control" value="0">
             </div>
-
-            {{-- Diamond rate AED/Ct. entered directly — no gram conversion needed --}}
-            <input type="hidden" id="diamond_rate_aed_gram" name="diamond_rate_aed_gram_hidden">
 
             <div class="col-md-4 mt-2">
               <label>Remarks</label>
@@ -234,7 +231,15 @@
               <input type="text" id="sum_vat_amount" class="form-control" readonly>
             </div>
             <div class="col-md-2 mt-3">
-              <label>Net Amount</label>
+              <label>Total Diamond Val. <small class="text-muted">(Parts)</small></label>
+              <input type="text" id="sum_diamond_value" class="form-control text-warning fw-bold" readonly>
+            </div>
+            <div class="col-md-2 mt-3">
+              <label>Total Stone Val. <small class="text-muted">(Parts)</small></label>
+              <input type="text" id="sum_stone_value" class="form-control text-info fw-bold" readonly>
+            </div>
+            <div class="col-md-2 mt-3">
+              <label>Net Amount <small class="text-muted">(Mat + Dia + Stone)</small></label>
               <input type="text" id="net_amount_display" class="form-control text-danger fw-bold" readonly>
               <input type="hidden" name="net_amount" id="net_amount">
             </div>
@@ -644,7 +649,7 @@
     });
 
     // Purity or other item fields changed — re-derive gross wt (purity affects the formula) then recalc row
-    $(document).on('input change', '.purity, .making-rate, .vat-percent, .material-type, #gold_rate_aed, #diamond_rate_aed_gram', function() {
+    $(document).on('input change', '.purity, .making-rate, .vat-percent, .material-type, #gold_rate_aed, #diamond_rate_aed', function() {
         const row = $(this).closest('tr.item-row');
         if (row.length) {
             recalcItemGrossWeight(row);
@@ -705,7 +710,7 @@
 
         let rate = (materialType === 'gold')
             ? parseFloat($('#gold_rate_aed').val())
-            : parseFloat($('#diamond_rate_aed_ounce').val());
+            : parseFloat($('#diamond_rate_aed').val());
         rate = rate || 0;
 
         // Purity Wt = purity % x Net Wt (user-entered), NOT gross wt
@@ -741,10 +746,11 @@
         let sumMakingTaxable = 0;
         let sumMaterial      = 0;
         let sumVAT           = 0;
-        let netTotal         = 0;
         let totalStoneQty    = 0;
         let sumGoldGross     = 0;
         let totalDiamondCTS  = 0;
+        let totalDiamondVal  = 0;  // sum of (diamond qty * rate) across all parts
+        let totalStoneVal    = 0;  // sum of (stone qty * stone rate) across all parts
 
         $('#PurchaseTable tr.item-row').each(function () {
             const itemRow      = $(this);
@@ -757,12 +763,18 @@
             sumMakingTaxable += parseFloat(itemRow.find('.taxable-amount').val()) || 0;
             sumMaterial      += parseFloat(itemRow.find('.material-value').val()) || 0;
             sumVAT           += parseFloat(itemRow.find('.vat-amount').val())     || 0;
-            netTotal         += parseFloat(itemRow.find('.item-total').val())     || 0;
 
-            // Sum diamond CTS and stone qty from all parts regardless of material type
+            // Sum diamond CTS/value and stone qty/value from all parts
             itemRow.next('.parts-row').find('.part-item-row').each(function () {
-                totalDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
-                totalStoneQty   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
+                const diaQty    = parseFloat($(this).find('.part-qty').val())        || 0;
+                const diaRate   = parseFloat($(this).find('.part-rate').val())       || 0;
+                const stoneQty  = parseFloat($(this).find('.part-stone-qty').val())  || 0;
+                const stoneRate = parseFloat($(this).find('.part-stone-rate').val()) || 0;
+
+                totalDiamondCTS += diaQty;
+                totalStoneQty   += stoneQty;
+                totalDiamondVal += diaQty   * diaRate;
+                totalStoneVal   += stoneQty * stoneRate;
             });
 
             if (materialType === 'gold') {
@@ -772,6 +784,9 @@
 
         const makingTotalWithVat = sumMakingTaxable + sumVAT;
 
+        // Net Amount = Total Material (gold/diamond item value) + Diamond Parts Val + Stone Parts Val + Making (incl VAT)
+        const netTotal = sumMaterial + totalDiamondVal + totalStoneVal + makingTotalWithVat;
+
         $('#sum_gold_gross_weight').val(sumGoldGross.toFixed(3));
         $('#sum_diamond_cts').val(totalDiamondCTS.toFixed(3));
         $('#sum_stone_qty').val(totalStoneQty.toFixed(2));
@@ -780,6 +795,8 @@
         $('#sum_making_value').val(makingTotalWithVat.toFixed(2));
         $('#sum_material_value').val(sumMaterial.toFixed(2));
         $('#sum_vat_amount').val(sumVAT.toFixed(2));
+        $('#sum_diamond_value').val(totalDiamondVal.toFixed(2));
+        $('#sum_stone_value').val(totalStoneVal.toFixed(2));
         $('#net_amount_display').val(netTotal.toFixed(2));
         $('#net_amount').val(netTotal.toFixed(2));
 
@@ -798,7 +815,7 @@
     }
 
     // ================= OUNCE TO GRAM & CURRENCY CONVERSION =================
-    $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #diamond_rate_aed_ounce, #exchange_rate', function() {
+    $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #diamond_rate_aed, #exchange_rate', function() {
         const id     = $(this).attr('id');
         const exRate = parseFloat($('#exchange_rate').val()) || 3.674;
 
@@ -809,14 +826,11 @@
         const goldAedOunceFinal = parseFloat($('#gold_rate_aed_ounce').val()) || 0;
         $('#gold_rate_aed').val((goldAedOunceFinal / TROY_OUNCE_TO_GRAM).toFixed(4));
 
-        // Diamond: AED/Ct. entered directly — USD/Ct converts at exchange rate, no gram division
+        // Diamond: AED/Ct entered directly — USD/Ct converts via exchange rate only, no gram division
         if (id === 'diamond_rate_usd' || id === 'exchange_rate') {
             const diaUsd = parseFloat($('#diamond_rate_usd').val()) || 0;
-            $('#diamond_rate_aed_ounce').val((diaUsd * exRate).toFixed(4));
+            $('#diamond_rate_aed').val((diaUsd * exRate).toFixed(4));
         }
-        // diamond_rate_aed_ounce now holds AED/Ct directly — pass it through to the hidden field
-        const diaAedCt = parseFloat($('#diamond_rate_aed_ounce').val()) || 0;
-        $('#diamond_rate_aed_gram').val(diaAedCt.toFixed(4));
 
         $('#PurchaseTable tr.item-row').each(function() {
             calculateRow($(this));

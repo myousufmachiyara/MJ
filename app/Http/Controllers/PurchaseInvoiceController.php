@@ -8,80 +8,64 @@ use App\Models\Product;
 use App\Models\Voucher;
 use App\Models\MeasurementUnit;
 use App\Models\AccountingEntry;
-use \App\Models\Purity;
-use App\Models\ChartOfAccounts; // assuming vendors are COA entries
+use App\Models\Purity;
+use App\Models\ChartOfAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
-use App\Services\myPDF;
+use App\Services\MyPDF;
 use Carbon\Carbon;
 
 class PurchaseInvoiceController extends Controller
 {
+    // =========================================================================
+    // INDEX
+    // =========================================================================
+
     public function index()
     {
-        $invoices = PurchaseInvoice::with('vendor','attachments')->get();
+        $invoices = PurchaseInvoice::with('vendor', 'attachments')->get();
         return view('purchase.index', compact('invoices'));
     }
 
+    // =========================================================================
+    // CREATE
+    // =========================================================================
+
     public function create()
     {
-        $vendors = ChartOfAccounts::where('account_type', 'vendor')->get();
-        $banks = ChartOfAccounts::where('account_type', 'bank')->get();
+        $vendors  = ChartOfAccounts::where('account_type', 'vendor')->get();
+        $banks    = ChartOfAccounts::where('account_type', 'bank')->get();
         $products = Product::with('measurementUnit')->get();
-        $purities   = Purity::all();
+        $purities = Purity::all();
 
         return view('purchase.create', compact('products', 'vendors', 'banks', 'purities'));
     }
 
+    // =========================================================================
+    // DOWNLOAD TEMPLATE
+    // =========================================================================
+
     public function downloadTemplate()
     {
         $filename = "purchase_import_template.csv";
-        $handle = fopen('php://output', 'w');
+        $handle   = fopen('php://output', 'w');
 
-        // Headers matching the JavaScript parser
         fputcsv($handle, [
-            'Item Name', 'Description', 'Purity', 'Gross Wt', 
-            'Making Rate', 'Material', 'VAT %', 
-            'Part Name', 'Part Desc', 'Part Qty', 'Part Rate', 'Stone Qty', 'Stone Rate'
+            'Item Name', 'Description', 'Purity', 'Gross Wt',
+            'Making Rate', 'Material', 'VAT %',
+            'Part Name', 'Part Desc', 'Part Qty', 'Part Rate', 'Stone Qty', 'Stone Rate',
         ]);
 
-        // Item 1: Gold Bracelet with Diamond Part
-        fputcsv($handle, ['18K Gold Bracelet', 'Handmade Chain Design', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '']);
-        fputcsv($handle, ['', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50']);
-
-        // Item 2: Standard 22K Ring (No Parts)
-        fputcsv($handle, ['22K Wedding Band', 'Plain Polished', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '']);
-
-        // Item 3: Luxury Diamond Ring (Multiple Parts)
-        fputcsv($handle, ['Diamond Engagement Ring', 'Solitaire Setting', '0.75', '4.20', '150.00', 'gold', '5', '', '', '', '', '', '']);
-        fputcsv($handle, ['', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0']);
-        fputcsv($handle, ['', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10']);
-
-        // Item 4: 21K Arabic Necklace
-        fputcsv($handle, ['21K Dubai Gold Necklace', 'Filigree Work', '0.88', '45.30', '12.00', 'gold', '5', '', '', '', '', '', '']);
-
-        // Item 5: Stone Necklace (Mixed Parts)
-        fputcsv($handle, ['Ruby Pendant', '18K White Gold', '0.75', '6.10', '45.00', 'gold', '5', '', '', '', '', '', '']);
-        fputcsv($handle, ['', '', '', '', '', '', '', 'Ruby Center', 'Oval Cut', '2.10', '3000', '1', '200']);
-        fputcsv($handle, ['', '', '', '', '', '', '', 'Diamond Halo', 'VS Clarity', '0.35', '1800', '12', '20']);
-
-        // Item 6: Simple Gold Coin (Investment)
-        fputcsv($handle, ['Gold Coin 10g', 'Swiss PAMP', '0.88', '10.00', '5.00', 'gold', '0', '', '', '', '', '', '']);
-
-        // Item 7: 18K Diamond Earrings
-        fputcsv($handle, ['Diamond Studs', 'White Gold 18K', '0.75', '2.50', '30.00', 'gold', '5', '', '', '', '', '', '']);
-        fputcsv($handle, ['', '', '', '', '', '', '', 'Diamonds', 'Pair Round Brilliant', '0.80', '4200', '2', '100']);
-
-        // Item 8: 22K Bangles (Heavy)
-        fputcsv($handle, ['22K Calcutta Bangles', 'Set of 2', '0.92', '65.00', '18.50', 'gold', '5', '', '', '', '', '', '']);
-
-        // Item 9: Fancy Colored Stone Ring
-        fputcsv($handle, ['Sapphire Ring', '18K Yellow Gold', '0.75', '5.80', '55.00', 'gold', '5', '', '', '', '', '', '']);
-        fputcsv($handle, ['', '', '', '', '', '', '', 'Blue Sapphire', 'Cushion Cut', '1.50', '2200', '1', '150']);
-
+        // Sample rows
+        fputcsv($handle, ['18K Gold Bracelet','Handmade Chain Design','0.75','12.50','25.00','gold','5','','','','','','']);
+        fputcsv($handle, ['','','','','','','','Small Diamonds','VVS1 Round','0.25','1500','10','50']);
+        fputcsv($handle, ['22K Wedding Band','Plain Polished','0.92','8.75','15.00','gold','5','','','','','','']);
+        fputcsv($handle, ['Diamond Engagement Ring','Solitaire Setting','0.75','4.20','150.00','gold','5','','','','','','']);
+        fputcsv($handle, ['','','','','','','','Main Diamond','1.0ct GIA','1.00','8500','0','0']);
+        fputcsv($handle, ['','','','','','','','Side Stones','Micro Pave','0.50','1200','24','10']);
 
         header('Content-Type: text/csv');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
@@ -89,79 +73,30 @@ class PurchaseInvoiceController extends Controller
         exit;
     }
 
+    // =========================================================================
+    // STORE
+    // =========================================================================
+
     public function store(Request $request)
     {
-        // ── Clear irrelevant payment fields ───────────────────────────────────
-        if ($request->payment_method !== 'cheque') {
-            $request->merge([
-                'bank_name'     => null,
-                'cheque_no'     => null,
-                'cheque_date'   => null,
-                'cheque_amount' => null,
-            ]);
-        }
+        $this->clearIrrelevantPaymentFields($request);
 
-        if ($request->payment_method !== 'bank_transfer') {
-            $request->merge([
-                'transfer_from_bank' => null,
-                'transfer_to_bank'   => null,
-                'account_title'      => null,
-                'account_no'         => null,
-                'transaction_id'     => null,
-                'transfer_date'      => null,
-                'transfer_amount'    => null,
-            ]);
-        }
-
-        // ── Validation ────────────────────────────────────────────────────────
-        $request->validate([
-            'is_taxable'          => 'required|boolean',
-            'vendor_id'           => 'required|exists:chart_of_accounts,id',
-            'invoice_date'        => 'required|date',
-            'currency'            => 'required|in:AED,USD',
-            'exchange_rate'       => 'nullable|required_if:currency,USD|numeric|min:0',
-            'net_amount'          => 'required|numeric|min:0',
-            'payment_method'      => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
-            'payment_term'        => 'nullable|string',
-            'gold_rate_aed'       => 'nullable|numeric|min:0',
-            'gold_rate_usd'       => 'nullable|numeric|min:0',
-            'diamond_rate_aed'    => 'nullable|numeric|min:0',
-            'diamond_rate_usd'    => 'nullable|numeric|min:0',
-            'bank_name'           => 'nullable|required_if:payment_method,cheque|exists:chart_of_accounts,id',
-            'cheque_no'           => 'nullable|required_if:payment_method,cheque|string',
-            'cheque_date'         => 'nullable|required_if:payment_method,cheque|date',
-            'cheque_amount'       => 'nullable|required_if:payment_method,cheque|numeric|min:0',
-            'transfer_from_bank'  => 'nullable|required_if:payment_method,bank_transfer|exists:chart_of_accounts,id',
-            'transfer_to_bank'    => 'nullable|string',
-            'account_title'       => 'nullable|string',
-            'account_no'          => 'nullable|string',
-            'transaction_id'      => 'nullable|string',
-            'transfer_date'       => 'nullable|required_if:payment_method,bank_transfer|date',
-            'transfer_amount'     => 'nullable|required_if:payment_method,bank_transfer|numeric|min:0',
-            'items'               => 'required|array|min:1',
-            'items.*.item_name'   => 'nullable|string|required_without:items.*.product_id',
-            'items.*.product_id'  => 'nullable|exists:products,id|required_without:items.*.item_name',
-            'items.*.gross_weight'   => 'required|numeric|min:0',
-            'items.*.purity'         => 'required|numeric|min:0|max:1',
-            'items.*.making_rate'    => 'required|numeric|min:0',
-            'items.*.material_type'  => 'required|in:gold,diamond',
-            'items.*.vat_percent'    => 'required|numeric|min:0',
-            'material_given_by'   => 'nullable|required_if:payment_method,material+making cost|string',
-            'material_received_by'=> 'nullable|required_if:payment_method,material+making cost|string',
-        ]);
+        $this->validateInvoice($request);
 
         try {
             DB::beginTransaction();
 
-            // ── Generate invoice number ───────────────────────────────────────
-            $isTaxable = $request->boolean('is_taxable');
-            $prefix    = $isTaxable ? 'PUR-TAX-' : 'PUR-';
+            // ── Invoice number ────────────────────────────────────────────────
+            $isTaxable  = $request->boolean('is_taxable');
+            $prefix     = $isTaxable ? 'PUR-TAX-' : 'PUR-';
+            $lastInvoice = PurchaseInvoice::withTrashed()
+                ->where('invoice_no', 'LIKE', $prefix . '%')
+                ->orderBy('id', 'desc')
+                ->first();
+            $nextNumber = $lastInvoice ? ((int) str_replace($prefix, '', $lastInvoice->invoice_no)) + 1 : 1;
+            $invoiceNo  = $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
 
-            $lastInvoice = PurchaseInvoice::withTrashed()->where('invoice_no', 'LIKE', $prefix . '%')->orderBy('id', 'desc')->first();
-            $nextNumber  = $lastInvoice ? (int) str_replace($prefix, '', $lastInvoice->invoice_no) + 1 : 1;
-            $invoiceNo   = $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
-
-            // ── Create invoice header with placeholder amounts (will update after items) ─
+            // ── Create invoice header (net_amount filled after items loop) ────
             $invoice = PurchaseInvoice::create([
                 'invoice_no'           => $invoiceNo,
                 'is_taxable'           => $isTaxable,
@@ -170,10 +105,13 @@ class PurchaseInvoiceController extends Controller
                 'remarks'              => $request->remarks,
                 'currency'             => $request->currency,
                 'exchange_rate'        => $request->exchange_rate,
-                'gold_rate_aed'        => $request->gold_rate_aed,
-                'gold_rate_usd'        => $request->gold_rate_usd,
-                'diamond_rate_aed'     => $request->diamond_rate_aed,
-                'diamond_rate_usd'     => $request->diamond_rate_usd,
+                // Rates stored as submitted from blade ─────────────────────────
+                'gold_rate_usd'          => $request->gold_rate_usd,
+                'gold_rate_aed_ounce'    => $request->gold_rate_aed_ounce,   // AED/oz (display)
+                'gold_rate_aed'          => $request->gold_rate_aed,          // AED/gram ← used in calculations
+                'diamond_rate_usd'       => $request->diamond_rate_usd,
+                'diamond_rate_aed'       => $request->diamond_rate_aed,          // AED/Ct ← used in calculations
+                // ──────────────────────────────────────────────────────────────
                 'net_amount'           => 0,
                 'net_amount_aed'       => 0,
                 'payment_method'       => $request->payment_method,
@@ -194,95 +132,13 @@ class PurchaseInvoiceController extends Controller
                 'created_by'           => auth()->id(),
             ]);
 
-            // ── Accumulators ──────────────────────────────────────────────────
-            $totalGoldMaterialAed    = 0.0;
-            $totalDiamondMaterialAed = 0.0;
-            $totalMakingAed          = 0.0;
-            $totalPartsAed           = 0.0;
-            $totalVatAed             = 0.0;
-            $position                = 1;
+            [$totals, $position] = $this->createItems($invoice, $request->items, $request, 1);
 
-            // ── Create items ──────────────────────────────────────────────────
-            foreach ($request->items as $itemData) {
-                $purityWeight = $itemData['gross_weight'] * $itemData['purity'];
-                $col995       = $purityWeight / 0.995;
-                $makingValue  = $itemData['gross_weight'] * $itemData['making_rate'];
-
-                $metalRate = ($itemData['material_type'] === 'gold')
-                    ? ($request->gold_rate_aed ?? 0)
-                    : ($request->diamond_rate_aed ?? 0);
-
-                $materialValue = $purityWeight * $metalRate;
-
-                // Parts total for this item (stored for reference, not included in taxable/net)
-                $itemPartsTotal = 0.0;
-                if (!empty($itemData['parts'])) {
-                    foreach ($itemData['parts'] as $partData) {
-                        $itemPartsTotal += ($partData['qty'] * $partData['rate'])
-                            + (($partData['stone_qty']  ?? 0) * ($partData['stone_rate'] ?? 0));
-                    }
-                }
-
-                // Only making is taxable; parts excluded
-                $taxableAmount = $makingValue;
-                $vatAmount     = $taxableAmount * ($itemData['vat_percent'] / 100);
-                $itemTotal     = $materialValue + $makingValue + $vatAmount;
-
-                $invoiceItem = $invoice->items()->create([
-                    'item_name'        => $itemData['item_name']        ?? null,
-                    'product_id'       => $itemData['product_id']       ?? null,
-                    'item_description' => $itemData['item_description'] ?? null,
-                    'gross_weight'     => $itemData['gross_weight'],
-                    'purity'           => $itemData['purity'],
-                    'purity_weight'    => $purityWeight,
-                    'col_995'          => $col995,
-                    'making_rate'      => $itemData['making_rate'],
-                    'making_value'     => $makingValue,
-                    'material_type'    => $itemData['material_type'],
-                    'material_rate'    => $metalRate,
-                    'material_value'   => $materialValue,
-                    'parts_total'      => $itemPartsTotal,
-                    'taxable_amount'   => $taxableAmount,
-                    'vat_percent'      => $itemData['vat_percent'],
-                    'vat_amount'       => $vatAmount,
-                    'item_total'       => $itemTotal,
-                    'barcode_number'   => $this->generateBarcodeNumber($invoice, $position),
-                    'is_printed'       => false,
-                ]);
-
-                // ── Accumulate ─────────────────────────────────────────────────
-                if ($itemData['material_type'] === 'gold') {
-                    $totalGoldMaterialAed    += $materialValue;
-                } else {
-                    $totalDiamondMaterialAed += $materialValue;
-                }
-                $totalMakingAed += $makingValue;
-                $totalPartsAed  += $itemPartsTotal;
-                $totalVatAed    += $vatAmount;
-                $position++;
-
-                // ── Create parts ───────────────────────────────────────────────
-                if (!empty($itemData['parts'])) {
-                    foreach ($itemData['parts'] as $partData) {
-                        $partTotal = ($partData['qty'] * $partData['rate'])
-                            + (($partData['stone_qty']  ?? 0) * ($partData['stone_rate'] ?? 0));
-
-                        $invoiceItem->parts()->create([
-                            'product_id'       => $partData['product_id']       ?? null,
-                            'item_name'        => $partData['item_name']        ?? null,
-                            'qty'              => $partData['qty'],
-                            'rate'             => $partData['rate'],
-                            'stone_qty'        => $partData['stone_qty']        ?? 0,
-                            'stone_rate'       => $partData['stone_rate']       ?? 0,
-                            'total'            => $partTotal,
-                            'part_description' => $partData['part_description'] ?? null,
-                        ]);
-                    }
-                }
-            }
-
-            // ── Calculate net amount server-side (material + making + VAT, no parts) ──
-            $calculatedNet    = ($totalGoldMaterialAed + $totalDiamondMaterialAed) + $totalMakingAed + $totalVatAed;
+            // ── Net amount ─────────────────────────────────────────────────────
+            // Formula (matches blade calculateTotals):
+            //   Net = totalMaterial + totalDiamondVal + totalStoneVal + totalMaking + totalVAT
+            $calculatedNet    = $totals['material'] + $totals['diamond_val'] + $totals['stone_val']
+                              + $totals['making'] + $totals['vat'];
             $calculatedNetAed = $request->currency === 'USD'
                 ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
                 : $calculatedNet;
@@ -292,23 +148,11 @@ class PurchaseInvoiceController extends Controller
                 'net_amount_aed' => $calculatedNetAed,
             ]);
 
-            // ── Attachments ───────────────────────────────────────────────────
-            if ($request->hasFile('attachments')) {
-                foreach ($request->file('attachments') as $file) {
-                    $path = $file->store('purchase_invoices', 'public');
-                    $invoice->attachments()->create(['file_path' => $path]);
-                }
-            }
+            // ── Attachments ────────────────────────────────────────────────────
+            $this->storeAttachments($request, $invoice);
 
-            // ── Accounting entries ────────────────────────────────────────────
-            $this->createPurchaseAccountingEntries(
-                $invoice,
-                $totalGoldMaterialAed,
-                $totalDiamondMaterialAed,
-                $totalMakingAed,
-                $totalPartsAed,
-                $totalVatAed
-            );
+            // ── Accounting ────────────────────────────────────────────────────
+            $this->createPurchaseAccountingEntries($invoice, $totals);
 
             DB::commit();
 
@@ -328,6 +172,71 @@ class PurchaseInvoiceController extends Controller
         }
     }
 
+    // =========================================================================
+    // EDIT
+    // =========================================================================
+
+    public function edit($id)
+    {
+        $purchaseInvoice = PurchaseInvoice::with(['items.parts', 'attachments'])->findOrFail($id);
+        $purities        = Purity::all();
+        $vendors         = ChartOfAccounts::where('account_type', 'vendor')->get();
+        $banks           = ChartOfAccounts::where('account_type', 'bank')->get();
+        $products        = Product::with('measurementUnit')->get();
+
+        // Re-derive ounce values for display in the blade header fields
+        // gold_rate_aed is stored as AED/gram → convert back to AED/oz for display
+        $goldAedOunce    = ($purchaseInvoice->gold_rate_aed    ?? 0) * 31.1035;
+        // diamond_rate_aed is stored directly as AED/Ct
+        $diamondAedCt = $purchaseInvoice->diamond_rate_aed ?? 0;
+
+        $itemsData = $purchaseInvoice->items->map(function ($item) {
+            return [
+                'item_name'        => $item->item_name,
+                'barcode_number'   => $item->barcode_number,
+                'is_printed'       => $item->is_printed,
+                'product_id'       => $item->product_id,
+                'item_description' => $item->item_description,
+                'purity'           => $item->purity,
+                // net_weight = user-entered weight (stored in net_weight column)
+                'net_weight'       => $item->net_weight,
+                // gross_weight = calculated (net_wt + CTS/5)
+                'gross_weight'     => $item->gross_weight,
+                'making_rate'      => $item->making_rate,
+                'material_type'    => $item->material_type,
+                'vat_percent'      => $item->vat_percent,
+                'purity_weight'    => $item->purity_weight,
+                'col_995'          => $item->col_995,
+                'making_value'     => $item->making_value,
+                'material_value'   => $item->material_value,
+                'taxable_amount'   => $item->taxable_amount,
+                'vat_amount'       => $item->vat_amount,
+                'item_total'       => $item->item_total,
+                'parts' => $item->parts->map(function ($part) {
+                    return [
+                        'item_name'        => $part->item_name,
+                        'product_id'       => $part->product_id,
+                        'part_description' => $part->part_description,
+                        'qty'              => $part->qty,
+                        'rate'             => $part->rate,
+                        'stone_qty'        => $part->stone_qty,
+                        'stone_rate'       => $part->stone_rate,
+                        'total'            => $part->total,
+                    ];
+                })->values()->toArray(),
+            ];
+        })->values()->toArray();
+
+        return view('purchase.edit', compact(
+            'purchaseInvoice', 'vendors', 'banks', 'products',
+            'itemsData', 'goldAedOunce', 'diamondAedCt', 'purities'
+        ));
+    }
+
+    // =========================================================================
+    // UPDATE
+    // =========================================================================
+
     public function update(Request $request, $id)
     {
         $invoice = PurchaseInvoice::findOrFail($id);
@@ -345,69 +254,13 @@ class PurchaseInvoiceController extends Controller
                 ->with('printed_delete_warning', $printedAndDeleted->join(', '));
         }
 
-        // ── Clear irrelevant payment fields ───────────────────────────────────
-        if ($request->payment_method !== 'cheque') {
-            $request->merge([
-                'bank_name'     => null,
-                'cheque_no'     => null,
-                'cheque_date'   => null,
-                'cheque_amount' => null,
-            ]);
-        }
-
-        if ($request->payment_method !== 'bank_transfer') {
-            $request->merge([
-                'transfer_from_bank' => null,
-                'transfer_to_bank'   => null,
-                'account_title'      => null,
-                'account_no'         => null,
-                'transaction_id'     => null,
-                'transfer_date'      => null,
-                'transfer_amount'    => null,
-            ]);
-        }
-
-        // ── Validation ────────────────────────────────────────────────────────
-        $request->validate([
-            'is_taxable'          => 'required|boolean',
-            'vendor_id'           => 'required|exists:chart_of_accounts,id',
-            'invoice_date'        => 'required|date',
-            'currency'            => 'required|in:AED,USD',
-            'exchange_rate'       => 'nullable|required_if:currency,USD|numeric|min:0',
-            'net_amount'          => 'required|numeric|min:0',
-            'payment_method'      => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
-            'payment_term'        => 'nullable|string',
-            'gold_rate_aed'       => 'nullable|numeric|min:0',
-            'gold_rate_usd'       => 'nullable|numeric|min:0',
-            'diamond_rate_aed'    => 'nullable|numeric|min:0',
-            'diamond_rate_usd'    => 'nullable|numeric|min:0',
-            'bank_name'           => 'nullable|required_if:payment_method,cheque|exists:chart_of_accounts,id',
-            'cheque_no'           => 'nullable|required_if:payment_method,cheque|string',
-            'cheque_date'         => 'nullable|required_if:payment_method,cheque|date',
-            'cheque_amount'       => 'nullable|required_if:payment_method,cheque|numeric|min:0',
-            'transfer_from_bank'  => 'nullable|required_if:payment_method,bank_transfer|exists:chart_of_accounts,id',
-            'transfer_to_bank'    => 'nullable|string',
-            'account_title'       => 'nullable|string',
-            'account_no'          => 'nullable|string',
-            'transaction_id'      => 'nullable|string',
-            'transfer_date'       => 'nullable|required_if:payment_method,bank_transfer|date',
-            'transfer_amount'     => 'nullable|required_if:payment_method,bank_transfer|numeric|min:0',
-            'items'               => 'required|array|min:1',
-            'items.*.item_name'   => 'nullable|string|required_without:items.*.product_id',
-            'items.*.product_id'  => 'nullable|exists:products,id|required_without:items.*.item_name',
-            'items.*.gross_weight'   => 'required|numeric|min:0',
-            'items.*.purity'         => 'required|numeric|min:0|max:1',
-            'items.*.making_rate'    => 'required|numeric|min:0',
-            'items.*.material_type'  => 'required|in:gold,diamond',
-            'items.*.vat_percent'    => 'required|numeric|min:0',
-            'material_given_by'   => 'nullable|required_if:payment_method,material+making cost|string',
-            'material_received_by'=> 'nullable|required_if:payment_method,material+making cost|string',
-        ]);
+        $this->clearIrrelevantPaymentFields($request);
+        $this->validateInvoice($request);
 
         try {
             DB::beginTransaction();
 
-            // ── Update invoice header (net_amount will be overwritten after items) ─
+            // ── Update invoice header ─────────────────────────────────────────
             $invoice->update([
                 'is_taxable'           => $request->boolean('is_taxable'),
                 'vendor_id'            => $request->vendor_id,
@@ -415,11 +268,12 @@ class PurchaseInvoiceController extends Controller
                 'remarks'              => $request->remarks,
                 'currency'             => $request->currency,
                 'exchange_rate'        => $request->exchange_rate,
-                'gold_rate_aed'        => $request->gold_rate_aed,
-                'gold_rate_usd'        => $request->gold_rate_usd,
-                'diamond_rate_aed'     => $request->diamond_rate_aed,
-                'diamond_rate_usd'     => $request->diamond_rate_usd,
-                'net_amount'           => $invoice->net_amount, // keep old until recalculated
+                'gold_rate_usd'          => $request->gold_rate_usd,
+                'gold_rate_aed_ounce'    => $request->gold_rate_aed_ounce,
+                'gold_rate_aed'          => $request->gold_rate_aed,
+                'diamond_rate_usd'       => $request->diamond_rate_usd,
+                'diamond_rate_aed'       => $request->diamond_rate_aed,
+                'net_amount'           => $invoice->net_amount,      // temp, overwritten below
                 'net_amount_aed'       => $invoice->net_amount_aed,
                 'payment_method'       => $request->payment_method,
                 'payment_term'         => $request->payment_term,
@@ -444,103 +298,12 @@ class PurchaseInvoiceController extends Controller
             }
             $invoice->items()->delete();
 
-            // ── Accumulators ──────────────────────────────────────────────────
-            $totalGoldMaterialAed    = 0.0;
-            $totalDiamondMaterialAed = 0.0;
-            $totalMakingAed          = 0.0;
-            $totalPartsAed           = 0.0;
-            $totalVatAed             = 0.0;
-            $position                = 1;
+            // ── Re-create items (preserve printed status by barcode) ──────────
+            [$totals] = $this->createItems($invoice, $request->items, $request, 1, preservePrinted: true);
 
-            // ── Re-create items ───────────────────────────────────────────────
-            foreach ($request->items as $itemData) {
-                $purityWeight = $itemData['gross_weight'] * $itemData['purity'];
-                $col995       = $purityWeight / 0.995;
-                $makingValue  = $itemData['gross_weight'] * $itemData['making_rate'];
-
-                $metalRate = ($itemData['material_type'] === 'gold')
-                    ? ($request->gold_rate_aed ?? 0)
-                    : ($request->diamond_rate_aed ?? 0);
-
-                $materialValue = $purityWeight * $metalRate;
-
-                // Parts total for this item (stored for reference, not included in taxable/net)
-                $itemPartsTotal = 0.0;
-                if (!empty($itemData['parts'])) {
-                    foreach ($itemData['parts'] as $partData) {
-                        $itemPartsTotal += ($partData['qty'] * $partData['rate'])
-                            + (($partData['stone_qty']  ?? 0) * ($partData['stone_rate'] ?? 0));
-                    }
-                }
-
-                // Only making is taxable; parts excluded
-                $taxableAmount = $makingValue;
-                $vatAmount     = $taxableAmount * ($itemData['vat_percent'] / 100);
-                $itemTotal     = $materialValue + $makingValue + $vatAmount;
-
-                // Preserve printed status for existing barcodes
-                $existingBarcode   = $itemData['barcode_number'] ?? null;
-                $wasAlreadyPrinted = false;
-                if ($existingBarcode) {
-                    $oldItem           = PurchaseInvoiceItem::where('barcode_number', $existingBarcode)->first();
-                    $wasAlreadyPrinted = $oldItem?->is_printed ?? false;
-                }
-
-                $invoiceItem = $invoice->items()->create([
-                    'item_name'        => $itemData['item_name']        ?? null,
-                    'product_id'       => $itemData['product_id']       ?? null,
-                    'item_description' => $itemData['item_description'] ?? null,
-                    'gross_weight'     => $itemData['gross_weight'],
-                    'purity'           => $itemData['purity'],
-                    'purity_weight'    => $purityWeight,
-                    'col_995'          => $col995,
-                    'making_rate'      => $itemData['making_rate'],
-                    'making_value'     => $makingValue,
-                    'material_type'    => $itemData['material_type'],
-                    'material_rate'    => $metalRate,
-                    'material_value'   => $materialValue,
-                    'parts_total'      => $itemPartsTotal,
-                    'taxable_amount'   => $taxableAmount,
-                    'vat_percent'      => $itemData['vat_percent'],
-                    'vat_amount'       => $vatAmount,
-                    'item_total'       => $itemTotal,
-                    'barcode_number'   => $existingBarcode ?? $this->generateBarcodeNumber($invoice, $position),
-                    'is_printed'       => $wasAlreadyPrinted,
-                ]);
-
-                // ── Accumulate ─────────────────────────────────────────────────
-                if ($itemData['material_type'] === 'gold') {
-                    $totalGoldMaterialAed    += $materialValue;
-                } else {
-                    $totalDiamondMaterialAed += $materialValue;
-                }
-                $totalMakingAed += $makingValue;
-                $totalPartsAed  += $itemPartsTotal;
-                $totalVatAed    += $vatAmount;
-                $position++;
-
-                // ── Re-create parts ────────────────────────────────────────────
-                if (!empty($itemData['parts'])) {
-                    foreach ($itemData['parts'] as $partData) {
-                        $partTotal = ($partData['qty'] * $partData['rate'])
-                            + (($partData['stone_qty']  ?? 0) * ($partData['stone_rate'] ?? 0));
-
-                        $invoiceItem->parts()->create([
-                            'product_id'       => $partData['product_id']       ?? null,
-                            'item_name'        => $partData['item_name']        ?? null,
-                            'qty'              => $partData['qty'],
-                            'rate'             => $partData['rate'],
-                            'stone_qty'        => $partData['stone_qty']        ?? 0,
-                            'stone_rate'       => $partData['stone_rate']       ?? 0,
-                            'total'            => $partTotal,
-                            'part_description' => $partData['part_description'] ?? null,
-                        ]);
-                    }
-                }
-            }
-
-            // ── Calculate net amount server-side (material + making + VAT, no parts) ──
-            $calculatedNet    = ($totalGoldMaterialAed + $totalDiamondMaterialAed) + $totalMakingAed + $totalVatAed;
+            // ── Recalculate net amount ─────────────────────────────────────────
+            $calculatedNet    = $totals['material'] + $totals['diamond_val'] + $totals['stone_val']
+                              + $totals['making'] + $totals['vat'];
             $calculatedNetAed = $request->currency === 'USD'
                 ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
                 : $calculatedNet;
@@ -550,32 +313,19 @@ class PurchaseInvoiceController extends Controller
                 'net_amount_aed' => $calculatedNetAed,
             ]);
 
-            // ── New attachments ───────────────────────────────────────────────
-            if ($request->hasFile('attachments')) {
-                foreach ($request->file('attachments') as $file) {
-                    $path = $file->store('purchase_invoices', 'public');
-                    $invoice->attachments()->create(['file_path' => $path]);
-                }
-            }
+            // ── Attachments ────────────────────────────────────────────────────
+            $this->storeAttachments($request, $invoice);
 
-            // ── Reverse old voucher + entries, then recreate ──────────────────
-            $oldVoucher = Voucher::where('reference_type', 'App\Models\PurchaseInvoice')
+            // ── Reverse old voucher + recreate ────────────────────────────────
+            $oldVoucher = Voucher::where('reference_type', PurchaseInvoice::class)
                 ->where('reference_id', $invoice->id)
                 ->first();
-
             if ($oldVoucher) {
                 AccountingEntry::where('voucher_id', $oldVoucher->id)->delete();
                 $oldVoucher->delete();
             }
 
-            $this->createPurchaseAccountingEntries(
-                $invoice,
-                $totalGoldMaterialAed,
-                $totalDiamondMaterialAed,
-                $totalMakingAed,
-                $totalPartsAed,
-                $totalVatAed
-            );
+            $this->createPurchaseAccountingEntries($invoice, $totals);
 
             DB::commit();
 
@@ -595,75 +345,9 @@ class PurchaseInvoiceController extends Controller
         }
     }
 
-    public function edit($id)
-    {
-        $purchaseInvoice = PurchaseInvoice::findOrFail($id);
-        $purchaseInvoice->load(['items.parts', 'attachments']);
-        $purities   = Purity::all();
-
-        $vendors  = ChartOfAccounts::where('account_type', 'vendor')->get();
-        $banks    = ChartOfAccounts::where('account_type', 'bank')->get();
-        $products = Product::with('measurementUnit')->get();
-        $goldAedOunce    = ($purchaseInvoice->gold_rate_aed ?? 0) * 31.1034768;
-        $diamondAedOunce = ($purchaseInvoice->diamond_rate_aed ?? 0) * 31.1034768;
-        // Pre-compute items data to avoid nested closure issues in Blade @json()
-        $itemsData = $purchaseInvoice->items->map(function($item) {
-            return [
-                'item_name'         => $item->item_name,
-                'barcode_number'    => $item->barcode_number,
-                'is_printed'        => $item->is_printed,
-                'product_id'        => $item->product_id,
-                'item_description'  => $item->item_description,
-                'purity'            => $item->purity,
-                'gross_weight'      => $item->gross_weight,
-                'making_rate'       => $item->making_rate,
-                'material_type'     => $item->material_type,
-                'vat_percent'       => $item->vat_percent,
-                'purity_weight'     => $item->purity_weight,
-                'col_995'           => $item->col_995,
-                'making_value'      => $item->making_value,
-                'material_value'    => $item->material_value,
-                'taxable_amount'    => $item->taxable_amount,
-                'vat_amount'        => $item->vat_amount,
-                'item_total'        => $item->item_total,
-                'parts'             => $item->parts->map(function($part) {
-                    return [
-                        'item_name'        => $part->item_name,
-                        'product_id'       => $part->product_id,
-                        'part_description' => $part->part_description,
-                        'qty'              => $part->qty,
-                        'rate'             => $part->rate,
-                        'stone_qty'        => $part->stone_qty,
-                        'stone_rate'       => $part->stone_rate,
-                        'total'            => $part->total,
-                    ];
-                })->values()->toArray(),
-            ];
-        })->values()->toArray();
-
-        return view('purchase.edit', compact('purchaseInvoice', 'vendors', 'banks', 'products', 'itemsData', 'goldAedOunce', 'diamondAedOunce', 'purities'));
-    }
-
-    private function generateBarcodeNumber(PurchaseInvoice $invoice, int $itemPosition): string
-    {
-        $prefix = $invoice->is_taxable ? 'MJT-' : 'MJ-';
-        
-        // Use invoice_no sequence number, NOT the DB auto-increment ID
-        // invoice_no is like "PUR-TAX-00003", extract "00003"
-        $invoiceNo = substr($invoice->invoice_no, strrpos($invoice->invoice_no, '-') + 1);
-        
-        return $prefix . $invoiceNo . '-' . $itemPosition;
-    }
-
-    public function printBarcodes($id)
-    {
-        $invoice = PurchaseInvoice::with('items')->findOrFail($id);
-
-        // Mark all items as printed
-        $invoice->items()->update(['is_printed' => true]);
-
-        return view('purchase.barcodes', compact('invoice'));
-    }
+    // =========================================================================
+    // PRINT
+    // =========================================================================
 
     public function print($id)
     {
@@ -676,17 +360,25 @@ class PurchaseInvoiceController extends Controller
             'items.parts.variation.attributeValues.attribute',
             'bank',
             'transferBank',
-            'vouchers.entries.account' // Load accounting entries
+            'vouchers.entries.account',
         ])->findOrFail($id);
 
-        // Calculate totals from stored items (matching what was saved)
+        // Totals from stored values
         $totalMaterialAed = $invoice->items->sum('material_value');
-        $totalMakingAed = $invoice->items->sum('making_value');
+        $totalMakingAed   = $invoice->items->sum('making_value');
+        $totalVatAed      = $invoice->items->sum('vat_amount');
+        $totalTaxableAed  = $invoice->items->sum('taxable_amount');
+
+        // Diamond + stone part values (summing from parts directly)
+        $totalDiamondVal = $invoice->items->sum(function ($item) {
+            return $item->parts->sum(fn($p) => $p->qty * $p->rate);
+        });
+        $totalStoneVal = $invoice->items->sum(function ($item) {
+            return $item->parts->sum(fn($p) => ($p->stone_qty ?? 0) * ($p->stone_rate ?? 0));
+        });
         $totalPartsAed = $invoice->items->sum(function ($item) {
             return $item->parts->sum('total');
         });
-        $totalVatAed = $invoice->items->sum('vat_amount');
-        $totalTaxableAed = $invoice->items->sum('taxable_amount');
 
         $pdf = new MyPDF();
         $pdf->setPrintHeader(false);
@@ -695,18 +387,16 @@ class PurchaseInvoiceController extends Controller
         $pdf->SetTitle($invoice->invoice_no);
         $pdf->SetMargins(10, 10, 10);
         $pdf->setCellPadding(1.2);
-        
-        // =========================================================================
-        // 1. PAGE 1: PURCHASE INVOICE
-        // =========================================================================
+
+        // ── PAGE 1: PURCHASE INVOICE ──────────────────────────────────────────
         $pdf->AddPage();
-        
+
         $logoPath = public_path('assets/img/mj-logo.jpeg');
-        $logoHtml = file_exists($logoPath) ? '<img src="'.$logoPath.'" width="85">' : '';
+        $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="85">' : '';
         $pdf->writeHTML('
             <table width="100%" cellpadding="3">
                 <tr>
-                    <td width="40%">'.$logoHtml.'</td>
+                    <td width="40%">' . $logoHtml . '</td>
                     <td width="60%" style="text-align:right;font-size:10px;">
                         <strong>MUSFIRA JEWELRY L.L.C</strong><br>
                         Suite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai<br>
@@ -715,139 +405,130 @@ class PurchaseInvoiceController extends Controller
                 </tr>
             </table><hr>', true, false, false, false);
 
-        $title = $invoice->is_taxable ? 'TAX INVOICE (PURCHASE)' : 'PURCHASE INVOICE';        
+        $title = $invoice->is_taxable ? 'TAX INVOICE (PURCHASE)' : 'PURCHASE INVOICE';
         $pdf->SetFont('helvetica', 'B', 11);
         $pdf->Cell(0, 6, $title, 0, 1, 'C');
-        $pdf->Ln(2);        
-        $pdf->SetFont('helvetica','',9);
+        $pdf->Ln(2);
+        $pdf->SetFont('helvetica', '', 9);
+
+        // Display rate based on currency
+        $goldRateDisplay    = $invoice->currency === 'USD' ? $invoice->gold_rate_usd    : $invoice->gold_rate_aed_ounce;
+        $diamondRateDisplay = $invoice->currency === 'USD' ? $invoice->diamond_rate_usd : $invoice->diamond_rate_aed;
 
         $vendorHtml = '
         <table cellpadding="3" width="100%">
             <tr>
                 <td width="50%">
                     <b>To:</b><br>
-                    '.($invoice->vendor->name ?? '-').'<br>
-                    '.($invoice->vendor->address ?? '-').'<br>
-                    Contact: '.($invoice->vendor->contact_no ?? '-').'<br>
-                    TRN: '.($invoice->vendor->trn ?? '-').'<br>
+                    ' . ($invoice->vendor->name ?? '-') . '<br>
+                    ' . ($invoice->vendor->address ?? '-') . '<br>
+                    Contact: ' . ($invoice->vendor->contact_no ?? '-') . '<br>
+                    TRN: ' . ($invoice->vendor->trn ?? '-') . '<br>
                 </td>
                 <td width="50%">
                     <table border="1" cellpadding="3" width="100%">
-                        <tr><td width="45%"><b>Date</b></td><td width="55%">'.\Carbon\Carbon::parse($invoice->invoice_date)->format('d.m.Y').'</td></tr>
-                        <tr><td><b>Invoice No</b></td><td>'.$invoice->invoice_no.'</td></tr>
-                        <tr>
-                            <td><b>Gold Rate ('.$invoice->currency.')</b></td>
-                            <td>'.number_format($invoice->currency === 'USD' ? $invoice->gold_rate_usd : $invoice->gold_rate_aed, 2).'</td>
-                        </tr>
-                        <tr>
-                            <td><b>Diamond Rate ('.$invoice->currency.')</b></td>
-                            <td>'.number_format($invoice->currency === 'USD' ? $invoice->diamond_rate_usd : $invoice->diamond_rate_aed, 2).'</td>
-                        </tr>
+                        <tr><td width="45%"><b>Date</b></td><td width="55%">' . Carbon::parse($invoice->invoice_date)->format('d.m.Y') . '</td></tr>
+                        <tr><td><b>Invoice No</b></td><td>' . $invoice->invoice_no . '</td></tr>
+                        <tr><td><b>Gold Rate (' . $invoice->currency . '/oz)</b></td><td>' . number_format($goldRateDisplay, 2) . '</td></tr>
+                        <tr><td><b>Gold Rate (AED/g)</b></td><td>' . number_format($invoice->gold_rate_aed, 4) . '</td></tr>
+                        <tr><td><b>Diamond Rate (' . $invoice->currency . '/Ct)</b></td><td>' . number_format($diamondRateDisplay, 2) . '</td></tr>
                     </table>
                 </td>
             </tr>
         </table>';
         $pdf->writeHTML($vendorHtml, true, false, false, false);
 
+        // Items table
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
-                    <th width="3%" rowspan="2">#</th>
+                    <th width="3%"  rowspan="2">#</th>
                     <th width="10%" rowspan="2">Item Name</th>
                     <th width="10%" rowspan="2">Description</th>
-                    <th width="7%" rowspan="2">Gross Wt</th>
-                    <th width="6%" rowspan="2">Purity</th>
-                    <th width="7%" rowspan="2">Purity Wt</th>
-                    <th width="6%" rowspan="2">995</th>
-                    <th width="14%" colspan="2">Making</th>
-                    <th width="8%" rowspan="2">Material</th>
-                    <th width="8%" rowspan="2">Material Val</th>
-                    <th width="7%" rowspan="2">Taxable</th>
-                    <th width="6%" rowspan="2">VAT %</th>
-                    <th width="8%" rowspan="2">Item Total</th>
+                    <th width="6%"  rowspan="2">Net Wt</th>
+                    <th width="7%"  rowspan="2">Gold Gross Wt</th>
+                    <th width="6%"  rowspan="2">Purity</th>
+                    <th width="6%"  rowspan="2">Purity Wt</th>
+                    <th width="6%"  rowspan="2">995</th>
+                    <th width="13%" colspan="2">Making</th>
+                    <th width="7%"  rowspan="2">Material</th>
+                    <th width="8%"  rowspan="2">Material Val</th>
+                    <th width="6%"  rowspan="2">Taxable</th>
+                    <th width="5%"  rowspan="2">VAT%</th>
+                    <th width="7%"  rowspan="2">Item Total</th>
                 </tr>
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
-                    <th width="7%">Rate</th>
+                    <th width="6%">Rate</th>
                     <th width="7%">Value</th>
                 </tr>
             </thead>
             <tbody>';
 
         foreach ($invoice->items as $index => $item) {
-            $hasParts = ($item->parts && $item->parts->count() > 0);
+            $hasParts = $item->parts && $item->parts->count() > 0;
             $partsSum = $hasParts ? $item->parts->sum('total') : 0;
-            
-            // Use stored values from database
-            $itemOnlyTotal = $item->item_total; // This is material + making + VAT (without parts)
-            $productTotal = $item->item_total + $partsSum; // Add parts to get grand total
-            
-            $vatPercent = ($item->taxable_amount > 0) ? ($item->vat_amount / $item->taxable_amount) * 100 : 0;
+            $productTotal = $item->item_total + $partsSum;
 
-            // Main Item Row
             $html .= '
-                <tr style="text-align:center; background-color: #ffffff;">
-                    <td width="3%">'.($index + 1).'</td>
-                    <td width="10%">'.($item->item_name ?: ($item->product->name ?? '-')).'</td>
-                    <td width="10%">'.($item->item_description ?? '-').'</td>
-                    <td width="7%">'.number_format($item->gross_weight, 3).'</td>
-                    <td width="6%">'.number_format($item->purity, 3).'</td>
-                    <td width="7%">'.number_format($item->purity_weight, 3).'</td>
-                    <td width="6%">'.number_format($item->col_995 ?? 0, 3).'</td>
-                    <td width="7%">'.number_format($item->making_rate ?? 0, 2).'</td>
-                    <td width="7%">'.number_format($item->making_value, 2).'</td>
-                    <td width="8%">'.ucfirst($item->material_type).'</td>
-                    <td width="8%">'.number_format($item->material_value, 2).'</td>
-                    <td width="7%">'.number_format($item->taxable_amount, 2).'</td>
-                    <td width="6%">'.round($vatPercent, 0).'%</td>
-                    <td width="8%" style="font-weight:bold;">'.number_format($itemOnlyTotal, 2).'</td>
+                <tr style="text-align:center;background-color:#ffffff;">
+                    <td>' . ($index + 1) . '</td>
+                    <td>' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
+                    <td>' . ($item->item_description ?? '-') . '</td>
+                    <td>' . number_format($item->net_weight, 3) . '</td>
+                    <td>' . number_format($item->gross_weight, 3) . '</td>
+                    <td>' . number_format($item->purity, 3) . '</td>
+                    <td>' . number_format($item->purity_weight, 3) . '</td>
+                    <td>' . number_format($item->col_995 ?? 0, 3) . '</td>
+                    <td>' . number_format($item->making_rate ?? 0, 2) . '</td>
+                    <td>' . number_format($item->making_value, 2) . '</td>
+                    <td>' . ucfirst($item->material_type) . '</td>
+                    <td>' . number_format($item->material_value, 2) . '</td>
+                    <td>' . number_format($item->taxable_amount, 2) . '</td>
+                    <td>' . number_format($item->vat_percent, 0) . '%</td>
+                    <td style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
                 </tr>';
 
-            // Parts Detail Rows
             if ($hasParts) {
-                $html .= '<tr style="background-color:#f9f9f9; font-style:italic; font-size:7px;">
-                            <td width="3%"></td>
-                            <td colspan="13" width="97%"><b>Parts Detail:</b></td>
-                        </tr>';
+                $html .= '<tr style="background-color:#f9f9f9;font-style:italic;font-size:7px;">
+                            <td></td><td colspan="14"><b>Parts Detail:</b></td>
+                          </tr>';
 
                 foreach ($item->parts as $part) {
-                    $partUnit = $part->product->measurementUnit->shortcode ?? $part->product->measurementUnit->name ?? 'Ct.';
                     $displayPartName = $part->item_name ?: ($part->product->name ?? 'Part');
-                    
                     $html .= '
-                    <tr style="font-size:7.5px; background-color:#fcfcfc;">
-                        <td width="3%"></td>
-                        <td width="20%" colspan="2" style="text-align:left;">'.$displayPartName.'</td>
-                        <td width="20%" colspan="1" style="text-align:left;">'.htmlspecialchars($part->part_description ?? '').'</td>
-                        <td width="10%" colspan="2" style="text-align:center;">'.$part->qty.' '.$partUnit.'</td>                       
-                        <td width="10%" colspan="2" style="text-align:center;">Rate: '.number_format($part->rate, 2).'</td>
-                        <td width="11%" colspan="1" style="text-align:center;">St. Qty: '.number_format($part->stone_qty ?? 0, 0).'</td>
-                        <td width="12%" colspan="1" style="text-align:center;">St. Rate: '.number_format($part->stone_rate ?? 0, 2).'</td>
-                        <td width="14%" colspan="2" style="text-align:right; padding-right:10px;"><b>'.number_format($part->total, 2).'</b></td>
+                    <tr style="font-size:7.5px;background-color:#fcfcfc;">
+                        <td></td>
+                        <td colspan="2" style="text-align:left;">' . $displayPartName . '</td>
+                        <td colspan="2" style="text-align:left;">' . htmlspecialchars($part->part_description ?? '') . '</td>
+                        <td colspan="2" style="text-align:center;">' . $part->qty . ' Ct.</td>
+                        <td colspan="2" style="text-align:center;">Rate: ' . number_format($part->rate, 2) . '</td>
+                        <td colspan="2" style="text-align:center;">St.Qty: ' . number_format($part->stone_qty ?? 0, 0) . '</td>
+                        <td colspan="2" style="text-align:center;">St.Rate: ' . number_format($part->stone_rate ?? 0, 2) . '</td>
+                        <td colspan="2" style="text-align:right;font-weight:bold;">' . number_format($part->total, 2) . '</td>
                     </tr>';
                 }
 
-                // Product Summary Row (Item + Parts)
                 $html .= '
-                    <tr style="background-color:#eeeeee; font-weight:bold; font-size:8px;">
-                        <td colspan="10" align="right" style="padding-right:10px;">Product Grand Total (Item + Parts):</td>
-                        <td colspan="2" align="right">'.number_format($productTotal, 2).'</td>
+                    <tr style="background-color:#eeeeee;font-weight:bold;font-size:8px;">
+                        <td colspan="13" align="right">Product Grand Total (Item + Parts):</td>
+                        <td colspan="2" align="right">' . number_format($productTotal, 2) . '</td>
                     </tr>';
             }
         }
 
         $html .= '
-                <tr style="font-weight:bold; background-color:#f5f5f5;">
-                    <td colspan="10" align="right">Net Invoice Amount (Incl. VAT)</td>
-                    <td colspan="2" align="right">'.number_format($invoice->net_amount, 2).'</td>
+                <tr style="font-weight:bold;background-color:#f5f5f5;">
+                    <td colspan="13" align="right">Net Invoice Amount</td>
+                    <td colspan="2" align="right">' . number_format($invoice->net_amount, 2) . '</td>
                 </tr>
             </tbody>
         </table>';
 
         $pdf->writeHTML($html, true, false, false, false);
 
-        /* ================= SUMMARY SECTION ================= */
-        $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
+        // ── SUMMARY ────────────────────────────────────────────────────────────
+        $aedAmount  = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
 
         $summaryHtml = '
         <table width="100%" cellpadding="0" border="0" style="margin-top:10px;">
@@ -855,38 +536,34 @@ class PurchaseInvoiceController extends Controller
                 <td width="45%" valign="top">
                     <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
                         <tr style="background-color:#f5f5f5;"><td><b>Payment Details</b></td><td><b>Value</b></td></tr>
-                        <tr><td>Method</td><td>'.ucfirst($invoice->payment_method).'</td></tr>';
-    
-        if($invoice->payment_method === 'credit'){
-            $summaryHtml .= '
-            <tr><td>Payment Term:</td><td>'.($invoice->payment_term ?? '-').'</td></tr>';
-        }
-        if($invoice->payment_method === 'cheque'){
-            $summaryHtml .= '
-            <tr><td>Bank Name</td><td>'.($invoice->bank->name ?? '-').'</td></tr>
-            <tr><td>Cheque No</td><td>'.($invoice->cheque_no ?? '-').'</td></tr>
-            <tr><td>Cheque Date</td><td>'.($invoice->cheque_date ? \Carbon\Carbon::parse($invoice->cheque_date)->format('d.m.Y') : '-').'</td></tr>';
-        }
-        if($invoice->payment_method === 'bank_transfer'){
-            $summaryHtml .= '
-            <tr><td>From Bank</td><td>'.($invoice->transferBank->name ?? '-').'</td></tr>
-            <tr><td>Vendor Bank</td><td>'.($invoice->transfer_to_bank ?? '-').'</td></tr>
-            <tr><td>Account Title</td><td>'.($invoice->account_title ?? '-').'</td></tr>
-            <tr><td>Account No</td><td>'.($invoice->account_no ?? '-').'</td></tr>
-            <tr><td>Transfer Date</td><td>'.($invoice->transfer_date ? \Carbon\Carbon::parse($invoice->transfer_date)->format('d.m.Y') : '-').'</td></tr>
-            <tr><td>Transaction Ref</td><td>'.($invoice->transaction_id ?? '-').'</td></tr>
-            <tr><td>Transfer Amount</td><td>'.number_format($invoice->transfer_amount ?? 0, 2).'</td></tr>';
-        }
+                        <tr><td>Method</td><td>' . ucfirst($invoice->payment_method) . '</td></tr>';
 
-        if(str_contains($invoice->payment_method, 'material')){
-            // Calculate from items instead of legacy fields
-            $totalPureWeight = $invoice->items->sum('purity_weight');
-            
+        if ($invoice->payment_method === 'credit') {
+            $summaryHtml .= '<tr><td>Payment Term</td><td>' . ($invoice->payment_term ?? '-') . '</td></tr>';
+        }
+        if ($invoice->payment_method === 'cheque') {
             $summaryHtml .= '
-            <tr><td>Material Given By</td><td>'.($invoice->material_given_by ?? '-').'</td></tr>
-            <tr><td>Material Received By</td><td>'.($invoice->material_received_by ?? '-').'</td></tr>
-            <tr><td>Total Pure Weight</td><td>'.number_format($totalPureWeight, 3).' gms</td></tr>
-            <tr><td>Making Charges</td><td>'.number_format($totalMakingAed, 2).' AED</td></tr>';
+            <tr><td>Bank Name</td><td>'  . ($invoice->bank->name ?? '-') . '</td></tr>
+            <tr><td>Cheque No</td><td>'  . ($invoice->cheque_no ?? '-') . '</td></tr>
+            <tr><td>Cheque Date</td><td>' . ($invoice->cheque_date ? Carbon::parse($invoice->cheque_date)->format('d.m.Y') : '-') . '</td></tr>';
+        }
+        if ($invoice->payment_method === 'bank_transfer') {
+            $summaryHtml .= '
+            <tr><td>From Bank</td><td>'       . ($invoice->transferBank->name ?? '-') . '</td></tr>
+            <tr><td>Vendor Bank</td><td>'     . ($invoice->transfer_to_bank ?? '-') . '</td></tr>
+            <tr><td>Account Title</td><td>'   . ($invoice->account_title ?? '-') . '</td></tr>
+            <tr><td>Account No</td><td>'      . ($invoice->account_no ?? '-') . '</td></tr>
+            <tr><td>Transfer Date</td><td>'   . ($invoice->transfer_date ? Carbon::parse($invoice->transfer_date)->format('d.m.Y') : '-') . '</td></tr>
+            <tr><td>Transaction Ref</td><td>' . ($invoice->transaction_id ?? '-') . '</td></tr>
+            <tr><td>Transfer Amount</td><td>' . number_format($invoice->transfer_amount ?? 0, 2) . '</td></tr>';
+        }
+        if (str_contains($invoice->payment_method, 'material')) {
+            $totalPureWeight = $invoice->items->sum('purity_weight');
+            $summaryHtml .= '
+            <tr><td>Material Given By</td><td>'    . ($invoice->material_given_by ?? '-') . '</td></tr>
+            <tr><td>Material Received By</td><td>' . ($invoice->material_received_by ?? '-') . '</td></tr>
+            <tr><td>Total Pure Weight</td><td>'    . number_format($totalPureWeight, 3) . ' gms</td></tr>
+            <tr><td>Making Charges</td><td>'       . number_format($totalMakingAed, 2) . ' AED</td></tr>';
         }
 
         $summaryHtml .= '</table>
@@ -894,328 +571,370 @@ class PurchaseInvoiceController extends Controller
                 <td width="10%"></td>
                 <td width="45%" valign="top">
                     <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
-                        <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary ('.$invoice->currency.')</b></td></tr>
-                        <tr><td width="60%">Material Value</td><td width="40%" align="right">'.number_format($totalMaterialAed, 2).'</td></tr>
-                        <tr><td>Making Charges</td><td align="right">'.number_format($totalMakingAed, 2).'</td></tr>
-                        <tr><td>Taxable Amount</td><td align="right">'.number_format($totalTaxableAed, 2).'</td></tr>
-                        <tr><td>Total VAT</td><td align="right">'.number_format($totalVatAed, 2).'</td></tr>
-                        <tr style="font-weight:bold; background-color:#eeeeee;">
+                        <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary (' . $invoice->currency . ')</b></td></tr>
+                        <tr><td width="60%">Material Value</td>  <td width="40%" align="right">' . number_format($totalMaterialAed, 2) . '</td></tr>
+                        <tr><td>Diamond Parts Val.</td>          <td align="right">' . number_format($totalDiamondVal, 2) . '</td></tr>
+                        <tr><td>Stone Parts Val.</td>            <td align="right">' . number_format($totalStoneVal, 2) . '</td></tr>
+                        <tr><td>Making Charges</td>              <td align="right">' . number_format($totalMakingAed, 2) . '</td></tr>
+                        <tr><td>Taxable Amount</td>              <td align="right">' . number_format($totalTaxableAed, 2) . '</td></tr>
+                        <tr><td>Total VAT</td>                   <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>
+                        <tr style="font-weight:bold;background-color:#eeeeee;">
                             <td>Invoice Total</td>
-                            <td align="right">'.number_format($invoice->net_amount, 2).'</td>
+                            <td align="right">' . number_format($invoice->net_amount, 2) . '</td>
                         </tr>';
-        
-        if($invoice->currency === 'USD'){
+
+        if ($invoice->currency === 'USD') {
             $summaryHtml .= '
-                <tr><td>Exchange Rate</td><td align="right">'.number_format($invoice->exchange_rate, 4).'</td></tr>
-                <tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">'.number_format($aedAmount, 2).'</td></tr>';
+                        <tr><td>Exchange Rate</td><td align="right">' . number_format($invoice->exchange_rate, 4) . '</td></tr>
+                        <tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
         } else {
-            $summaryHtml .= '<tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">'.number_format($aedAmount, 2).'</td></tr>';
+            $summaryHtml .= '<tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
         }
-        $summaryHtml .= '</table>
-                </td>
-            </tr>
-        </table>';
+
+        $summaryHtml .= '</table></td></tr></table>';
 
         $pdf->Ln(2);
         $pdf->writeHTML($summaryHtml, true, false, false, false);
 
-        /* ================= AMOUNT IN WORDS ================= */
+        // Amount in words
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', 'B', 9);
-
         $wordsAED = $pdf->convertCurrencyToWords($aedAmount, 'AED');
-
         if ($invoice->currency === 'USD') {
             $wordsUSD = $pdf->convertCurrencyToWords($invoice->net_amount, 'USD');
-            $pdf->Cell(0, 5, "Amount in Words (USD): " . $wordsUSD, 0, 1, 'L');
-            $pdf->Cell(0, 5, "Amount in Words (AED): " . $wordsAED, 0, 1, 'L');
+            $pdf->Cell(0, 5, 'Amount in Words (USD): ' . $wordsUSD, 0, 1, 'L');
+            $pdf->Cell(0, 5, 'Amount in Words (AED): ' . $wordsAED, 0, 1, 'L');
         } else {
-            $pdf->Cell(0, 5, "Amount in Words (AED): " . $wordsAED, 0, 1, 'L');
+            $pdf->Cell(0, 5, 'Amount in Words (AED): ' . $wordsAED, 0, 1, 'L');
         }
-        
-        /* ================= TERMS & CONDITIONS ================= */
-        $pdf->Ln(2);
-        $pdf->Line(10, $pdf->GetY(), 200, $pdf->GetY()); 
-        $pdf->Ln(2);
-        $pdf->SetFont('helvetica', '', 9); 
-        $termsHtml = '
-            <div style="line-height: 8px; text-align: justify; color: #333;">
-                <b>TERMS & CONDITIONS:</b> Goods sold on credit, if not paid when due, or in case of law suit arising there from, 
-                the purchaser agrees to pay the seller all expense of recovery, collection, etc., including attorney fees, 
-                legal expense and/or recovery-agent charges. <b>GOODS ONCE SOLD CANNOT BE RETURNED OR EXCHANGED.</b> 
-                Any dispute, difference, controversy or claim arising out of or in connection with this sale, 
-                including (but not limited to) any issue regarding its existence, validity, interpretation, performance, 
-                discharge and other applicable remedies, shall be subject to the exclusive jurisdiction of Dubai Courts.
-            </div>';
 
+        // Terms & Conditions
+        $pdf->Ln(2);
+        $pdf->Line(10, $pdf->GetY(), 200, $pdf->GetY());
+        $pdf->Ln(2);
+        $pdf->SetFont('helvetica', '', 9);
+        $termsHtml = '
+            <div style="line-height:8px;text-align:justify;color:#333;">
+                <b>TERMS & CONDITIONS:</b> Goods sold on credit, if not paid when due, or in case of law suit arising there from,
+                the purchaser agrees to pay the seller all expense of recovery, collection, etc., including attorney fees,
+                legal expense and/or recovery-agent charges. <b>GOODS ONCE SOLD CANNOT BE RETURNED OR EXCHANGED.</b>
+                Any dispute arising out of or in connection with this sale shall be subject to the exclusive jurisdiction of Dubai Courts.
+            </div>';
         $pdf->writeHTML($termsHtml, true, false, false, false);
 
         // Signatures
-        $pdf->Ln(40); $y = $pdf->GetY();
-        $pdf->Line(20, $y, 80, $y); $pdf->Line(130, $y, 190, $y);
-        $pdf->SetXY(20, $y); $pdf->Cell(60, 5, "Receiver's Signature", 0, 0, 'C');
-        $pdf->SetXY(130, $y); $pdf->Cell(60, 5, "Authorized Signature", 0, 0, 'C');
+        $pdf->Ln(40);
+        $y = $pdf->GetY();
+        $pdf->Line(20, $y, 80, $y);
+        $pdf->Line(130, $y, 190, $y);
+        $pdf->SetXY(20, $y);
+        $pdf->Cell(60, 5, "Receiver's Signature", 0, 0, 'C');
+        $pdf->SetXY(130, $y);
+        $pdf->Cell(60, 5, "Authorized Signature", 0, 0, 'C');
 
-        // 2. METAL PURCHASE FIXING (if material+making cost method)
+        // ── Material fixing pages (if payment method = material+making cost) ──
         if (str_contains(strtolower($invoice->payment_method), 'material')) {
             $pdf->AddPage();
             $this->renderMetalFixingPage($pdf, $invoice, $totalMaterialAed, 'PARTY COPY');
-
             $pdf->AddPage();
             $this->renderMetalFixingPage($pdf, $invoice, $totalMaterialAed, 'ACCOUNTS COPY');
         }
 
-        // 3. CURRENCY PAYMENT (Making + Parts + VAT)
+        // ── Currency payment pages (Making + VAT) ────────────────────────────
         $pdf->AddPage();
         $this->renderCurrencyPaymentPage($pdf, $invoice, $totalMakingAed, $totalPartsAed, $totalVatAed, 'PARTY COPY');
-
         $pdf->AddPage();
         $this->renderCurrencyPaymentPage($pdf, $invoice, $totalMakingAed, $totalPartsAed, $totalVatAed, 'ACCOUNTS COPY');
 
-        return $pdf->Output($invoice->invoice_no.'.pdf', 'I');
+        return $pdf->Output($invoice->invoice_no . '.pdf', 'I');
     }
 
-    private function renderMetalFixingPage($pdf, $invoice, $totalMaterialVal, $copyType = 'PARTY COPY')
+    // =========================================================================
+    // PRINT BARCODES
+    // =========================================================================
+
+    public function printBarcodes($id)
     {
-        // 1. HEADER
-        $logoPath = public_path('assets/img/mj-logo.jpeg');
-        $logoHtml = file_exists($logoPath) ? '<img src="'.$logoPath.'" width="80">' : '';
-        $header = '
-        <table width="100%" cellpadding="2">
-            <tr>
-                <td width="30%">'.$logoHtml.'</td>
-                <td width="70%" style="text-align:right; font-size:9px;">
-                    <strong style="font-size:12px;">MUSFIRA JEWELRY L.L.C</strong><br>
-                    M04 Al Buteen 2 Building, Old Baldiya Street,<br>
-                    Gold Souq Gate 1 Dubai UAE. Tel: +971 4 2202622<br>
-                    TRN: 104902647700003
-                </td>
-            </tr>
-        </table><hr>';
-        $pdf->writeHTML($header, true, false, false, false);
-
-        // 2. TITLE
-        $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->Cell(120, 8, 'METAL SALE FIXING', 0, 0, 'R');
-        $pdf->SetFont('helvetica', '', 9);
-        $pdf->Cell(70, 8, strtoupper($copyType), 0, 1, 'R');
-        $pdf->Ln(5);
-
-        // 3. MASTER DETAILS
-        $pdf->SetFont('helvetica', '', 9);
-        $htmlInfo = '
-        <table width="100%" cellpadding="0">
-            <tr>
-                <td width="60%">
-                    <b>To:</b><br>
-                    '.($invoice->vendor->name ?? '-').'<br>
-                    '.($invoice->vendor->address ?? '-').'<br>
-                    Contact: '.($invoice->vendor->contact_no ?? '-').'<br>
-                    TRN: '.($invoice->vendor->trn ?? '-').'
-                </td>
-                <td width="40%">
-                    <table border="1" cellpadding="3" width="100%">
-                        <tr><td width="40%"><b>Invoice #</b></td><td width="60%"><b>'.$invoice->invoice_no.'</b></td></tr>
-                        <tr><td><b>Date</b></td><td><b>'.\Carbon\Carbon::parse($invoice->invoice_date)->format('d/m/Y').'</b></td></tr>
-                    </table>
-                </td>
-            </tr>
-        </table>';
-        $pdf->writeHTML($htmlInfo, true, false, false, false);
-
-        // Calculate values
-        $totalPureWt = $invoice->items->sum('purity_weight');
-        $rate = ($invoice->currency === 'USD') ? $invoice->gold_rate_usd : $invoice->gold_rate_aed;
-        $rateUnit = ($invoice->currency === 'USD') ? 'GOZ' : 'GMS';
-        
-        // Convert to AED if currency is USD
-        $materialValueAED = $invoice->currency === 'USD' 
-            ? round($totalMaterialVal * $invoice->exchange_rate, 2)
-            : $totalMaterialVal;
-
-        $pdf->Ln(2);
-        $pdf->SetFont('helvetica', 'B', 10);
-        $pdf->writeHTML('<b>WE HAVE</b>', true, false, false, false);
-
-        $pdf->SetFont('helvetica', '', 11);
-        $htmlContent = '
-        <table width="100%" style="border: 1px solid #000;">
-            <tr>
-                <td>
-                    BOUGHT FINE GOLD <span style="font-weight:bold;">'.number_format($totalPureWt, 3).' (GMS) @ '.number_format($rate, 2).' / '.$rateUnit.'</span><br>
-                    EQUIVALENT MATERIAL VALUE ..... <span style="font-weight:bold;">AED '.number_format($materialValueAED, 2).'</span>
-                </td>
-            </tr>
-        </table>';
-        $pdf->writeHTML($htmlContent, true, false, false, false);
-
-        $pdf->SetFont('helvetica', '', 8);
-        $words = $pdf->convertCurrencyToWords($materialValueAED, 'AED');
-        $htmlAccount = '
-        <table width="100%" cellpadding="4" style="border:1px solid #000;">
-            <tr>
-                <td width="30%" style="border: 1px solid #000; background-color:#f0f0f0;">Your account has been updated with :</td>
-                <td width="70%" rowspan="2" valign="middle">'.strtoupper($words).'</td>
-            </tr>
-            <tr>
-                <td width="30%" style="border-right: 0.5px solid #000;"><b>DEBITED AED '.number_format($materialValueAED, 2).'</b></td>
-            </tr>
-        </table>';
-        $pdf->writeHTML($htmlAccount, true, false, false, false);
-
-        $pdf->Ln(1);
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->writeHTML('Being '.number_format($totalPureWt, 2).' gms pure gold rate '.number_format($rate, 2).' /- fixed with '.($invoice->vendor->name ?? '-').' TRN-'.($invoice->vendor->trn ?? '-').' Against Purchase Invoice # '.$invoice->invoice_no.'.', true, false, false, false);
-
-        // Signatures
-        $pdf->Ln(20);
-        $y = $pdf->GetY();
-        $pdf->SetFont('helvetica', '', 7);
-
-        $pdf->SetXY(10, $y - 12);
-        $pdf->Line(10, $y, 55, $y);
-        $pdf->SetXY(10, $y + 1);
-        $pdf->Cell(45, 5, "SUPPLIER'S SIGNATURE", 0, 0, 'C');
-
-        $pdf->Line(65, $y, 95, $y);
-        $pdf->SetXY(65, $y + 1);
-        $pdf->Cell(30, 5, "For Accounts", 0, 0, 'C');
-
-        $pdf->Line(110, $y, 140, $y);
-        $pdf->SetXY(110, $y + 1);
-        $pdf->Cell(30, 5, "Checked By", 0, 0, 'C');
-
-        $pdf->SetXY(150, $y - 9);
-        $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->Cell(50, 3, "For MUSFIRA JEWELRY L L C", 0, 0, 'C');
-        $pdf->Line(155, $y, 195, $y);
-        $pdf->SetXY(155, $y + 1);
-        $pdf->SetFont('helvetica', '', 7);
-        $pdf->Cell(40, 5, "AUTHORISED SIGNATORY", 0, 0, 'C');
+        $invoice = PurchaseInvoice::with('items')->findOrFail($id);
+        $invoice->items()->update(['is_printed' => true]);
+        return view('purchase.barcodes', compact('invoice'));
     }
 
-    private function renderCurrencyPaymentPage($pdf, $invoice, $totalMaking, $totalParts, $totalVat, $copyType = 'PARTY COPY') 
+    // =========================================================================
+    // PRIVATE HELPERS
+    // =========================================================================
+
+    /**
+     * Create item rows and their parts for a given invoice.
+     *
+     * Formulas (must match blade calculateRow exactly):
+     *   purity_weight  = net_weight × purity
+     *   col_995        = purity_weight / 0.995
+     *   making_value   = net_weight × making_rate          (Net Wt, NOT gross)
+     *   material_value = rate × purity_weight
+     *   partsTotal     = Σ (qty×rate + stone_qty×stone_rate) per part
+     *   taxable        = making_value + partsTotal
+     *   vat_amount     = taxable × (vat_percent / 100)
+     *   item_total     = material_value + taxable + vat_amount
+     *
+     * net_amount (invoice level, matches blade calculateTotals):
+     *   = Σ material_value + Σ(diamond qty×rate) + Σ(stone qty×stone_rate) + Σ making + Σ vat
+     *
+     * @return array  [ $totals, $position ]
+     */
+    private function createItems(
+        PurchaseInvoice $invoice,
+        array $items,
+        Request $request,
+        int $startPosition = 1,
+        bool $preservePrinted = false
+    ): array {
+        $totals = [
+            'gold_material'    => 0.0,
+            'diamond_material' => 0.0,
+            'material'         => 0.0,
+            'making'           => 0.0,
+            'diamond_val'      => 0.0,  // Σ (part qty × part rate)
+            'stone_val'        => 0.0,  // Σ (stone qty × stone rate)
+            'vat'              => 0.0,
+        ];
+
+        $position = $startPosition;
+
+        // Rates from blade:
+        //   gold  → gold_rate_aed (AED/gram, converted from ounce by JS)
+        //   diamond → diamond_rate_aed (AED/Ct, direct entry)
+        $goldRateAedGram    = (float) ($request->gold_rate_aed    ?? 0);
+        $diamondRateAedCt   = (float) ($request->diamond_rate_aed ?? 0);
+
+        foreach ($items as $itemData) {
+
+            $netWeight   = (float) ($itemData['net_weight']   ?? 0);   // user-entered
+            $grossWeight = (float) ($itemData['gross_weight'] ?? 0);   // JS-calculated (net + CTS/5)
+            $purity      = (float) ($itemData['purity']       ?? 0);
+            $makingRate  = (float) ($itemData['making_rate']  ?? 0);
+            $vatPercent  = (float) ($itemData['vat_percent']  ?? 0);
+            $matType     = $itemData['material_type'] ?? 'gold';
+
+            // ── Row calculations (mirrors calculateRow in blade) ──────────────
+            $purityWeight  = $netWeight * $purity;                      // net_weight × purity
+            $col995        = $purityWeight > 0 ? $purityWeight / 0.995 : 0;
+            $makingValue   = $netWeight * $makingRate;                  // net_weight × making_rate
+
+            $rate          = $matType === 'gold' ? $goldRateAedGram : $diamondRateAedCt;
+            $materialValue = $rate * $purityWeight;                     // rate × purity_weight
+
+            // ── Parts ─────────────────────────────────────────────────────────
+            $partsData       = $itemData['parts'] ?? [];
+            $partsTotal      = 0.0;
+            $itemDiamondVal  = 0.0;
+            $itemStoneVal    = 0.0;
+
+            foreach ($partsData as $partData) {
+                $qty       = (float) ($partData['qty']        ?? 0);
+                $partRate  = (float) ($partData['rate']       ?? 0);
+                $stoneQty  = (float) ($partData['stone_qty']  ?? 0);
+                $stoneRate = (float) ($partData['stone_rate'] ?? 0);
+
+                $diaValue   = $qty     * $partRate;
+                $stoneValue = $stoneQty * $stoneRate;
+                $partTotal  = $diaValue + $stoneValue;
+
+                $partsTotal     += $partTotal;
+                $itemDiamondVal += $diaValue;
+                $itemStoneVal   += $stoneValue;
+            }
+
+            // taxable = making + parts total  (matches blade)
+            $taxableAmount = $makingValue + $partsTotal;
+            $vatAmount     = $taxableAmount * ($vatPercent / 100);
+            $itemTotal     = $materialValue + $taxableAmount + $vatAmount;
+
+            // ── Barcode / printed status ──────────────────────────────────────
+            $existingBarcode   = $itemData['barcode_number'] ?? null;
+            $wasAlreadyPrinted = false;
+            if ($preservePrinted && $existingBarcode) {
+                $wasAlreadyPrinted = PurchaseInvoiceItem::where('barcode_number', $existingBarcode)
+                    ->value('is_printed') ?? false;
+            }
+
+            $invoiceItem = $invoice->items()->create([
+                'item_name'        => $itemData['item_name']        ?? null,
+                'product_id'       => $itemData['product_id']       ?? null,
+                'item_description' => $itemData['item_description'] ?? null,
+                // Both net_weight and gross_weight stored:
+                'net_weight'       => $netWeight,     // user-entered (blade: .net-weight)
+                'gross_weight'     => $grossWeight,   // JS-calculated (blade: .gross-weight)
+                'purity'           => $purity,
+                'purity_weight'    => round($purityWeight, 4),
+                'col_995'          => round($col995, 4),
+                'making_rate'      => $makingRate,
+                'making_value'     => round($makingValue, 2),
+                'material_type'    => $matType,
+                'material_rate'    => $rate,
+                'material_value'   => round($materialValue, 2),
+                'parts_total'      => round($partsTotal, 2),
+                'taxable_amount'   => round($taxableAmount, 2),
+                'vat_percent'      => $vatPercent,
+                'vat_amount'       => round($vatAmount, 2),
+                'item_total'       => round($itemTotal, 2),
+                'barcode_number'   => $existingBarcode ?? $this->generateBarcodeNumber($invoice, $position),
+                'is_printed'       => $wasAlreadyPrinted,
+            ]);
+
+            // ── Create parts ──────────────────────────────────────────────────
+            foreach ($partsData as $partData) {
+                $qty       = (float) ($partData['qty']        ?? 0);
+                $partRate  = (float) ($partData['rate']       ?? 0);
+                $stoneQty  = (float) ($partData['stone_qty']  ?? 0);
+                $stoneRate = (float) ($partData['stone_rate'] ?? 0);
+                $partTotal = ($qty * $partRate) + ($stoneQty * $stoneRate);
+
+                $invoiceItem->parts()->create([
+                    'product_id'       => $partData['product_id']       ?? null,
+                    'item_name'        => $partData['item_name']        ?? null,
+                    'part_description' => $partData['part_description'] ?? null,
+                    'qty'              => $qty,
+                    'rate'             => $partRate,
+                    'stone_qty'        => $stoneQty,
+                    'stone_rate'       => $stoneRate,
+                    'total'            => round($partTotal, 2),
+                ]);
+            }
+
+            // ── Accumulate totals ─────────────────────────────────────────────
+            if ($matType === 'gold') {
+                $totals['gold_material'] += $materialValue;
+            } else {
+                $totals['diamond_material'] += $materialValue;
+            }
+            $totals['material']    += $materialValue;
+            $totals['making']      += $makingValue;
+            $totals['diamond_val'] += $itemDiamondVal;
+            $totals['stone_val']   += $itemStoneVal;
+            $totals['vat']         += $vatAmount;
+
+            $position++;
+        }
+
+        return [$totals, $position];
+    }
+
+    /**
+     * Store file attachments linked to an invoice.
+     */
+    private function storeAttachments(Request $request, PurchaseInvoice $invoice): void
     {
-        // 1. HEADER
-        $logoPath = public_path('assets/img/mj-logo.jpeg');
-        $logoHtml = file_exists($logoPath) ? '<img src="'.$logoPath.'" width="80">' : '';
-        $header = '<table width="100%" cellpadding="2"><tr><td width="30%">'.$logoHtml.'</td><td width="70%" style="text-align:right; font-size:9px;"><strong style="font-size:12px;">MUSFIRA JEWELRY L.L.C</strong><br>M04 Al Buteen 2 Building, Old Baldiya Street,<br>Gold Souq Gate 1 Dubai UAE. Tel: +971 4 2202622<br>TRN: 104902647700003</td></tr></table><hr>';
-        $pdf->writeHTML($header, true, false, false, false);
-
-        // 2. TITLE
-        $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->Cell(120, 8, 'CURRENCY PAYMENT', 0, 0, 'R');
-        $pdf->SetFont('helvetica', '', 9);
-        $pdf->Cell(70, 8, strtoupper($copyType), 0, 1, 'R');
-        $pdf->Ln(2);
-
-        // 3. Convert to AED if USD
-        $makingAED = $invoice->currency === 'USD' ? round($totalMaking * $invoice->exchange_rate, 2) : $totalMaking;
-        $vatAED = $invoice->currency === 'USD' ? round($totalVat * $invoice->exchange_rate, 2) : $totalVat;
-        $payableAmount = $makingAED + $vatAED;
-
-        // 4. MASTER DETAILS
-        $pdf->SetFont('helvetica', '', 9);
-        $htmlInfo = '
-        <table width="100%" cellpadding="0">
-            <tr>
-                <td width="60%">
-                    <b>To:</b><br>
-                    '.($invoice->vendor->name ?? '-').'<br>
-                    '.($invoice->vendor->address ?? '-').'<br>
-                    Contact: '.($invoice->vendor->contact_no ?? '-').'<br>
-                    TRN: '.($invoice->vendor->trn ?? '-').'
-                </td>
-                <td width="40%">
-                    <table border="1" cellpadding="3" width="100%">
-                        <tr><td><b>REF DOC. NO#</b></td><td><b>'.$invoice->invoice_no.'</b></td></tr>
-                        <tr><td><b>DATE</b></td><td><b>'.\Carbon\Carbon::parse($invoice->invoice_date)->format('d/m/Y').'</b></td></tr>
-                    </table>
-                </td>
-            </tr>
-        </table>';
-        $pdf->writeHTML($htmlInfo, true, false, false, false);
-        $pdf->Ln(2);
-
-        // 5. TRANSACTION TABLE
-        $pdf->SetFont('helvetica', '', 8);
-        $tableHtml = '
-        <table width="100%" cellpadding="5" border="1" style="border-collapse: collapse;">
-            <tr style="background-color:#f2f2f2; font-weight:bold; text-align:center;">
-                <th width="10%">No.</th>
-                <th width="50%">Account Description</th>
-                <th width="20%">Amount (AED)</th>
-                <th width="20%">Total (AED)</th>
-            </tr>
-            <tr style="text-align:center;">
-                <td>1</td>
-                <td align="left">
-                    <b>Labour, Making Charges</b><br>
-                    (Making: '.number_format($makingAED, 2).' + VAT: '.number_format($vatAED, 2).')<br>
-                    Against Purchase Invoice # '.$invoice->invoice_no.'
-                </td>
-                <td>'.number_format($payableAmount, 2).'</td>
-                <td>'.number_format($payableAmount, 2).'</td>
-            </tr>
-            <tr style="font-weight:bold; background-color:#f9f9f9;">
-                <td colspan="2" align="right">Total Payment Amount</td>
-                <td align="center">'.number_format($payableAmount, 2).'</td>
-                <td align="center">'.number_format($payableAmount, 2).'</td>
-            </tr>
-        </table>';
-        $pdf->writeHTML($tableHtml, true, false, false, false);
-
-        // 6. ACCOUNT STATUS
-        $pdf->Ln(2);
-        $words = $pdf->convertCurrencyToWords($payableAmount, 'AED');
-        $htmlStatus = '
-        <table width="100%" cellpadding="4" style="border:1px solid #000;">
-            <tr>
-                <td width="30%" style="border: 1px solid #000; background-color:#f2f2f2;">Account Update:</td>
-                <td width="70%">'.strtoupper($words).'</td>
-            </tr>
-            <tr>
-                <td style="border-right: 0.5px solid #000;"><b>AED '.number_format($payableAmount, 2).' DEBITED</b></td>
-                <td>Being payment for service charges, parts and tax.</td>
-            </tr>
-        </table>';
-        $pdf->writeHTML($htmlStatus, true, false, false, false);
-
-        // 7. SIGNATURES
-        $pdf->Ln(30);
-        $y = $pdf->GetY();
-        $pdf->SetFont('helvetica', '', 7);
-
-        $pdf->SetXY(10, $y - 12);
-        $pdf->Line(10, $y, 55, $y);
-        $pdf->SetXY(10, $y + 1);
-        $pdf->Cell(45, 5, "RECEIVER'S SIGNATURE", 0, 0, 'C');
-
-        $pdf->Line(65, $y, 95, $y);
-        $pdf->SetXY(65, $y + 1);
-        $pdf->Cell(30, 5, "Prepared By", 0, 0, 'C');
-
-        $pdf->Line(110, $y, 140, $y);
-        $pdf->SetXY(110, $y + 1);
-        $pdf->Cell(30, 5, "Checked By", 0, 0, 'C');
-
-        $pdf->SetXY(150, $y - 9);
-        $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->Cell(50, 3, "For MUSFIRA JEWELRY L L C", 0, 0, 'C');
-        $pdf->Line(155, $y, 195, $y);
-        $pdf->SetXY(155, $y + 1);
-        $pdf->SetFont('helvetica', '', 7);
-        $pdf->Cell(40, 5, "AUTHORISED SIGNATORY", 0, 0, 'C');
+        if ($request->hasFile('attachments')) {
+            foreach ($request->file('attachments') as $file) {
+                $path = $file->store('purchase_invoices', 'public');
+                $invoice->attachments()->create(['file_path' => $path]);
+            }
+        }
     }
 
-    protected function createPurchaseAccountingEntries( PurchaseInvoice $invoice, float $totalGoldMaterialAed, float $totalDiamondMaterialAed, float $totalMakingAed, float $totalPartsAed, float $totalVatAed): Voucher 
+    /**
+     * Null out payment fields that don't belong to the selected payment method.
+     */
+    private function clearIrrelevantPaymentFields(Request $request): void
+    {
+        if ($request->payment_method !== 'cheque') {
+            $request->merge([
+                'bank_name'     => null,
+                'cheque_no'     => null,
+                'cheque_date'   => null,
+                'cheque_amount' => null,
+            ]);
+        }
+
+        if ($request->payment_method !== 'bank_transfer') {
+            $request->merge([
+                'transfer_from_bank' => null,
+                'transfer_to_bank'   => null,
+                'account_title'      => null,
+                'account_no'         => null,
+                'transaction_id'     => null,
+                'transfer_date'      => null,
+                'transfer_amount'    => null,
+            ]);
+        }
+    }
+
+    /**
+     * Validate the invoice request.
+     * Field names match exactly what the blade POSTs.
+     */
+    private function validateInvoice(Request $request): void
+    {
+        $request->validate([
+            'is_taxable'             => 'required|boolean',
+            'vendor_id'              => 'required|exists:chart_of_accounts,id',
+            'invoice_date'           => 'required|date',
+            'currency'               => 'required|in:AED,USD',
+            'exchange_rate'          => 'nullable|required_if:currency,USD|numeric|min:0',
+            'net_amount'             => 'required|numeric|min:0',
+            'payment_method'         => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
+            'payment_term'           => 'nullable|string',
+            // Gold rates
+            'gold_rate_usd'          => 'nullable|numeric|min:0',
+            'gold_rate_aed_ounce'    => 'nullable|numeric|min:0',   // AED/oz (display only)
+            'gold_rate_aed'          => 'nullable|numeric|min:0',   // AED/gram (used in calc)
+            // Diamond rates
+            'diamond_rate_usd'       => 'nullable|numeric|min:0',
+            'diamond_rate_aed'       => 'nullable|numeric|min:0',   // AED/Ct (used in calculations)
+            // Cheque fields
+            'bank_name'              => 'nullable|required_if:payment_method,cheque|exists:chart_of_accounts,id',
+            'cheque_no'              => 'nullable|required_if:payment_method,cheque|string',
+            'cheque_date'            => 'nullable|required_if:payment_method,cheque|date',
+            'cheque_amount'          => 'nullable|required_if:payment_method,cheque|numeric|min:0',
+            // Bank transfer fields
+            'transfer_from_bank'     => 'nullable|required_if:payment_method,bank_transfer|exists:chart_of_accounts,id',
+            'transfer_to_bank'       => 'nullable|string',
+            'account_title'          => 'nullable|string',
+            'account_no'             => 'nullable|string',
+            'transaction_id'         => 'nullable|string',
+            'transfer_date'          => 'nullable|required_if:payment_method,bank_transfer|date',
+            'transfer_amount'        => 'nullable|required_if:payment_method,bank_transfer|numeric|min:0',
+            // Items
+            'items'                  => 'required|array|min:1',
+            'items.*.item_name'      => 'nullable|string|required_without:items.*.product_id',
+            'items.*.product_id'     => 'nullable|exists:products,id|required_without:items.*.item_name',
+            'items.*.net_weight'     => 'required|numeric|min:0',
+            'items.*.gross_weight'   => 'required|numeric|min:0',
+            'items.*.purity'         => 'required|numeric|min:0|max:1',
+            'items.*.making_rate'    => 'required|numeric|min:0',
+            'items.*.material_type'  => 'required|in:gold,diamond',
+            'items.*.vat_percent'    => 'required|numeric|min:0',
+            // Material + making cost
+            'material_given_by'      => 'nullable|required_if:payment_method,material+making cost|string',
+            'material_received_by'   => 'nullable|required_if:payment_method,material+making cost|string',
+        ]);
+    }
+
+    /**
+     * Create accounting voucher + double-entry lines for a purchase invoice.
+     *
+     * DEBIT:
+     *   510001 — Gold Material Purchases
+     *   510002 — Diamond Material Purchases
+     *   510003 — Making Charges Expense
+     *   105001 — VAT Input Tax Recoverable
+     *   (Parts are NOT journalized — informational only)
+     *
+     * CREDIT:
+     *   Vendor / Cash / Bank — depending on payment method
+     *
+     * Note: net_amount on the invoice = material + diamond_val + stone_val + making + vat
+     *       BUT accounting only journals material + making + vat (parts are pass-through).
+     *       The journal debit total = material + making + vat.
+     */
+    protected function createPurchaseAccountingEntries(PurchaseInvoice $invoice, array $totals): Voucher
     {
         $acct = function (string $code) use ($invoice): int {
             $account = ChartOfAccounts::where('account_code', $code)->first();
             if (!$account) {
                 throw new \Exception(
-                    "Account code [{$code}] not found in Chart of Accounts " .
-                    "(Invoice #{$invoice->invoice_no})."
+                    "Account code [{$code}] not found in Chart of Accounts (Invoice #{$invoice->invoice_no})."
                 );
             }
             return $account->id;
@@ -1225,7 +944,7 @@ class PurchaseInvoiceController extends Controller
             'voucher_no'     => Voucher::generateVoucherNo('purchase'),
             'voucher_type'   => 'purchase',
             'voucher_date'   => $invoice->invoice_date,
-            'reference_type' => 'App\Models\PurchaseInvoice',
+            'reference_type' => PurchaseInvoice::class,
             'reference_id'   => $invoice->id,
             'ac_dr_sid'      => null,
             'ac_cr_sid'      => null,
@@ -1236,45 +955,42 @@ class PurchaseInvoiceController extends Controller
 
         $entries = [];
 
-        // ── DEBIT entries ─────────────────────────────────────────────────────────
-
-        if ($totalGoldMaterialAed > 0) {
+        // ── DEBIT entries ─────────────────────────────────────────────────────
+        if ($totals['gold_material'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('510001'),        // Material Purchases (Gold)
-                'debit'      => round($totalGoldMaterialAed, 2),
+                'account_id' => $acct('510001'),
+                'debit'      => round($totals['gold_material'], 2),
                 'credit'     => 0,
                 'narration'  => 'Gold material purchase — Inv# ' . $invoice->invoice_no,
             ];
         }
 
-        if ($totalDiamondMaterialAed > 0) {
+        if ($totals['diamond_material'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('510002'),        // Material Purchases (Diamond)
-                'debit'      => round($totalDiamondMaterialAed, 2),
+                'account_id' => $acct('510002'),
+                'debit'      => round($totals['diamond_material'], 2),
                 'credit'     => 0,
                 'narration'  => 'Diamond material purchase — Inv# ' . $invoice->invoice_no,
             ];
         }
 
-        if ($totalMakingAed > 0) {
+        if ($totals['making'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('510003'),        // Making Charges Expense
-                'debit'      => round($totalMakingAed, 2),
+                'account_id' => $acct('510003'),
+                'debit'      => round($totals['making'], 2),
                 'credit'     => 0,
                 'narration'  => 'Making charges — Inv# ' . $invoice->invoice_no,
             ];
         }
 
-        // Parts are NOT journalized — they are informational only on the invoice
-
-        if ($totalVatAed > 0) {
+        if ($totals['vat'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('105001'),        // VAT Input Tax Recoverable
-                'debit'      => round($totalVatAed, 2),
+                'account_id' => $acct('105001'),
+                'debit'      => round($totals['vat'], 2),
                 'credit'     => 0,
                 'narration'  => 'Input VAT recoverable — Inv# ' . $invoice->invoice_no,
             ];
@@ -1288,13 +1004,12 @@ class PurchaseInvoiceController extends Controller
             );
         }
 
-        // ── CREDIT entry — payment side ───────────────────────────────────────────
-
+        // ── CREDIT entry ──────────────────────────────────────────────────────
         switch ($invoice->payment_method) {
             case 'credit':
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->vendor_id,        // 205001/205002 Accounts Payable
+                    'account_id' => $invoice->vendor_id,
                     'debit'      => 0,
                     'credit'     => $totalDebit,
                     'narration'  => 'Purchase on credit — payable to vendor',
@@ -1304,7 +1019,7 @@ class PurchaseInvoiceController extends Controller
             case 'cash':
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $acct('101001'),            // Cash in Hand
+                    'account_id' => $acct('101001'),
                     'debit'      => 0,
                     'credit'     => $totalDebit,
                     'narration'  => 'Cash paid for purchase — Inv# ' . $invoice->invoice_no,
@@ -1313,11 +1028,11 @@ class PurchaseInvoiceController extends Controller
 
             case 'cheque':
                 if (!$invoice->bank_name) {
-                    throw new \Exception('Bank account is required for cheque payment (Inv# ' . $invoice->invoice_no . ').');
+                    throw new \Exception('Bank account required for cheque payment (Inv# ' . $invoice->invoice_no . ').');
                 }
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->bank_name,        // 102001/102002 Bank
+                    'account_id' => $invoice->bank_name,
                     'debit'      => 0,
                     'credit'     => $totalDebit,
                     'narration'  => 'Cheque #' . $invoice->cheque_no . ' — Inv# ' . $invoice->invoice_no,
@@ -1326,11 +1041,11 @@ class PurchaseInvoiceController extends Controller
 
             case 'bank_transfer':
                 if (!$invoice->transfer_from_bank) {
-                    throw new \Exception('Transfer-from bank is required for bank transfer (Inv# ' . $invoice->invoice_no . ').');
+                    throw new \Exception('Transfer-from bank required for bank transfer (Inv# ' . $invoice->invoice_no . ').');
                 }
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->transfer_from_bank, // 102001/102002 Bank
+                    'account_id' => $invoice->transfer_from_bank,
                     'debit'      => 0,
                     'credit'     => $totalDebit,
                     'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id . ' — Inv# ' . $invoice->invoice_no,
@@ -1340,7 +1055,7 @@ class PurchaseInvoiceController extends Controller
             case 'material+making cost':
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->vendor_id,        // 205001/205002 Accounts Payable
+                    'account_id' => $invoice->vendor_id,
                     'debit'      => 0,
                     'credit'     => $totalDebit,
                     'narration'  => 'Material + making cost — payable to ' . ($invoice->material_given_by ?? 'vendor'),
@@ -1355,29 +1070,215 @@ class PurchaseInvoiceController extends Controller
             AccountingEntry::create($entry);
         }
 
+        // ── Balance check ─────────────────────────────────────────────────────
         $sumDebits  = round(collect($entries)->sum('debit'),  2);
         $sumCredits = round(collect($entries)->sum('credit'), 2);
 
         if ($sumDebits !== $sumCredits) {
             throw new \Exception(
                 "Accounting imbalance on Invoice #{$invoice->invoice_no}: " .
-                "Debits {$sumDebits} ≠ Credits {$sumCredits}. " .
-                "Voucher #{$voucher->voucher_no} rolled back."
+                "Debits {$sumDebits} ≠ Credits {$sumCredits}."
             );
         }
 
         Log::info('Purchase accounting entries created', [
             'invoice_no'       => $invoice->invoice_no,
             'voucher_no'       => $voucher->voucher_no,
-            'gold_material'    => $totalGoldMaterialAed,
-            'diamond_material' => $totalDiamondMaterialAed,
-            'making'           => $totalMakingAed,
-            'parts'            => $totalPartsAed,   // logged for reference only
-            'vat_input'        => $totalVatAed,
+            'gold_material'    => $totals['gold_material'],
+            'diamond_material' => $totals['diamond_material'],
+            'making'           => $totals['making'],
+            'diamond_val'      => $totals['diamond_val'],   // parts only, not journalized
+            'stone_val'        => $totals['stone_val'],     // parts only, not journalized
+            'vat_input'        => $totals['vat'],
             'total_debit'      => $sumDebits,
             'total_credit'     => $sumCredits,
         ]);
 
         return $voucher;
+    }
+
+    // ── Barcode ───────────────────────────────────────────────────────────────
+
+    private function generateBarcodeNumber(PurchaseInvoice $invoice, int $itemPosition): string
+    {
+        $prefix    = $invoice->is_taxable ? 'MJT-' : 'MJ-';
+        $invoiceNo = substr($invoice->invoice_no, strrpos($invoice->invoice_no, '-') + 1);
+        return $prefix . $invoiceNo . '-' . $itemPosition;
+    }
+
+    // ── PDF helpers ───────────────────────────────────────────────────────────
+
+    private function renderMetalFixingPage($pdf, $invoice, $totalMaterialVal, string $copyType = 'PARTY COPY'): void
+    {
+        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
+
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="2"><tr>
+            <td width="30%">' . $logoHtml . '</td>
+            <td width="70%" style="text-align:right;font-size:9px;">
+                <strong style="font-size:12px;">MUSFIRA JEWELRY L.L.C</strong><br>
+                M04 Al Buteen 2 Building, Old Baldiya Street, Gold Souq Gate 1 Dubai UAE.<br>
+                TRN: 104902647700003
+            </td>
+        </tr></table><hr>', true, false, false, false);
+
+        $pdf->SetFont('helvetica', 'B', 12);
+        $pdf->Cell(120, 8, 'METAL SALE FIXING', 0, 0, 'R');
+        $pdf->SetFont('helvetica', '', 9);
+        $pdf->Cell(70, 8, strtoupper($copyType), 0, 1, 'R');
+        $pdf->Ln(5);
+
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="0"><tr>
+            <td width="60%">
+                <b>To:</b><br>' . ($invoice->vendor->name ?? '-') . '<br>' . ($invoice->vendor->address ?? '-') . '<br>
+                Contact: ' . ($invoice->vendor->contact_no ?? '-') . '<br>TRN: ' . ($invoice->vendor->trn ?? '-') . '
+            </td>
+            <td width="40%">
+                <table border="1" cellpadding="3" width="100%">
+                    <tr><td><b>Invoice #</b></td><td><b>' . $invoice->invoice_no . '</b></td></tr>
+                    <tr><td><b>Date</b></td><td><b>' . Carbon::parse($invoice->invoice_date)->format('d/m/Y') . '</b></td></tr>
+                </table>
+            </td>
+        </tr></table>', true, false, false, false);
+
+        $totalPureWt = $invoice->items->sum('purity_weight');
+        $rate        = $invoice->currency === 'USD' ? $invoice->gold_rate_usd : $invoice->gold_rate_aed_ounce;
+        $rateUnit    = $invoice->currency === 'USD' ? 'GOZ' : 'GMS';
+        $materialAED = $invoice->currency === 'USD'
+            ? round($totalMaterialVal * $invoice->exchange_rate, 2)
+            : $totalMaterialVal;
+
+        $pdf->Ln(2);
+        $pdf->writeHTML('<b>WE HAVE</b>', true, false, false, false);
+        $pdf->writeHTML('
+        <table width="100%" style="border:1px solid #000;"><tr><td>
+            BOUGHT FINE GOLD <b>' . number_format($totalPureWt, 3) . ' (GMS) @ ' . number_format($rate, 2) . ' / ' . $rateUnit . '</b><br>
+            EQUIVALENT MATERIAL VALUE ..... <b>AED ' . number_format($materialAED, 2) . '</b>
+        </td></tr></table>', true, false, false, false);
+
+        $words = $pdf->convertCurrencyToWords($materialAED, 'AED');
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="4" style="border:1px solid #000;">
+            <tr>
+                <td width="30%" style="border:1px solid #000;background-color:#f0f0f0;">Your account has been updated with:</td>
+                <td width="70%" rowspan="2" valign="middle">' . strtoupper($words) . '</td>
+            </tr>
+            <tr><td style="border-right:0.5px solid #000;"><b>DEBITED AED ' . number_format($materialAED, 2) . '</b></td></tr>
+        </table>', true, false, false, false);
+
+        $pdf->Ln(1);
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->writeHTML(
+            'Being ' . number_format($totalPureWt, 2) . ' gms pure gold rate ' . number_format($rate, 2) .
+            ' /- fixed with ' . ($invoice->vendor->name ?? '-') . ' TRN-' . ($invoice->vendor->trn ?? '-') .
+            ' Against Purchase Invoice # ' . $invoice->invoice_no . '.',
+            true, false, false, false
+        );
+
+        $pdf->Ln(20);
+        $y = $pdf->GetY();
+        $pdf->SetFont('helvetica', '', 7);
+        $pdf->Line(10, $y, 55, $y);   $pdf->SetXY(10, $y + 1); $pdf->Cell(45, 5, "SUPPLIER'S SIGNATURE", 0, 0, 'C');
+        $pdf->Line(65, $y, 95, $y);   $pdf->SetXY(65, $y + 1); $pdf->Cell(30, 5, 'For Accounts', 0, 0, 'C');
+        $pdf->Line(110, $y, 140, $y); $pdf->SetXY(110, $y + 1); $pdf->Cell(30, 5, 'Checked By', 0, 0, 'C');
+        $pdf->SetXY(150, $y - 9); $pdf->SetFont('helvetica', 'B', 7);
+        $pdf->Cell(50, 3, 'For MUSFIRA JEWELRY L L C', 0, 0, 'C');
+        $pdf->Line(155, $y, 195, $y); $pdf->SetXY(155, $y + 1);
+        $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
+    }
+
+    private function renderCurrencyPaymentPage($pdf, $invoice, float $totalMaking, float $totalParts, float $totalVat, string $copyType = 'PARTY COPY'): void
+    {
+        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
+
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="2"><tr>
+            <td width="30%">' . $logoHtml . '</td>
+            <td width="70%" style="text-align:right;font-size:9px;">
+                <strong style="font-size:12px;">MUSFIRA JEWELRY L.L.C</strong><br>
+                M04 Al Buteen 2 Building, Old Baldiya Street, Gold Souq Gate 1 Dubai UAE.<br>
+                TRN: 104902647700003
+            </td>
+        </tr></table><hr>', true, false, false, false);
+
+        $pdf->SetFont('helvetica', 'B', 12);
+        $pdf->Cell(120, 8, 'CURRENCY PAYMENT', 0, 0, 'R');
+        $pdf->SetFont('helvetica', '', 9);
+        $pdf->Cell(70, 8, strtoupper($copyType), 0, 1, 'R');
+        $pdf->Ln(2);
+
+        $ex        = (float) ($invoice->exchange_rate ?? 1);
+        $makingAED = $invoice->currency === 'USD' ? round($totalMaking * $ex, 2) : $totalMaking;
+        $vatAED    = $invoice->currency === 'USD' ? round($totalVat    * $ex, 2) : $totalVat;
+        $payable   = $makingAED + $vatAED;
+
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="0"><tr>
+            <td width="60%">
+                <b>To:</b><br>' . ($invoice->vendor->name ?? '-') . '<br>' . ($invoice->vendor->address ?? '-') . '<br>
+                Contact: ' . ($invoice->vendor->contact_no ?? '-') . '<br>TRN: ' . ($invoice->vendor->trn ?? '-') . '
+            </td>
+            <td width="40%">
+                <table border="1" cellpadding="3" width="100%">
+                    <tr><td><b>REF DOC. NO#</b></td><td><b>' . $invoice->invoice_no . '</b></td></tr>
+                    <tr><td><b>DATE</b></td><td><b>' . Carbon::parse($invoice->invoice_date)->format('d/m/Y') . '</b></td></tr>
+                </table>
+            </td>
+        </tr></table>', true, false, false, false);
+
+        $pdf->Ln(2);
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="5" border="1" style="border-collapse:collapse;">
+            <tr style="background-color:#f2f2f2;font-weight:bold;text-align:center;">
+                <th width="10%">No.</th>
+                <th width="50%">Account Description</th>
+                <th width="20%">Amount (AED)</th>
+                <th width="20%">Total (AED)</th>
+            </tr>
+            <tr style="text-align:center;">
+                <td>1</td>
+                <td align="left">
+                    <b>Labour, Making Charges</b><br>
+                    (Making: ' . number_format($makingAED, 2) . ' + VAT: ' . number_format($vatAED, 2) . ')<br>
+                    Against Purchase Invoice # ' . $invoice->invoice_no . '
+                </td>
+                <td>' . number_format($payable, 2) . '</td>
+                <td>' . number_format($payable, 2) . '</td>
+            </tr>
+            <tr style="font-weight:bold;background-color:#f9f9f9;">
+                <td colspan="2" align="right">Total Payment Amount</td>
+                <td align="center">' . number_format($payable, 2) . '</td>
+                <td align="center">' . number_format($payable, 2) . '</td>
+            </tr>
+        </table>', true, false, false, false);
+
+        $words = $pdf->convertCurrencyToWords($payable, 'AED');
+        $pdf->Ln(2);
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="4" style="border:1px solid #000;">
+            <tr>
+                <td width="30%" style="border:1px solid #000;background-color:#f2f2f2;">Account Update:</td>
+                <td width="70%">' . strtoupper($words) . '</td>
+            </tr>
+            <tr>
+                <td style="border-right:0.5px solid #000;"><b>AED ' . number_format($payable, 2) . ' DEBITED</b></td>
+                <td>Being payment for service charges, parts and tax.</td>
+            </tr>
+        </table>', true, false, false, false);
+
+        $pdf->Ln(30);
+        $y = $pdf->GetY();
+        $pdf->SetFont('helvetica', '', 7);
+        $pdf->Line(10, $y, 55, $y);   $pdf->SetXY(10, $y + 1); $pdf->Cell(45, 5, "RECEIVER'S SIGNATURE", 0, 0, 'C');
+        $pdf->Line(65, $y, 95, $y);   $pdf->SetXY(65, $y + 1); $pdf->Cell(30, 5, 'Prepared By', 0, 0, 'C');
+        $pdf->Line(110, $y, 140, $y); $pdf->SetXY(110, $y + 1); $pdf->Cell(30, 5, 'Checked By', 0, 0, 'C');
+        $pdf->SetXY(150, $y - 9); $pdf->SetFont('helvetica', 'B', 7);
+        $pdf->Cell(50, 3, 'For MUSFIRA JEWELRY L L C', 0, 0, 'C');
+        $pdf->Line(155, $y, 195, $y); $pdf->SetXY(155, $y + 1);
+        $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
     }
 }

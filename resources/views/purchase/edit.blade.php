@@ -18,24 +18,24 @@
           </ul>
         </div>
       @endif
+
       @if(session('printed_delete_warning'))
         <div class="alert alert-warning">
-            <strong>Warning:</strong> The following items have already been printed and will be permanently deleted:
-            <br><code>{{ session('printed_delete_warning') }}</code>
-            <br><br>
-            <form method="POST" action="{{ route('purchase_invoices.update', $purchaseInvoice->id) }}" enctype="multipart/form-data" id="confirm-delete-form">
-                @csrf @method('PUT')
-                <input type="hidden" name="confirm_delete_printed" value="1">
-                {{-- Re-submit all original form data --}}
-                <button type="button" class="btn btn-danger" onclick="resubmitWithConfirm()">
-                    Delete anyway and update invoice
-                </button>
-                <a href="{{ route('purchase_invoices.edit', $purchaseInvoice->id) }}" class="btn btn-secondary ms-2">
-                    Go back and keep items
-                </a>
-            </form>
+          <strong>Warning:</strong> The following items have already been printed and will be permanently deleted:
+          <br><code>{{ session('printed_delete_warning') }}</code>
+          <br><br>
+          <form method="POST" action="{{ route('purchase_invoices.update', $purchaseInvoice->id) }}" enctype="multipart/form-data" id="confirm-delete-form">
+            @csrf @method('PUT')
+            <input type="hidden" name="confirm_delete_printed" value="1">
+            <button type="button" class="btn btn-danger" onclick="resubmitWithConfirm()">
+              Delete anyway and update invoice
+            </button>
+            <a href="{{ route('purchase_invoices.edit', $purchaseInvoice->id) }}" class="btn btn-secondary ms-2">
+              Go back and keep items
+            </a>
+          </form>
         </div>
-        @endif
+      @endif
 
       <section class="card">
         <header class="card-header d-flex justify-content-between align-items-center">
@@ -47,11 +47,13 @@
 
         <div class="card-body">
 
-          {{-- HEADER --}}
+          {{-- ===================== HEADER ===================== --}}
           <div class="row mb-5">
+
             <div class="col-md-2">
               <label>Invoice Date</label>
-              <input type="date" name="invoice_date" class="form-control" value="{{ \Carbon\Carbon::parse($purchaseInvoice->invoice_date)->format('Y-m-d') }}">
+              <input type="date" name="invoice_date" class="form-control"
+                value="{{ \Carbon\Carbon::parse($purchaseInvoice->invoice_date)->format('Y-m-d') }}">
             </div>
 
             <div class="col-md-2">
@@ -75,36 +77,38 @@
               </select>
             </div>
 
+            {{-- Gold Rates --}}
             <div class="col-12 col-md-2">
               <label>Gold Rate (USD / <b>Ounce</b>)</label>
-              <input type="number" step="any" id="gold_rate_usd" name="gold_rate_usd" class="form-control" value="{{ $purchaseInvoice->gold_rate_usd ?? 0 }}">
+              <input type="number" step="any" id="gold_rate_usd" name="gold_rate_usd"
+                class="form-control" value="{{ $purchaseInvoice->gold_rate_usd ?? 0 }}">
             </div>
 
             <div class="col-12 col-md-2">
               <label>Gold Rate (AED / <b>Ounce</b>)</label>
-              <input type="number" step="any" id="gold_rate_aed_ounce" name="gold_rate_aed_ounce" class="form-control" value="{{ round($goldAedOunce, 2) }}">
+              <input type="number" step="any" id="gold_rate_aed_ounce" name="gold_rate_aed_ounce"
+                class="form-control" value="{{ round($goldAedOunce, 2) }}">
             </div>
 
             <div class="col-12 col-md-3">
-              <label class="text-primary">Gold Converted Rate (AED / <b>Gram</b>)</label>
-              <input type="number" step="any" id="gold_rate_aed" name="gold_rate_aed" class="form-control" value="{{ $purchaseInvoice->gold_rate_aed ?? 0 }}" readonly>
-              <small class="text-danger text-bold">Used for calculations</small>
+              <label class="text-primary">Gold Rate (AED / <b>Gram</b>)</label>
+              <input type="number" step="any" id="gold_rate_aed" name="gold_rate_aed"
+                class="form-control" value="{{ $purchaseInvoice->gold_rate_aed ?? 0 }}" readonly>
+              <small class="text-danger fw-bold">Used for calculations</small>
+            </div>
+
+            {{-- Diamond Rates — Ct. only, no gram/ounce conversion --}}
+            <div class="col-12 col-md-2 mt-2">
+              <label>Diamond Rate (USD) / Ct.</label>
+              <input type="number" step="any" id="diamond_rate_usd" name="diamond_rate_usd"
+                class="form-control" value="{{ $purchaseInvoice->diamond_rate_usd ?? 0 }}">
             </div>
 
             <div class="col-12 col-md-2 mt-2">
-              <label>Diamond Rate (USD) / Ounce</label>
-              <input type="number" step="any" id="diamond_rate_usd" name="diamond_rate_usd" class="form-control" value="{{ $purchaseInvoice->diamond_rate_usd ?? 0 }}">
-            </div>
-
-            <div class="col-12 col-md-2 mt-2">
-              <label>Diamond Rate (AED) / Ounce</label>
-              <input type="number" step="any" id="diamond_rate_aed_ounce" name="diamond_rate_aed_ounce" class="form-control" value="{{ round($diamondAedOunce, 2) }}">
-            </div>
-
-            <div class="col-12 col-md-3">
-              <label class="text-primary">Diamond Converted Rate (AED / <b>Gram</b>)</label>
-              <input type="number" step="any" id="diamond_rate_aed_gram" name="diamond_rate_aed" class="form-control" value="{{ $purchaseInvoice->diamond_rate_aed ?? 0 }}" readonly>
-              <small class="text-danger text-bold">Used for calculations</small>
+              <label>Diamond Rate (AED) / Ct.</label>
+              <input type="number" step="any" id="diamond_rate_aed" name="diamond_rate_aed"
+                class="form-control" value="{{ $diamondAedCt ?? 0 }}">
+              <small class="text-danger fw-bold">Used for calculations</small>
             </div>
 
             <div class="col-md-4 mt-2">
@@ -116,17 +120,20 @@
               <label>Add Attachments</label>
               <input type="file" name="attachments[]" class="form-control" multiple accept=".pdf,.jpg,.jpeg,.png,.zip">
               @if($purchaseInvoice->attachments->count())
-                <small class="text-muted">{{ $purchaseInvoice->attachments->count() }} existing attachment(s) — uploading new files adds to them.</small>
+                <small class="text-muted">
+                  {{ $purchaseInvoice->attachments->count() }} existing attachment(s) — uploading new files adds to them.
+                </small>
               @endif
             </div>
-          </div>
 
-          {{-- ITEMS TABLE --}}
+          </div>{{-- end header row --}}
+
+          {{-- ===================== ITEMS TABLE ===================== --}}
           <section class="card">
             <header class="card-header d-flex justify-content-between align-items-center">
               <h2 class="card-title">Invoice Items</h2>
               <div>
-                <input type="file" id="excel_import" class="d-none" accept=".xlsx, .xls, .csv">
+                <input type="file" id="excel_import" class="d-none" accept=".xlsx,.xls,.csv">
                 <button type="button" class="btn btn-success" onclick="document.getElementById('excel_import').click()">
                   <i class="fas fa-file-excel"></i> Import Excel
                 </button>
@@ -140,15 +147,16 @@
                 <thead>
                   <tr>
                     <th width="12%" rowspan="2">Item Name</th>
-                    <th width="13%" rowspan="2">Item Description</th>
-                    <th width="9%"  rowspan="2">Purity</th>
+                    <th width="12%" rowspan="2">Description</th>
+                    <th width="8%"  rowspan="2">Purity</th>
+                    <th rowspan="2">Net Wt</th>
                     <th rowspan="2">Gross Wt</th>
                     <th rowspan="2">Purity Wt</th>
                     <th rowspan="2">995</th>
                     <th colspan="2" class="text-center">Making</th>
                     <th width="6%" rowspan="2">Material</th>
                     <th rowspan="2">Material Val</th>
-                    <th rowspan="2">Taxable (MC)</th>
+                    <th rowspan="2">Taxable</th>
                     <th rowspan="2">VAT %</th>
                     <th rowspan="2">VAT Amt</th>
                     <th rowspan="2">Gross Total</th>
@@ -167,11 +175,19 @@
             </div>
           </section>
 
-          {{-- SUMMARY --}}
+          {{-- ===================== SUMMARY ===================== --}}
           <div class="row mt-5 mb-5">
             <div class="col-md-2">
-              <label>Total Gross Wt</label>
-              <input type="text" id="sum_gross_weight" class="form-control" readonly>
+              <label>Gold Gross Wt</label>
+              <input type="text" id="sum_gold_gross_weight" class="form-control" readonly>
+            </div>
+            <div class="col-md-2">
+              <label>Diamond CTS</label>
+              <input type="text" id="sum_diamond_cts" class="form-control" readonly>
+            </div>
+            <div class="col-md-2">
+              <label>Stone Qty</label>
+              <input type="text" id="sum_stone_qty" class="form-control" readonly>
             </div>
             <div class="col-md-2">
               <label>Total Purity Wt</label>
@@ -185,11 +201,19 @@
               <label>Total Making (Incl. VAT)</label>
               <input type="text" id="sum_making_value" class="form-control" readonly>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-2 mt-3">
               <label>Total Material Val.</label>
               <input type="text" id="sum_material_value" class="form-control" readonly>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-2 mt-3">
+              <label>Diamond Parts Val.</label>
+              <input type="text" id="sum_diamond_value" class="form-control" readonly>
+            </div>
+            <div class="col-md-2 mt-3">
+              <label>Stone Parts Val.</label>
+              <input type="text" id="sum_stone_value" class="form-control" readonly>
+            </div>
+            <div class="col-md-2 mt-3">
               <label>Total VAT</label>
               <input type="text" id="sum_vat_amount" class="form-control" readonly>
             </div>
@@ -200,7 +224,7 @@
             </div>
           </div>
 
-          {{-- PAYMENT METHOD --}}
+          {{-- ===================== PAYMENT METHOD ===================== --}}
           <div class="row mb-3">
             <div class="col-md-2">
               <label class="fw-bold">Payment Method</label>
@@ -219,7 +243,6 @@
             </div>
           </div>
 
-          {{-- ADDITIONAL FIELDS --}}
           <div class="row mb-3 d-none" id="received_by_box">
             <div class="col-md-2">
               <label>Received By</label>
@@ -255,10 +278,6 @@
 
           <div class="row mb-3 d-none" id="material_fields">
             <div class="col-md-2">
-              <label>Total Item Wt. Received</label>
-              <input type="text" id="total_wt_received" class="form-control">
-            </div>
-            <div class="col-md-2">
               <label>Raw Material Weight Given</label>
               <input type="number" step="any" name="material_weight" class="form-control" value="{{ $purchaseInvoice->material_weight }}">
             </div>
@@ -275,22 +294,10 @@
               <input type="number" step="any" name="making_charges" class="form-control" value="{{ $purchaseInvoice->making_charges }}">
             </div>
             <div class="col-md-2">
-              <label>Gold Used (Invoice)</label>
-              <input type="text" id="gold_used" class="form-control">
-            </div>
-            <div class="col-md-2 mt-3">
-              <label>Gold Balance</label>
-              <input type="text" id="gold_balance" class="form-control fw-bold" readonly>
-            </div>
-            <div class="col-md-2 mt-3">
-              <label>Gold Balance Value (AED)</label>
-              <input type="text" id="gold_balance_value" class="form-control text-danger fw-bold" readonly>
-            </div>
-            <div class="col-md-2 mt-3">
               <label>Material Given By</label>
               <input type="text" name="material_given_by" class="form-control" value="{{ $purchaseInvoice->material_given_by }}">
             </div>
-            <div class="col-md-2 mt-3">
+            <div class="col-md-2">
               <label>Material Received By</label>
               <input type="text" name="material_received_by" class="form-control" value="{{ $purchaseInvoice->material_received_by }}">
             </div>
@@ -314,11 +321,11 @@
             </div>
             <div class="col-md-2">
               <label>Account Title</label>
-              <input type="text" name="account_title" class="form-control" value="{{ $purchaseInvoice->account_title }}" placeholder="Account Holder Name">
+              <input type="text" name="account_title" class="form-control" value="{{ $purchaseInvoice->account_title }}">
             </div>
             <div class="col-md-2">
               <label>Account Number</label>
-              <input type="text" name="account_no" class="form-control" value="{{ $purchaseInvoice->account_no }}" placeholder="XXXX XXXX XXXX">
+              <input type="text" name="account_no" class="form-control" value="{{ $purchaseInvoice->account_no }}">
             </div>
             <div class="col-md-2">
               <label>Transaction Ref No</label>
@@ -326,7 +333,8 @@
             </div>
             <div class="col-md-2">
               <label>Transfer Date</label>
-              <input type="date" name="transfer_date" class="form-control" value="{{ $purchaseInvoice->transfer_date ? \Carbon\Carbon::parse($purchaseInvoice->transfer_date)->format('Y-m-d') : '' }}">
+              <input type="date" name="transfer_date" class="form-control"
+                value="{{ $purchaseInvoice->transfer_date ? \Carbon\Carbon::parse($purchaseInvoice->transfer_date)->format('Y-m-d') : '' }}">
             </div>
             <div class="col-md-2 mt-2">
               <label>Transfer Amount</label>
@@ -334,7 +342,7 @@
             </div>
           </div>
 
-          {{-- CURRENCY --}}
+          {{-- ===================== CURRENCY ===================== --}}
           <div class="card mt-3">
             <div class="card-header"><h2 class="card-title">Currency</h2></div>
             <div class="card-body">
@@ -348,8 +356,8 @@
                 </div>
                 <div class="col-md-2" id="exchangeRateBox" style="display:none;">
                   <label class="form-label">USD → AED Rate <span class="text-danger">*</span></label>
-                  <input type="number" step="0.000001" name="exchange_rate" id="exchange_rate" class="form-control"
-                    value="{{ $purchaseInvoice->exchange_rate }}" placeholder="3.6725">
+                  <input type="number" step="0.000001" name="exchange_rate" id="exchange_rate"
+                    class="form-control" value="{{ $purchaseInvoice->exchange_rate }}" placeholder="3.6725">
                 </div>
                 <div class="col-md-2">
                   <label class="form-label">Converted Total (AED)</label>
@@ -375,13 +383,13 @@
 </div>
 
 <script>
-  $(document).ready(function () {
+$(document).ready(function () {
 
     const products      = @json($products);
     const existingItems = @json($itemsData);
-    const TROY_OUNCE_TO_GRAM = 31.1034768;
+    const TROY_OUNCE_TO_GRAM = 31.1035;
 
-    // ===== TOGGLE PARTS =====
+    // ===== PARTS TOGGLE =====
     $(document).on('click', '.toggle-parts', function() {
         $(this).closest('tr').next('.parts-row').fadeToggle(200);
     });
@@ -442,10 +450,13 @@
         const name    = data.item_name        || '';
         const desc    = data.item_description || '';
         const purity  = data.purity           || '0.92';
-        const gross   = data.gross_weight     || 0;
+        const netWt   = data.net_weight       || 0;
+        const grossWt = data.gross_weight     || 0;
         const mkRate  = data.making_rate      || 0;
         const matType = data.material_type    || 'gold';
         const vatPct  = data.vat_percent      || 0;
+
+        const purityOptions = `@foreach($purities as $p)<option value="{{ $p->value }}" ${purity == {{ $p->value }} ? 'selected' : ''}>{{ $p->label }}</option>@endforeach`;
 
         return `
         <tr class="item-row" data-item-index="${index}">
@@ -459,41 +470,38 @@
             <td><input type="text" name="items[${index}][item_description]" class="form-control" value="${desc}" required></td>
             <td>
                 <select name="items[${index}][purity]" class="form-control purity">
-                    @foreach($purities as $p)
-                        <option value="{{ $p->value }}" ${purity == {{ $p->value }} ? 'selected' : ''}>
-                            {{ $p->label }}
-                        </option>
-                    @endforeach
+                    ${purityOptions}
                 </select>
             </td>
-            <td><input type="number" name="items[${index}][gross_weight]" step="any" value="${gross}" class="form-control gross-weight"></td>
-            <td><input type="number" name="items[${index}][purity_weight]" step="any" value="0" class="form-control purity-weight" readonly></td>
-            <td><input type="number" name="items[${index}][995]" step="any" value="0" class="form-control col-995" readonly></td>
+            <td><input type="number" name="items[${index}][net_weight]" step="any" value="${netWt}" class="form-control net-weight"></td>
+            <td><input type="number" name="items[${index}][gross_weight]" step="any" value="${grossWt}" class="form-control gross-weight bg-light text-primary fw-bold" readonly></td>
+            <td><input type="number" name="items[${index}][purity_weight]" step="any" value="${data.purity_weight || 0}" class="form-control purity-weight" readonly></td>
+            <td><input type="number" name="items[${index}][col_995]" step="any" value="${data.col_995 || 0}" class="form-control col-995" readonly></td>
             <td><input type="number" name="items[${index}][making_rate]" step="any" value="${mkRate}" class="form-control making-rate"></td>
-            <td><input type="number" name="items[${index}][making_value]" step="any" class="form-control making-value" readonly></td>
+            <td><input type="number" name="items[${index}][making_value]" step="any" value="${data.making_value || 0}" class="form-control making-value" readonly></td>
             <td>
                 <select name="items[${index}][material_type]" class="form-control material-type">
                     <option value="gold"    ${matType === 'gold'    ? 'selected' : ''}>Gold</option>
                     <option value="diamond" ${matType === 'diamond' ? 'selected' : ''}>Diamond</option>
                 </select>
             </td>
-            <td><input type="number" name="items[${index}][metal_value]" step="any" value="0" class="form-control material-value" readonly></td>
-            <td><input type="number" name="items[${index}][taxable_amount]" step="any" value="0" class="form-control taxable-amount" readonly></td>
+            <td><input type="number" name="items[${index}][material_value]" step="any" value="${data.material_value || 0}" class="form-control material-value" readonly></td>
+            <td><input type="number" name="items[${index}][taxable_amount]" step="any" value="${data.taxable_amount || 0}" class="form-control taxable-amount" readonly></td>
             <td><input type="number" name="items[${index}][vat_percent]" class="form-control vat-percent" step="any" value="${vatPct}"></td>
-            <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
-            <td><input type="number" class="form-control item-total" readonly></td>
+            <td><input type="number" name="items[${index}][vat_amount]" step="any" value="${data.vat_amount || 0}" class="form-control vat-amount" readonly></td>
+            <td><input type="number" name="items[${index}][item_total]" step="any" value="${data.item_total || 0}" class="form-control item-total" readonly></td>
             <td>
                 <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
                 <button type="button" class="btn btn-sm btn-primary toggle-parts"><i class="fas fa-wrench"></i></button>
             </td>
         </tr>
         <tr class="parts-row" style="display:none;background:#efefef">
-            <td colspan="15">
+            <td colspan="16">
                 <div class="parts-wrapper">
                     <table class="table table-sm table-bordered parts-table">
                         <thead>
                             <tr>
-                                <th>Part</th><th>Description</th><th>Carat (CTS)</th><th>Rate</th>
+                                <th>Part</th><th>Description</th><th>Diamond Ct.</th><th>Rate</th>
                                 <th>Stone Ct.</th><th>Stone Rate</th><th>Total</th><th></th>
                             </tr>
                         </thead>
@@ -519,7 +527,7 @@
             <td>
                 <div class="input-group">
                     <input type="number" name="items[${itemIndex}][parts][${partIndex}][qty]" step="any" value="${data.qty || 0}" class="form-control part-qty">
-                    <input type="text" class="form-control part-unit-name" style="width:70px;flex:none;" readonly placeholder="CTS">
+                    <span class="input-group-text">Ct.</span>
                 </div>
             </td>
             <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][rate]" step="any" value="${data.rate || 0}" class="form-control part-rate"></td>
@@ -537,19 +545,15 @@
         const itemRow  = $('#PurchaseTable tr.item-row').last();
         const partsRow = itemRow.next('.parts-row');
 
-        // Store saved gross as base BEFORE loading parts so carat recalc works correctly
-        itemRow.find('.gross-weight').data('base-gross', parseFloat(itemData.gross_weight) || 0);
-
         if (itemData.parts && itemData.parts.length > 0) {
             partsRow.show();
             itemData.parts.forEach(function(partData, j) {
                 partsRow.find('.parts-table tbody').append(buildPartRowHtml(i, j, partData));
             });
-            // Apply carat → gross recalc after all parts are loaded
-            recalcItemGrossWeight(itemRow);
-        } else {
-            calculateRow(itemRow);
         }
+
+        // Always recalc after load to keep gross_weight and all derived values in sync
+        recalcItemGrossWeight(itemRow);
     });
 
     calculateTotals();
@@ -597,13 +601,12 @@
     $(document).on('click', '.remove-part', function() {
         const itemRow = $(this).closest('.parts-row').prev('.item-row');
         $(this).closest('tr').remove();
-        // Recalc gross weight after part removed
         recalcItemGrossWeight(itemRow);
         calculateTotals();
     });
 
     // ===== PRODUCT TOGGLE =====
-    $(document).on('click', '.toggle-product, .revert-to-name', function () {
+    $(document).on('click', '.toggle-product, .revert-to-name', function() {
         const isReverting = $(this).hasClass('revert-to-name');
         const wrapper     = $(this).closest('.product-wrapper');
         const isPart      = wrapper.closest('tr').hasClass('part-item-row');
@@ -639,12 +642,12 @@
         const productId       = $(this).val();
         const row             = $(this).closest('tr');
         const variationSelect = row.find('.variation-select');
-        const unitInput       = row.find('.part-unit-name');
-
-        if (unitInput.length > 0) unitInput.val($(this).find(':selected').data('unit') || '');
 
         variationSelect.html('<option value="">Loading...</option>').prop('disabled', true);
-        if (!productId) { variationSelect.html('<option value="">Select Variation</option>').prop('disabled', false); return; }
+        if (!productId) {
+            variationSelect.html('<option value="">Select Variation</option>').prop('disabled', false);
+            return;
+        }
 
         fetch(`/product/${productId}/variations`)
             .then(res => res.json())
@@ -655,72 +658,84 @@
                     opts = '<option value="">Select Variation</option>';
                     data.variation.forEach(v => { opts += `<option value="${v.id}">${v.sku}</option>`; });
                 }
-                variationSelect.html(opts).trigger('change');
+                variationSelect.html(opts);
             });
     });
 
-    // ===== CALCULATIONS =====
+    // ================= CALCULATIONS =================
 
-    // When user manually edits gross weight, store as new base
-    $(document).on('input', '.gross-weight', function() {
-        $(this).data('base-gross', parseFloat($(this).val()) || 0);
+    // User types Net Wt — recalc gross + row
+    $(document).on('input', '.net-weight', function() {
         recalcItemGrossWeight($(this).closest('tr.item-row'));
     });
 
-    // All other item field changes
-    $(document).on('input change', '.purity, .making-rate, .vat-percent, .material-type, #gold_rate_aed, #diamond_rate_aed_gram', function() {
+    // Purity/rate/type changes — recalc row
+    $(document).on('input change', '.purity, .making-rate, .vat-percent, .material-type, #gold_rate_aed, #diamond_rate_aed', function() {
         const row = $(this).closest('tr.item-row');
-        if (row.length) calculateRow(row);
+        if (row.length) recalcItemGrossWeight(row);
         calculateTotals();
     });
 
     /**
-     * new gross = base gross (user typed) + sum(all part carat qty / 5)
-     * Then triggers full item row recalculation.
+     * Gross Wt = Net Wt + (diamondCTS / 5) + (stoneCTS / 5)
+     * gross_weight column is readonly — computed here, never typed by user.
      */
     function recalcItemGrossWeight(itemRow) {
         if (!itemRow || !itemRow.length) return;
 
-        const grossInput = itemRow.find('.gross-weight');
+        const netWt = parseFloat(itemRow.find('.net-weight').val()) || 0;
 
-        let baseGross = parseFloat(grossInput.data('base-gross'));
-        if (isNaN(baseGross)) {
-            baseGross = parseFloat(grossInput.val()) || 0;
-            grossInput.data('base-gross', baseGross);
-        }
-
-        let totalCaratContribution = 0;
+        let totalDiamondCTS = 0;
+        let totalStoneCTS   = 0;
         itemRow.next('.parts-row').find('.part-item-row').each(function() {
-            totalCaratContribution += (parseFloat($(this).find('.part-qty').val()) || 0) / 5;
+            totalDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
+            totalStoneCTS   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
         });
 
-        grossInput.val((baseGross + totalCaratContribution).toFixed(3));
+        const newGross = netWt + (totalDiamondCTS / 5) + (totalStoneCTS / 5);
+        itemRow.find('.gross-weight').val(newGross.toFixed(3));
 
         calculateRow(itemRow);
         calculateTotals();
     }
 
+    /**
+     * Row calculations:
+     *   purity_weight  = net_weight × purity
+     *   col_995        = purity_weight / 0.995
+     *   making_value   = net_weight × making_rate
+     *   material_value = rate × purity_weight
+     *   taxable        = making_value + parts_total
+     *   vat_amount     = taxable × vat% / 100
+     *   item_total     = material_value + taxable + vat_amount
+     */
     function calculateRow(row) {
-        const purity       = parseFloat(row.find('.purity').val())      || 0;
-        const gross        = parseFloat(row.find('.gross-weight').val()) || 0;
-        const makingRate   = parseFloat(row.find('.making-rate').val())  || 0;
-        const vatPercent   = parseFloat(row.find('.vat-percent').val())  || 0;
+        const netWt        = parseFloat(row.find('.net-weight').val())    || 0;
+        const purity       = parseFloat(row.find('.purity').val())        || 0;
+        const makingRate   = parseFloat(row.find('.making-rate').val())   || 0;
+        const vatPercent   = parseFloat(row.find('.vat-percent').val())   || 0;
         const materialType = row.find('.material-type').val();
 
         let rate = (materialType === 'gold')
             ? parseFloat($('#gold_rate_aed').val())
-            : parseFloat($('#diamond_rate_aed_gram').val());
+            : parseFloat($('#diamond_rate_aed').val());
         rate = rate || 0;
 
-        const purityWt      = gross * purity;
-        const col995        = purityWt / 0.995;
-        const makingValue   = gross * makingRate;
-        const materialValue = rate * purityWt;
-        const taxableAmount = makingValue;
-        const vatAmount     = taxableAmount * vatPercent / 100;
-        const itemTotal     = taxableAmount + materialValue + vatAmount;
+        const purityWeight  = netWt * purity;
+        const col995        = purityWeight / 0.995;
+        const makingValue   = netWt * makingRate;
+        const materialValue = rate * purityWeight;
 
-        row.find('.purity-weight').val(purityWt.toFixed(3));
+        let partsTotal = 0;
+        row.next('.parts-row').find('.part-item-row').each(function() {
+            partsTotal += parseFloat($(this).find('.part-total').val()) || 0;
+        });
+
+        const taxableAmount = makingValue + partsTotal;
+        const vatAmount     = taxableAmount * vatPercent / 100;
+        const itemTotal     = materialValue + taxableAmount + vatAmount;
+
+        row.find('.purity-weight').val(purityWeight.toFixed(3));
         row.find('.col-995').val(col995.toFixed(3));
         row.find('.making-value').val(makingValue.toFixed(2));
         row.find('.material-value').val(materialValue.toFixed(2));
@@ -730,26 +745,56 @@
     }
 
     function calculateTotals() {
-        let sumGross = 0, sumPurity = 0, sum995 = 0, sumMakingTaxable = 0,
-            sumMaterial = 0, sumVAT = 0, netTotal = 0;
+        let sumNetWt         = 0;
+        let sum995           = 0;
+        let sumMakingTaxable = 0;
+        let sumMaterial      = 0;
+        let sumVAT           = 0;
+        let sumGoldGross     = 0;
+        let totalDiamondCTS  = 0;
+        let totalStoneQty    = 0;
+        let totalDiamondVal  = 0;
+        let totalStoneVal    = 0;
 
-        $('#PurchaseTable tr.item-row').each(function () {
-            sumGross         += parseFloat($(this).find('.gross-weight').val())   || 0;
-            sumPurity        += parseFloat($(this).find('.purity-weight').val())  || 0;
-            sum995           += parseFloat($(this).find('.col-995').val())        || 0;
-            sumMakingTaxable += parseFloat($(this).find('.taxable-amount').val()) || 0;
-            sumMaterial      += parseFloat($(this).find('.material-value').val()) || 0;
-            sumVAT           += parseFloat($(this).find('.vat-amount').val())     || 0;
-            netTotal         += parseFloat($(this).find('.item-total').val())     || 0;
+        $('#PurchaseTable tr.item-row').each(function() {
+            const itemRow      = $(this);
+            const materialType = itemRow.find('.material-type').val();
+            const grossVal     = parseFloat(itemRow.find('.gross-weight').val())  || 0;
+
+            sumNetWt         += parseFloat(itemRow.find('.purity-weight').val())  || 0;
+            sum995           += parseFloat(itemRow.find('.col-995').val())         || 0;
+            sumMakingTaxable += parseFloat(itemRow.find('.taxable-amount').val())  || 0;
+            sumMaterial      += parseFloat(itemRow.find('.material-value').val())  || 0;
+            sumVAT           += parseFloat(itemRow.find('.vat-amount').val())      || 0;
+
+            if (materialType === 'gold') sumGoldGross += grossVal;
+
+            itemRow.next('.parts-row').find('.part-item-row').each(function() {
+                const diaQty    = parseFloat($(this).find('.part-qty').val())        || 0;
+                const diaRate   = parseFloat($(this).find('.part-rate').val())       || 0;
+                const stoneQty  = parseFloat($(this).find('.part-stone-qty').val())  || 0;
+                const stoneRate = parseFloat($(this).find('.part-stone-rate').val()) || 0;
+
+                totalDiamondCTS += diaQty;
+                totalStoneQty   += stoneQty;
+                totalDiamondVal += diaQty   * diaRate;
+                totalStoneVal   += stoneQty * stoneRate;
+            });
         });
 
         const makingTotalWithVat = sumMakingTaxable + sumVAT;
+        // Net Amount = Material Val + Diamond Parts Val + Stone Parts Val + Making (incl VAT)
+        const netTotal = sumMaterial + totalDiamondVal + totalStoneVal + makingTotalWithVat;
 
-        $('#sum_gross_weight').val(sumGross.toFixed(3));
-        $('#sum_purity_weight').val(sumPurity.toFixed(3));
+        $('#sum_gold_gross_weight').val(sumGoldGross.toFixed(3));
+        $('#sum_diamond_cts').val(totalDiamondCTS.toFixed(3));
+        $('#sum_stone_qty').val(totalStoneQty.toFixed(2));
+        $('#sum_purity_weight').val(sumNetWt.toFixed(3));
         $('#sum_995').val(sum995.toFixed(3));
         $('#sum_making_value').val(makingTotalWithVat.toFixed(2));
         $('#sum_material_value').val(sumMaterial.toFixed(2));
+        $('#sum_diamond_value').val(totalDiamondVal.toFixed(2));
+        $('#sum_stone_value').val(totalStoneVal.toFixed(2));
         $('#sum_vat_amount').val(sumVAT.toFixed(2));
         $('#net_amount_display').val(netTotal.toFixed(2));
         $('#net_amount').val(netTotal.toFixed(2));
@@ -760,32 +805,34 @@
 
         if ($('#payment_method').val() === 'material+making cost') {
             $('input[name="material_weight"]').val(sum995.toFixed(3));
-            $('input[name="material_purity"]').val(sumPurity.toFixed(3));
+            $('input[name="material_purity"]').val(sumNetWt.toFixed(3));
             $('input[name="material_value"]').val(sumMaterial.toFixed(2));
             $('input[name="making_charges"]').val(makingTotalWithVat.toFixed(2));
         }
     }
 
-    // ===== OUNCE → GRAM CONVERSION =====
-    $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #diamond_rate_aed_ounce, #exchange_rate', function() {
+    // ================= RATE CONVERSION =================
+    $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #diamond_rate_aed, #exchange_rate', function() {
         const id     = $(this).attr('id');
         const exRate = parseFloat($('#exchange_rate').val()) || 3.6725;
 
         if (id === 'gold_rate_usd' || id === 'exchange_rate') {
-            $('#gold_rate_aed_ounce').val(((parseFloat($('#gold_rate_usd').val()) || 0) * exRate).toFixed(2));
+            const goldUsd = parseFloat($('#gold_rate_usd').val()) || 0;
+            $('#gold_rate_aed_ounce').val((goldUsd * exRate).toFixed(2));
         }
         $('#gold_rate_aed').val(((parseFloat($('#gold_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
 
+        // Diamond: AED/Ct — USD converts via exchange rate only, no gram division
         if (id === 'diamond_rate_usd' || id === 'exchange_rate') {
-            $('#diamond_rate_aed_ounce').val(((parseFloat($('#diamond_rate_usd').val()) || 0) * exRate).toFixed(2));
+            const diaUsd = parseFloat($('#diamond_rate_usd').val()) || 0;
+            $('#diamond_rate_aed').val((diaUsd * exRate).toFixed(4));
         }
-        $('#diamond_rate_aed_gram').val(((parseFloat($('#diamond_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
 
         $('#PurchaseTable tr.item-row').each(function() { calculateRow($(this)); });
         calculateTotals();
     });
 
-    // ===== PAYMENT METHOD TOGGLE =====
+    // ================= PAYMENT METHOD TOGGLE =================
     $('#payment_method').on('change', function() {
         const val = $(this).val();
         $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields').addClass('d-none');
@@ -796,23 +843,21 @@
         calculateTotals();
     });
 
-    // ===== PARTS CALCULATION =====
+    // ================= PARTS CALCULATION =================
     $(document).on('input', '.part-qty, .part-rate, .part-stone-qty, .part-stone-rate', function() {
         const row       = $(this).closest('tr');
         const qty       = parseFloat(row.find('.part-qty').val())        || 0;
-        const rate      = parseFloat(row.find('.part-rate').val())        || 0;
+        const rate      = parseFloat(row.find('.part-rate').val())       || 0;
         const stoneQty  = parseFloat(row.find('.part-stone-qty').val())  || 0;
         const stoneRate = parseFloat(row.find('.part-stone-rate').val()) || 0;
 
-        // Part total: (carat qty * rate) + (stone qty * stone rate)
         row.find('.part-total').val(((qty * rate) + (stoneQty * stoneRate)).toFixed(2));
 
-        // Update parent item gross: base gross + sum(all part carats / 5)
         const itemRow = row.closest('.parts-row').prev('.item-row');
         recalcItemGrossWeight(itemRow);
     });
 
-    // ===== EXCEL IMPORT =====
+    // ================= EXCEL IMPORT =================
     $('#excel_import').on('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -834,16 +879,14 @@
                 if (row['Item Name'] && row['Item Name'].trim() !== '') {
                     addNewRow();
                     currentItemRow = $('#PurchaseTable tr.item-row').last();
-
-                    const baseGross = parseFloat(row['Gross Wt']) || 0;
-                    currentItemRow.find('.gross-weight').data('base-gross', baseGross).val(baseGross);
                     currentItemRow.find('.item-name-input').val(row['Item Name']);
                     currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
                     currentItemRow.find('.purity').val(row['Purity'] || '0.92');
+                    currentItemRow.find('.net-weight').val(parseFloat(row['Gross Wt']) || 0);
                     currentItemRow.find('.making-rate').val(row['Making Rate'] || 0);
                     currentItemRow.find('.material-type').val((row['Material'] || 'gold').toLowerCase());
                     currentItemRow.find('.vat-percent').val(row['VAT %'] || 0);
-                    calculateRow(currentItemRow);
+                    recalcItemGrossWeight(currentItemRow);
                 }
                 if (row['Part Name'] && row['Part Name'].trim() !== '' && currentItemRow) {
                     const partsRow = currentItemRow.next('.parts-row');
@@ -856,7 +899,6 @@
                     currentPartRow.find('.part-rate').val(row['Part Rate'] || 0);
                     currentPartRow.find('.part-stone-qty').val(row['Stone Qty'] || 0);
                     currentPartRow.find('.part-stone-rate').val(row['Stone Rate'] || 0);
-                    // Triggers part total calc AND gross weight recalc
                     currentPartRow.find('.part-qty').trigger('input');
                 }
             });
@@ -867,23 +909,23 @@
         };
         reader.readAsArrayBuffer(file);
     });
-  });
 
-  function resubmitWithConfirm() {
-    // Add hidden field to the main form and resubmit
-    const form = document.querySelector('form[action*="update"]');
+});
+
+function resubmitWithConfirm() {
+    const form  = document.getElementById('main-form');
     const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'confirm_delete_printed';
+    input.type  = 'hidden';
+    input.name  = 'confirm_delete_printed';
     input.value = '1';
     form.appendChild(input);
     form.submit();
-  }
+}
 
-  document.getElementById('main-form').addEventListener('submit', function() {
-      const btn = this.querySelector('button[type="submit"]');
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
-  });
+document.getElementById('main-form').addEventListener('submit', function() {
+    const btn = this.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+});
 </script>
 @endsection

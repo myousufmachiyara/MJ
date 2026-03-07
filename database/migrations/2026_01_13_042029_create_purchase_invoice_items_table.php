@@ -21,6 +21,7 @@ return new class extends Migration
             $table->unsignedBigInteger('product_id')->nullable();
             $table->unsignedBigInteger('variation_id')->nullable();
             $table->string('item_description')->nullable(); // for custom descriptions
+            $table->decimal('net_weight', 15, 3)->default(0);
 
             /* ================= ITEM DETAILS ================= */
             $table->decimal('gross_weight', 15, 3)->default(0);
@@ -30,7 +31,7 @@ return new class extends Migration
             $table->decimal('making_rate', 15, 2)->default(0);
             $table->decimal('making_value', 18, 2)->default(0);
             $table->decimal('parts_total', 15, 2)->default(0);
-            $table->decimal('material_rate', 18, 2)->default(0); // material cost based on metal_rate
+            $table->decimal('material_rate', 18, 4)->default(0); // material cost based on metal_rate
             $table->string('material_type'); // for custom descriptions
             $table->decimal('material_value', 18, 2)->default(0); // total value of metals
             $table->decimal('taxable_amount', 18, 2)->default(0);
