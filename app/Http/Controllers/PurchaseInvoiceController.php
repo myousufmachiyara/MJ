@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
-use App\Services\MyPDF;
+use App\Services\myPDF;
 use Carbon\Carbon;
 
 class PurchaseInvoiceController extends Controller
@@ -380,7 +380,7 @@ class PurchaseInvoiceController extends Controller
             return $item->parts->sum('total');
         });
 
-        $pdf = new MyPDF();
+        $pdf = new myPDF();
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
         $pdf->SetCreator('Your App');
