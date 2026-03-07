@@ -78,13 +78,13 @@
             </div>
 
             <div class="col-md-4 mt-2">
-              <label>Remarks</label>
-              <textarea name="remarks" class="form-control"></textarea>
+              <label>Attachments</label>
+              <input type="file" name="attachments[]" class="form-control" multiple accept=".pdf,.jpg,.jpeg,.png,.zip">
             </div>
 
             <div class="col-md-4 mt-2">
-              <label>Attachments</label>
-              <input type="file" name="attachments[]" class="form-control" multiple accept=".pdf,.jpg,.jpeg,.png,.zip">
+              <label>Remarks</label>
+              <textarea name="remarks" class="form-control"></textarea>
             </div>
           </div>
 
