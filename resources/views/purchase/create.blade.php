@@ -61,7 +61,7 @@
               <input type="number" step="any" id="gold_rate_aed_ounce" name="gold_rate_aed_ounce" class="form-control" value="0">
             </div>
 
-            <div class="col-12 col-md-3">
+            <div class="col-12 col-md-3 mt-2">
               <label class="text-primary">Gold Converted Rate (AED / <b>Gram</b>)</label>
               <input type="number" step="any" id="gold_rate_aed" name="gold_rate_aed" class="form-control" value="0" readonly>
               <small class="text-danger text-bold">Used for calculations</small>
