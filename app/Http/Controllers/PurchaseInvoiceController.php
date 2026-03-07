@@ -472,21 +472,21 @@ class PurchaseInvoiceController extends Controller
 
             $html .= '
                 <tr style="text-align:center;background-color:#ffffff;">
-                    <td>' . ($index + 1) . '</td>
-                    <td>' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
-                    <td>' . ($item->item_description ?? '-') . '</td>
-                    <td>' . number_format($item->net_weight, 3) . '</td>
-                    <td>' . number_format($item->gross_weight, 3) . '</td>
-                    <td>' . number_format($item->purity, 3) . '</td>
-                    <td>' . number_format($item->purity_weight, 3) . '</td>
-                    <td>' . number_format($item->col_995 ?? 0, 3) . '</td>
-                    <td>' . number_format($item->making_rate ?? 0, 2) . '</td>
-                    <td>' . number_format($item->making_value, 2) . '</td>
-                    <td>' . ucfirst($item->material_type) . '</td>
-                    <td>' . number_format($item->material_value, 2) . '</td>
-                    <td>' . number_format($item->taxable_amount, 2) . '</td>
-                    <td>' . number_format($item->vat_percent, 0) . '%</td>
-                    <td style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
+                    <td width="3%">' . ($index + 1) . '</td>
+                    <td width="10%">' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
+                    <td width="10%">' . ($item->item_description ?? '-') . '</td>
+                    <td width="6%">' . number_format($item->net_weight, 3) . '</td>
+                    <td width="7%">' . number_format($item->gross_weight, 3) . '</td>
+                    <td width="6%">' . number_format($item->purity, 3) . '</td>
+                    <td width="6%">' . number_format($item->purity_weight, 3) . '</td>
+                    <td width="6%">' . number_format($item->col_995 ?? 0, 3) . '</td>
+                    <td width="6%">'. number_format($item->making_rate ?? 0, 2) . '</td>
+                    <td width="7%">' . number_format($item->making_value, 2) . '</td>
+                    <td width="7%">' . ucfirst($item->material_type) . '</td>
+                    <td width="8%">' . number_format($item->material_value, 2) . '</td>
+                    <td width="6%">' . number_format($item->taxable_amount, 2) . '</td>
+                    <td width="5%">' . number_format($item->vat_percent, 0) . '%</td>
+                    <td width="7%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
                 </tr>';
 
             if ($hasParts) {
