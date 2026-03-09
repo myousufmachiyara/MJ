@@ -623,7 +623,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->writeHTML($termsHtml, true, false, false, false);
 
         // Signatures
-        $pdf->Ln(40);
+        $pdf->Ln(30);
         $y = $pdf->GetY();
         $pdf->Line(20, $y, 80, $y);
         $pdf->Line(130, $y, 190, $y);
@@ -928,6 +928,7 @@ class PurchaseInvoiceController extends Controller
      *       BUT accounting only journals material + making + vat (parts are pass-through).
      *       The journal debit total = material + making + vat.
      */
+
     protected function createPurchaseAccountingEntries(PurchaseInvoice $invoice, array $totals): Voucher
     {
         $acct = function (string $code) use ($invoice): int {
@@ -956,6 +957,7 @@ class PurchaseInvoiceController extends Controller
         $entries = [];
 
         // ── DEBIT entries ─────────────────────────────────────────────────────
+
         if ($totals['gold_material'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
@@ -973,6 +975,18 @@ class PurchaseInvoiceController extends Controller
                 'debit'      => round($totals['diamond_material'], 2),
                 'credit'     => 0,
                 'narration'  => 'Diamond material purchase — Inv# ' . $invoice->invoice_no,
+            ];
+        }
+
+        // ── Diamond & stone parts purchase (510004) ───────────────────────────
+        $partsTotal = round($totals['diamond_val'] + $totals['stone_val'], 2);
+        if ($partsTotal > 0) {
+            $entries[] = [
+                'voucher_id' => $voucher->id,
+                'account_id' => $acct('510004'),
+                'debit'      => $partsTotal,
+                'credit'     => 0,
+                'narration'  => 'Diamond/stone parts purchase — Inv# ' . $invoice->invoice_no,
             ];
         }
 
@@ -1086,9 +1100,10 @@ class PurchaseInvoiceController extends Controller
             'voucher_no'       => $voucher->voucher_no,
             'gold_material'    => $totals['gold_material'],
             'diamond_material' => $totals['diamond_material'],
+            'diamond_val'      => $totals['diamond_val'],
+            'stone_val'        => $totals['stone_val'],
+            'parts_total'      => $partsTotal,
             'making'           => $totals['making'],
-            'diamond_val'      => $totals['diamond_val'],   // parts only, not journalized
-            'stone_val'        => $totals['stone_val'],     // parts only, not journalized
             'vat_input'        => $totals['vat'],
             'total_debit'      => $sumDebits,
             'total_credit'     => $sumCredits,
