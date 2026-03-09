@@ -623,7 +623,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->writeHTML($termsHtml, true, false, false, false);
 
         // Signatures
-        $pdf->Ln(25);
+        $pdf->Ln(28);
         $y = $pdf->GetY();
         $pdf->Line(20, $y, 80, $y);
         $pdf->Line(130, $y, 190, $y);
