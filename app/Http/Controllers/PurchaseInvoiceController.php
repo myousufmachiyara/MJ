@@ -628,9 +628,9 @@ class PurchaseInvoiceController extends Controller
         $pdf->Line(20, $y, 80, $y);
         $pdf->Line(130, $y, 190, $y);
         $pdf->SetXY(20, $y);
-        $pdf->Cell(60, 5, "Receiver's Signature", 0, 0, 'C');
+        $pdf->Cell(50, 5, "Receiver's Signature", 0, 0, 'C');
         $pdf->SetXY(130, $y);
-        $pdf->Cell(60, 5, "Authorized Signature", 0, 0, 'C');
+        $pdf->Cell(50, 5, "Authorized Signature", 0, 0, 'C');
 
         // ── Material fixing pages (if payment method = material+making cost) ──
         if (str_contains(strtolower($invoice->payment_method), 'material')) {
