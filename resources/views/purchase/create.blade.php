@@ -782,10 +782,13 @@
             }
         });
 
+        // AFTER — sum item_total directly from each row, same as server-side Σ item_total
+        let sumItemTotal = 0;
+        $('#PurchaseTable tr.item-row').each(function () {
+            sumItemTotal += parseFloat($(this).find('.item-total').val()) || 0;
+        });
         const makingTotalWithVat = sumMakingTaxable + sumVAT;
-
-        // Net Amount = Total Material (gold/diamond item value) + Diamond Parts Val + Stone Parts Val + Making (incl VAT)
-        const netTotal = sumMaterial + totalDiamondVal + totalStoneVal + makingTotalWithVat;
+        const netTotal = sumItemTotal;
 
         $('#sum_gold_gross_weight').val(sumGoldGross.toFixed(3));
         $('#sum_diamond_cts').val(totalDiamondCTS.toFixed(3));
