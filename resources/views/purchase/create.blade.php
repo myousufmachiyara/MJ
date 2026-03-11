@@ -727,17 +727,18 @@
             partsTotal += parseFloat($(this).find('.part-total').val()) || 0;
         });
 
-        const taxableAmount = makingValue + partsTotal;
+        // AFTER
+        const taxableAmount = makingValue;                          // MC only — no parts
         const vatAmount     = taxableAmount * vatPercent / 100;
-        const itemTotal     = materialValue + taxableAmount + vatAmount;
+        const itemTotal     = materialValue + makingValue + partsTotal + vatAmount;
 
+        row.find('.taxable-amount').val(taxableAmount.toFixed(2));  // shows making only
+        row.find('.vat-amount').val(vatAmount.toFixed(2));
+        row.find('.item-total').val(itemTotal.toFixed(2));
         row.find('.purity-weight').val(netWt.toFixed(3));
         row.find('.col-995').val(col995.toFixed(3));
         row.find('.making-value').val(makingValue.toFixed(2));
         row.find('.material-value').val(materialValue.toFixed(2));
-        row.find('.taxable-amount').val(taxableAmount.toFixed(2));
-        row.find('.vat-amount').val(vatAmount.toFixed(2));
-        row.find('.item-total').val(itemTotal.toFixed(2));
     }
 
     function calculateTotals() {
