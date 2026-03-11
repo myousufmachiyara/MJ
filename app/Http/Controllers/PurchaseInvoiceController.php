@@ -693,13 +693,7 @@ class PurchaseInvoiceController extends Controller
      *
      * @return array  [ $totals, $position ]
      */
-    private function createItems(
-        PurchaseInvoice $invoice,
-        array $items,
-        Request $request,
-        int $startPosition = 1,
-        bool $preservePrinted = false
-    ): array {
+    private function createItems(PurchaseInvoice $invoice,array $items,Request $request,int $startPosition = 1,bool $preservePrinted = false): array {
         $totals = [
             'gold_material'    => 0.0,
             'diamond_material' => 0.0,
@@ -712,34 +706,31 @@ class PurchaseInvoiceController extends Controller
 
         $position = $startPosition;
 
-        // Rates from blade:
-        //   gold  → gold_rate_aed (AED/gram, converted from ounce by JS)
-        //   diamond → diamond_rate_aed (AED/Ct, direct entry)
-        $goldRateAedGram    = (float) ($request->gold_rate_aed    ?? 0);
-        $diamondRateAedCt   = (float) ($request->diamond_rate_aed ?? 0);
+        $goldRateAedGram  = (float) ($request->gold_rate_aed    ?? 0);
+        $diamondRateAedCt = (float) ($request->diamond_rate_aed ?? 0);
 
         foreach ($items as $itemData) {
 
-            $netWeight   = (float) ($itemData['net_weight']   ?? 0);   // user-entered
-            $grossWeight = (float) ($itemData['gross_weight'] ?? 0);   // JS-calculated (net + CTS/5)
+            $netWeight   = (float) ($itemData['net_weight']   ?? 0);
+            $grossWeight = (float) ($itemData['gross_weight'] ?? 0);
             $purity      = (float) ($itemData['purity']       ?? 0);
             $makingRate  = (float) ($itemData['making_rate']  ?? 0);
             $vatPercent  = (float) ($itemData['vat_percent']  ?? 0);
             $matType     = $itemData['material_type'] ?? 'gold';
 
-            // ── Row calculations (mirrors calculateRow in blade) ──────────────
-            $purityWeight  = $netWeight * $purity;                      // net_weight × purity
+            // ── Row calculations ──────────────────────────────────────────────────
+            $purityWeight  = $netWeight * $purity;
             $col995        = $purityWeight > 0 ? $purityWeight / 0.995 : 0;
-            $makingValue   = $netWeight * $makingRate;                  // net_weight × making_rate
+            $makingValue   = $netWeight * $makingRate;
 
             $rate          = $matType === 'gold' ? $goldRateAedGram : $diamondRateAedCt;
-            $materialValue = $rate * $purityWeight;                     // rate × purity_weight
+            $materialValue = $rate * $purityWeight;
 
-            // ── Parts ─────────────────────────────────────────────────────────
-            $partsData       = $itemData['parts'] ?? [];
-            $partsTotal      = 0.0;
-            $itemDiamondVal  = 0.0;
-            $itemStoneVal    = 0.0;
+            // ── Parts ─────────────────────────────────────────────────────────────
+            $partsData      = $itemData['parts'] ?? [];
+            $partsTotal     = 0.0;
+            $itemDiamondVal = 0.0;
+            $itemStoneVal   = 0.0;
 
             foreach ($partsData as $partData) {
                 $qty       = (float) ($partData['qty']        ?? 0);
@@ -747,7 +738,7 @@ class PurchaseInvoiceController extends Controller
                 $stoneQty  = (float) ($partData['stone_qty']  ?? 0);
                 $stoneRate = (float) ($partData['stone_rate'] ?? 0);
 
-                $diaValue   = $qty     * $partRate;
+                $diaValue   = $qty      * $partRate;
                 $stoneValue = $stoneQty * $stoneRate;
                 $partTotal  = $diaValue + $stoneValue;
 
@@ -756,12 +747,12 @@ class PurchaseInvoiceController extends Controller
                 $itemStoneVal   += $stoneValue;
             }
 
-            // taxable = making + parts total  (matches blade)
-            $taxableAmount = $makingValue + $partsTotal;
+            // ── Taxable = making only (VAT is on MC, not parts) ───────────────────
+            $taxableAmount = $makingValue;
             $vatAmount     = $taxableAmount * ($vatPercent / 100);
-            $itemTotal     = $materialValue + $taxableAmount + $vatAmount;
+            $itemTotal     = $materialValue + $makingValue + $partsTotal + $vatAmount;
 
-            // ── Barcode / printed status ──────────────────────────────────────
+            // ── Barcode / printed status ──────────────────────────────────────────
             $existingBarcode   = $itemData['barcode_number'] ?? null;
             $wasAlreadyPrinted = false;
             if ($preservePrinted && $existingBarcode) {
@@ -773,9 +764,8 @@ class PurchaseInvoiceController extends Controller
                 'item_name'        => $itemData['item_name']        ?? null,
                 'product_id'       => $itemData['product_id']       ?? null,
                 'item_description' => $itemData['item_description'] ?? null,
-                // Both net_weight and gross_weight stored:
-                'net_weight'       => $netWeight,     // user-entered (blade: .net-weight)
-                'gross_weight'     => $grossWeight,   // JS-calculated (blade: .gross-weight)
+                'net_weight'       => $netWeight,
+                'gross_weight'     => $grossWeight,
                 'purity'           => $purity,
                 'purity_weight'    => round($purityWeight, 4),
                 'col_995'          => round($col995, 4),
@@ -785,15 +775,15 @@ class PurchaseInvoiceController extends Controller
                 'material_rate'    => $rate,
                 'material_value'   => round($materialValue, 2),
                 'parts_total'      => round($partsTotal, 2),
-                'taxable_amount'   => round($taxableAmount, 2),
+                'taxable_amount'   => round($taxableAmount, 2),  // making only
                 'vat_percent'      => $vatPercent,
                 'vat_amount'       => round($vatAmount, 2),
-                'item_total'       => round($itemTotal, 2),
+                'item_total'       => round($itemTotal, 2),      // material + making + parts + vat
                 'barcode_number'   => $existingBarcode ?? $this->generateBarcodeNumber($invoice, $position),
                 'is_printed'       => $wasAlreadyPrinted,
             ]);
 
-            // ── Create parts ──────────────────────────────────────────────────
+            // ── Create parts ──────────────────────────────────────────────────────
             foreach ($partsData as $partData) {
                 $qty       = (float) ($partData['qty']        ?? 0);
                 $partRate  = (float) ($partData['rate']       ?? 0);
@@ -813,7 +803,7 @@ class PurchaseInvoiceController extends Controller
                 ]);
             }
 
-            // ── Accumulate totals ─────────────────────────────────────────────
+            // ── Accumulate totals ─────────────────────────────────────────────────
             if ($matType === 'gold') {
                 $totals['gold_material'] += $materialValue;
             } else {

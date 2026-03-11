@@ -116,7 +116,7 @@
                     <th colspan="2" class="text-center">Making</th>
                     <th width="6%" rowspan="2">Material</th>
                     <th rowspan="2">Material Val</th>
-                    <th rowspan="2">Making Cost</th>
+                    <th rowspan="2">MC</th>
                     <th rowspan="2">VAT %</th>
                     <th rowspan="2">VAT Amt</th>
                     <th rowspan="2">Gross Total</th>
