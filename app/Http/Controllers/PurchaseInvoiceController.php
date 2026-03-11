@@ -571,12 +571,16 @@ class PurchaseInvoiceController extends Controller
                 <td width="45%" valign="top">
                     <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
                         <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary (' . $invoice->currency . ')</b></td></tr>
-                        <tr><td width="60%">Material Value</td>  <td width="40%" align="right">' . number_format($totalMaterialAed, 2) . '</td></tr>
-                        <tr><td>Diamond Parts Val.</td>          <td align="right">' . number_format($totalDiamondVal, 2) . '</td></tr>
-                        <tr><td>Stone Parts Val.</td>            <td align="right">' . number_format($totalStoneVal, 2) . '</td></tr>
-                        <tr><td>Making Charges</td>              <td align="right">' . number_format($totalMakingAed, 2) . '</td></tr>
-                        <tr><td>Taxable Amount</td>              <td align="right">' . number_format($totalTaxableAed, 2) . '</td></tr>
-                        <tr><td>Total VAT</td>                   <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>
+                        <tr><td width="60%">Material Value</td>    <td width="40%" align="right">' . number_format($totalMaterialAed, 2) . '</td></tr>
+                        <tr><td>Diamond Parts Val.</td>            <td align="right">' . number_format($totalDiamondVal, 2) . '</td></tr>
+                        <tr><td>Stone Parts Val.</td>              <td align="right">' . number_format($totalStoneVal, 2) . '</td></tr>
+                        <tr><td>Making Charges</td>                <td align="right">' . number_format($totalMakingAed, 2) . '</td></tr>
+                        <tr><td>Taxable Amount (Making + Parts)</td><td align="right">' . number_format($totalTaxableAed, 2) . '</td></tr>
+                        <tr><td>Total VAT</td>                     <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>
+                        <tr style="font-weight:bold;background-color:#ddeeee;">
+                            <td>Invoice Total (excl. Material)</td>
+                            <td align="right">' . number_format($totalTaxableAed + $totalVatAed, 2) . '</td>
+                        </tr>
                         <tr style="font-weight:bold;background-color:#eeeeee;">
                             <td>Invoice Total</td>
                             <td align="right">' . number_format($invoice->net_amount, 2) . '</td>
@@ -1226,8 +1230,9 @@ class PurchaseInvoiceController extends Controller
 
         $ex        = (float) ($invoice->exchange_rate ?? 1);
         $makingAED = $invoice->currency === 'USD' ? round($totalMaking * $ex, 2) : $totalMaking;
+        $partsAED  = $invoice->currency === 'USD' ? round($totalParts  * $ex, 2) : $totalParts;
         $vatAED    = $invoice->currency === 'USD' ? round($totalVat    * $ex, 2) : $totalVat;
-        $payable   = $makingAED + $vatAED;
+        $payable   = $makingAED + $partsAED + $vatAED;
 
         $pdf->writeHTML('
         <table width="100%" cellpadding="0"><tr>
@@ -1256,9 +1261,11 @@ class PurchaseInvoiceController extends Controller
             <tr style="text-align:center;">
                 <td>1</td>
                 <td align="left">
-                    <b>Labour, Making Charges</b><br>
-                    (Making: ' . number_format($makingAED, 2) . ' + VAT: ' . number_format($vatAED, 2) . ')<br>
-                    Against Purchase Invoice # ' . $invoice->invoice_no . '
+                    <b>Labour, Making Charges & Parts</b><br>
+                    Making: ' . number_format($makingAED, 2) . 
+                    ' | Parts: ' . number_format($partsAED, 2) . 
+                    ' | VAT: ' . number_format($vatAED, 2) . '<br>
+                    Against Purchase Invoice # ' . $invoice->invoice_no. '
                 </td>
                 <td>' . number_format($payable, 2) . '</td>
                 <td>' . number_format($payable, 2) . '</td>
