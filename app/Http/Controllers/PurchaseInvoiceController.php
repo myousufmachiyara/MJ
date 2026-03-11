@@ -365,9 +365,9 @@ class PurchaseInvoiceController extends Controller
 
         // Totals from stored values
         $totalMaterialAed = $invoice->items->sum('material_value');
-        $totalMakingAed   = $invoice->items->sum('making_value');
-        $totalVatAed      = $invoice->items->sum('vat_amount');
-        $totalTaxableAed  = $invoice->items->sum('taxable_amount');
+        $totalMakingAed   = $invoice->items->sum('making_value');   // MC only (no parts)
+        $totalVatAed      = $invoice->items->sum('vat_amount');     // VAT on MC only
+        $totalTaxableAed  = $invoice->items->sum('taxable_amount'); // = making only (MC)
 
         // Diamond + stone part values (summing from parts directly)
         $totalDiamondVal = $invoice->items->sum(function ($item) {
@@ -379,6 +379,9 @@ class PurchaseInvoiceController extends Controller
         $totalPartsAed = $invoice->items->sum(function ($item) {
             return $item->parts->sum('total');
         });
+
+        // Currency payable = MC + Parts + VAT (what vendor gets paid in cash)
+        $totalCurrencyPayable = $totalMakingAed + $totalPartsAed + $totalVatAed;
 
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
@@ -411,7 +414,6 @@ class PurchaseInvoiceController extends Controller
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', '', 9);
 
-        // Display rate based on currency
         $goldRateDisplay    = $invoice->currency === 'USD' ? $invoice->gold_rate_usd    : $invoice->gold_rate_aed_ounce;
         $diamondRateDisplay = $invoice->currency === 'USD' ? $invoice->diamond_rate_usd : $invoice->diamond_rate_aed;
 
@@ -438,7 +440,7 @@ class PurchaseInvoiceController extends Controller
         </table>';
         $pdf->writeHTML($vendorHtml, true, false, false, false);
 
-        // Items table
+        // ── Items table ───────────────────────────────────────────────────────
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
@@ -466,8 +468,8 @@ class PurchaseInvoiceController extends Controller
             <tbody>';
 
         foreach ($invoice->items as $index => $item) {
-            $hasParts = $item->parts && $item->parts->count() > 0;
-            $productTotal = $item->item_total;  // parts already baked in
+            $hasParts     = $item->parts && $item->parts->count() > 0;
+            $productTotal = $item->item_total; // material + making + parts + vat
 
             $html .= '
                 <tr style="text-align:center;background-color:#ffffff;">
@@ -479,7 +481,7 @@ class PurchaseInvoiceController extends Controller
                     <td width="6%">' . number_format($item->purity, 3) . '</td>
                     <td width="6%">' . number_format($item->purity_weight, 3) . '</td>
                     <td width="6%">' . number_format($item->col_995 ?? 0, 3) . '</td>
-                    <td width="6%">'. number_format($item->making_rate ?? 0, 2) . '</td>
+                    <td width="6%">' . number_format($item->making_rate ?? 0, 2) . '</td>
                     <td width="7%">' . number_format($item->making_value, 2) . '</td>
                     <td width="7%">' . ucfirst($item->material_type) . '</td>
                     <td width="8%">' . number_format($item->material_value, 2) . '</td>
@@ -491,7 +493,7 @@ class PurchaseInvoiceController extends Controller
             if ($hasParts) {
                 $html .= '<tr style="background-color:#f9f9f9;font-style:italic;font-size:7px;">
                             <td></td><td colspan="14"><b>Parts Detail:</b></td>
-                          </tr>';
+                        </tr>';
 
                 foreach ($item->parts as $part) {
                     $displayPartName = $part->item_name ?: ($part->product->name ?? 'Part');
@@ -508,9 +510,10 @@ class PurchaseInvoiceController extends Controller
                     </tr>';
                 }
 
+                // Grand total row = item_total (material + making + parts + vat)
                 $html .= '
                     <tr style="background-color:#eeeeee;font-weight:bold;font-size:8px;">
-                        <td colspan="13" align="right">Product Grand Total (Item + Parts):</td>
+                        <td colspan="13" align="right">Product Grand Total (Material + MC + Parts + VAT):</td>
                         <td colspan="2" align="right">' . number_format($productTotal, 2) . '</td>
                     </tr>';
             }
@@ -527,7 +530,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->writeHTML($html, true, false, false, false);
 
         // ── SUMMARY ────────────────────────────────────────────────────────────
-        $aedAmount  = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
+        $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
 
         $summaryHtml = '
         <table width="100%" cellpadding="0" border="0" style="margin-top:10px;">
@@ -542,8 +545,8 @@ class PurchaseInvoiceController extends Controller
         }
         if ($invoice->payment_method === 'cheque') {
             $summaryHtml .= '
-            <tr><td>Bank Name</td><td>'  . ($invoice->bank->name ?? '-') . '</td></tr>
-            <tr><td>Cheque No</td><td>'  . ($invoice->cheque_no ?? '-') . '</td></tr>
+            <tr><td>Bank Name</td><td>'   . ($invoice->bank->name ?? '-') . '</td></tr>
+            <tr><td>Cheque No</td><td>'   . ($invoice->cheque_no ?? '-') . '</td></tr>
             <tr><td>Cheque Date</td><td>' . ($invoice->cheque_date ? Carbon::parse($invoice->cheque_date)->format('d.m.Y') : '-') . '</td></tr>';
         }
         if ($invoice->payment_method === 'bank_transfer') {
@@ -571,15 +574,14 @@ class PurchaseInvoiceController extends Controller
                 <td width="45%" valign="top">
                     <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
                         <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary (' . $invoice->currency . ')</b></td></tr>
-                        <tr><td width="60%">Material Value</td>    <td width="40%" align="right">' . number_format($totalMaterialAed, 2) . '</td></tr>
-                        <tr><td>Diamond Parts Val.</td>            <td align="right">' . number_format($totalDiamondVal, 2) . '</td></tr>
-                        <tr><td>Stone Parts Val.</td>              <td align="right">' . number_format($totalStoneVal, 2) . '</td></tr>
-                        <tr><td>Making Charges</td>                <td align="right">' . number_format($totalMakingAed, 2) . '</td></tr>
-                        <tr><td>Taxable Amount (Making + Parts)</td><td align="right">' . number_format($totalTaxableAed, 2) . '</td></tr>
-                        <tr><td>Total VAT</td>                     <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>
+                        <tr><td width="60%">Material Value</td>              <td width="40%" align="right">' . number_format($totalMaterialAed, 2) . '</td></tr>
+                        <tr><td>Diamond Parts Val.</td>                      <td align="right">' . number_format($totalDiamondVal, 2) . '</td></tr>
+                        <tr><td>Stone Parts Val.</td>                        <td align="right">' . number_format($totalStoneVal, 2) . '</td></tr>
+                        <tr><td>Making Charges (MC)</td>                     <td align="right">' . number_format($totalMakingAed, 2) . '</td></tr>
+                        <tr><td>Total VAT (on MC)</td>                       <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>
                         <tr style="font-weight:bold;background-color:#ddeeee;">
-                            <td>Invoice Total (excl. Material)</td>
-                            <td align="right">' . number_format($totalTaxableAed + $totalVatAed, 2) . '</td>
+                            <td>Currency Payable (MC + Parts + VAT)</td>
+                            <td align="right">' . number_format($totalCurrencyPayable, 2) . '</td>
                         </tr>
                         <tr style="font-weight:bold;background-color:#eeeeee;">
                             <td>Invoice Total</td>
@@ -599,8 +601,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->Ln(2);
         $pdf->writeHTML($summaryHtml, true, false, false, false);
 
-        // ── Check remaining space before Terms & Conditions + Signatures ──────────
-        // Terms block ≈ 20mm, Signatures ≈ 35mm, total needed ≈ 55mm
+        // ── Check remaining space before Terms & Conditions + Signatures ─────
         $remainingSpace = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
         if ($remainingSpace < 70) {
             $pdf->AddPage();
@@ -642,7 +643,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->SetXY(130, $y);
         $pdf->Cell(50, 5, "Authorized Signature", 0, 0, 'C');
 
-        // ── Material fixing pages (if payment method = material+making cost) ──
+        // ── Material fixing pages ─────────────────────────────────────────────
         if (str_contains(strtolower($invoice->payment_method), 'material')) {
             $pdf->AddPage();
             $this->renderMetalFixingPage($pdf, $invoice, $totalMaterialAed, 'PARTY COPY');
@@ -650,7 +651,7 @@ class PurchaseInvoiceController extends Controller
             $this->renderMetalFixingPage($pdf, $invoice, $totalMaterialAed, 'ACCOUNTS COPY');
         }
 
-        // ── Currency payment pages (Making + VAT) ────────────────────────────
+        // ── Currency payment pages (MC + Parts + VAT) ─────────────────────────
         $pdf->AddPage();
         $this->renderCurrencyPaymentPage($pdf, $invoice, $totalMakingAed, $totalPartsAed, $totalVatAed, 'PARTY COPY');
         $pdf->AddPage();
