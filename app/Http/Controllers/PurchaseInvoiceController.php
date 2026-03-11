@@ -599,6 +599,13 @@ class PurchaseInvoiceController extends Controller
         $pdf->Ln(2);
         $pdf->writeHTML($summaryHtml, true, false, false, false);
 
+        // ── Check remaining space before Terms & Conditions + Signatures ──────────
+        // Terms block ≈ 20mm, Signatures ≈ 35mm, total needed ≈ 55mm
+        $remainingSpace = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
+        if ($remainingSpace < 55) {
+            $pdf->AddPage();
+        }
+
         // Amount in words
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', 'B', 9);
@@ -609,13 +616,6 @@ class PurchaseInvoiceController extends Controller
             $pdf->Cell(0, 5, 'Amount in Words (AED): ' . $wordsAED, 0, 1, 'L');
         } else {
             $pdf->Cell(0, 5, 'Amount in Words (AED): ' . $wordsAED, 0, 1, 'L');
-        }
-
-        // ── Check remaining space before Terms & Conditions + Signatures ──────────
-        // Terms block ≈ 20mm, Signatures ≈ 35mm, total needed ≈ 55mm
-        $remainingSpace = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
-        if ($remainingSpace < 55) {
-            $pdf->AddPage();
         }
 
         // Terms & Conditions
