@@ -611,6 +611,13 @@ class PurchaseInvoiceController extends Controller
             $pdf->Cell(0, 5, 'Amount in Words (AED): ' . $wordsAED, 0, 1, 'L');
         }
 
+        // ── Check remaining space before Terms & Conditions + Signatures ──────────
+        // Terms block ≈ 20mm, Signatures ≈ 35mm, total needed ≈ 55mm
+        $remainingSpace = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
+        if ($remainingSpace < 55) {
+            $pdf->AddPage();
+        }
+
         // Terms & Conditions
         $pdf->Ln(2);
         $pdf->Line(10, $pdf->GetY(), 200, $pdf->GetY());
