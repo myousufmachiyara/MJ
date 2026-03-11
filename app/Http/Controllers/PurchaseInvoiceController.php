@@ -602,7 +602,7 @@ class PurchaseInvoiceController extends Controller
         // ── Check remaining space before Terms & Conditions + Signatures ──────────
         // Terms block ≈ 20mm, Signatures ≈ 35mm, total needed ≈ 55mm
         $remainingSpace = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
-        if ($remainingSpace < 55) {
+        if ($remainingSpace < 70) {
             $pdf->AddPage();
         }
 
