@@ -137,8 +137,8 @@ class PurchaseInvoiceController extends Controller
             // ── Net amount ─────────────────────────────────────────────────────
             // Formula (matches blade calculateTotals):
             //   Net = totalMaterial + totalDiamondVal + totalStoneVal + totalMaking + totalVAT
-            $calculatedNet    = $totals['material'] + $totals['diamond_val'] + $totals['stone_val']
-                              + $totals['making'] + $totals['vat'];
+            $calculatedNet = $invoice->items()->sum('item_total');
+
             $calculatedNetAed = $request->currency === 'USD'
                 ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
                 : $calculatedNet;
@@ -302,8 +302,8 @@ class PurchaseInvoiceController extends Controller
             [$totals] = $this->createItems($invoice, $request->items, $request, 1, preservePrinted: true);
 
             // ── Recalculate net amount ─────────────────────────────────────────
-            $calculatedNet    = $totals['material'] + $totals['diamond_val'] + $totals['stone_val']
-                              + $totals['making'] + $totals['vat'];
+            $calculatedNet = $invoice->items()->sum('item_total');
+
             $calculatedNetAed = $request->currency === 'USD'
                 ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
                 : $calculatedNet;
@@ -467,8 +467,7 @@ class PurchaseInvoiceController extends Controller
 
         foreach ($invoice->items as $index => $item) {
             $hasParts = $item->parts && $item->parts->count() > 0;
-            $partsSum = $hasParts ? $item->parts->sum('total') : 0;
-            $productTotal = $item->item_total + $partsSum;
+            $productTotal = $item->item_total;  // parts already baked in
 
             $html .= '
                 <tr style="text-align:center;background-color:#ffffff;">
