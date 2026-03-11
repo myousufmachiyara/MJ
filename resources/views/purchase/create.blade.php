@@ -219,7 +219,7 @@
               <input type="text" id="sum_995" class="form-control" readonly>
             </div>
             <div class="col-md-2">
-              <label>Total Making (Incl. VAT)</label>
+              <label>Total Making (excl. VAT)</label>
               <input type="text" id="sum_making_value" class="form-control" readonly>
             </div>
             <div class="col-md-2 mt-3">
@@ -742,16 +742,17 @@
     }
 
     function calculateTotals() {
-        let sumNetWt         = 0;
-        let sum995           = 0;
-        let sumMakingTaxable = 0;
-        let sumMaterial      = 0;
-        let sumVAT           = 0;
-        let totalStoneQty    = 0;
-        let sumGoldGross     = 0;
-        let totalDiamondCTS  = 0;
-        let totalDiamondVal  = 0;  // sum of (diamond qty * rate) across all parts
-        let totalStoneVal    = 0;  // sum of (stone qty * stone rate) across all parts
+        let sumNetWt        = 0;
+        let sum995          = 0;
+        let sumMakingValue  = 0;  // making only (no parts)
+        let sumMaterial     = 0;
+        let sumVAT          = 0;
+        let totalStoneQty   = 0;
+        let sumGoldGross    = 0;
+        let totalDiamondCTS = 0;
+        let totalDiamondVal = 0;
+        let totalStoneVal   = 0;
+        let sumItemTotal    = 0;  // Σ item_total = net amount
 
         $('#PurchaseTable tr.item-row').each(function () {
             const itemRow      = $(this);
@@ -759,11 +760,12 @@
             const grossVal     = parseFloat(itemRow.find('.gross-weight').val())  || 0;
             const netWtVal     = parseFloat(itemRow.find('.purity-weight').val()) || 0;
 
-            sumNetWt         += netWtVal;
-            sum995           += parseFloat(itemRow.find('.col-995').val())        || 0;
-            sumMakingTaxable += parseFloat(itemRow.find('.taxable-amount').val()) || 0;
-            sumMaterial      += parseFloat(itemRow.find('.material-value').val()) || 0;
-            sumVAT           += parseFloat(itemRow.find('.vat-amount').val())     || 0;
+            sumNetWt       += netWtVal;
+            sum995         += parseFloat(itemRow.find('.col-995').val())        || 0;
+            sumMakingValue += parseFloat(itemRow.find('.making-value').val())   || 0;  // making only
+            sumMaterial    += parseFloat(itemRow.find('.material-value').val()) || 0;
+            sumVAT         += parseFloat(itemRow.find('.vat-amount').val())     || 0;
+            sumItemTotal   += parseFloat(itemRow.find('.item-total').val())     || 0;
 
             // Sum diamond CTS/value and stone qty/value from all parts
             itemRow.next('.parts-row').find('.part-item-row').each(function () {
@@ -783,20 +785,14 @@
             }
         });
 
-        // AFTER — sum item_total directly from each row, same as server-side Σ item_total
-        let sumItemTotal = 0;
-        $('#PurchaseTable tr.item-row').each(function () {
-            sumItemTotal += parseFloat($(this).find('.item-total').val()) || 0;
-        });
-        const makingTotalWithVat = sumMakingTaxable + sumVAT;
-        const netTotal = sumItemTotal;
+        const netTotal = sumItemTotal;  // material + making + parts + vat
 
         $('#sum_gold_gross_weight').val(sumGoldGross.toFixed(3));
         $('#sum_diamond_cts').val(totalDiamondCTS.toFixed(3));
         $('#sum_stone_qty').val(totalStoneQty.toFixed(2));
         $('#sum_purity_weight').val(sumNetWt.toFixed(3));
         $('#sum_995').val(sum995.toFixed(3));
-        $('#sum_making_value').val(makingTotalWithVat.toFixed(2));
+        $('#sum_making_value').val(sumMakingValue.toFixed(2));
         $('#sum_material_value').val(sumMaterial.toFixed(2));
         $('#sum_vat_amount').val(sumVAT.toFixed(2));
         $('#sum_diamond_value').val(totalDiamondVal.toFixed(2));
@@ -814,7 +810,7 @@
             $('input[name="material_weight"]').val(sum995.toFixed(3));
             $('input[name="material_purity"]').val(sumNetWt.toFixed(3));
             $('input[name="material_value"]').val(sumMaterial.toFixed(2));
-            $('input[name="making_charges"]').val(makingTotalWithVat.toFixed(2));
+            $('input[name="making_charges"]').val(sumMakingValue.toFixed(2));  // making only
         }
     }
 
