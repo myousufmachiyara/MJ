@@ -198,7 +198,7 @@
               <input type="text" id="sum_995" class="form-control" readonly>
             </div>
             <div class="col-md-2">
-              <label>Total Making (Incl. VAT)</label>
+              <label>Total Making</label>
               <input type="text" id="sum_making_value" class="form-control" readonly>
             </div>
             <div class="col-md-2 mt-3">
@@ -731,41 +731,44 @@ $(document).ready(function () {
             partsTotal += parseFloat($(this).find('.part-total').val()) || 0;
         });
 
-        const taxableAmount = makingValue + partsTotal;
+        // taxable = making only (MC only — VAT on making, not parts)
+        const taxableAmount = makingValue;
         const vatAmount     = taxableAmount * vatPercent / 100;
-        const itemTotal     = materialValue + taxableAmount + vatAmount;
+        const itemTotal     = materialValue + makingValue + partsTotal + vatAmount;
 
         row.find('.purity-weight').val(purityWeight.toFixed(3));
         row.find('.col-995').val(col995.toFixed(3));
         row.find('.making-value').val(makingValue.toFixed(2));
         row.find('.material-value').val(materialValue.toFixed(2));
-        row.find('.taxable-amount').val(taxableAmount.toFixed(2));
+        row.find('.taxable-amount').val(taxableAmount.toFixed(2));  // making only
         row.find('.vat-amount').val(vatAmount.toFixed(2));
         row.find('.item-total').val(itemTotal.toFixed(2));
     }
 
     function calculateTotals() {
-        let sumNetWt         = 0;
-        let sum995           = 0;
-        let sumMakingTaxable = 0;
-        let sumMaterial      = 0;
-        let sumVAT           = 0;
-        let sumGoldGross     = 0;
-        let totalDiamondCTS  = 0;
-        let totalStoneQty    = 0;
-        let totalDiamondVal  = 0;
-        let totalStoneVal    = 0;
+        let sumNetWt        = 0;
+        let sum995          = 0;
+        let sumMakingValue  = 0;  // making only (no parts)
+        let sumMaterial     = 0;
+        let sumVAT          = 0;
+        let sumGoldGross    = 0;
+        let totalDiamondCTS = 0;
+        let totalStoneQty   = 0;
+        let totalDiamondVal = 0;
+        let totalStoneVal   = 0;
+        let sumItemTotal    = 0;  // Σ item_total = net amount
 
         $('#PurchaseTable tr.item-row').each(function() {
             const itemRow      = $(this);
             const materialType = itemRow.find('.material-type').val();
             const grossVal     = parseFloat(itemRow.find('.gross-weight').val())  || 0;
 
-            sumNetWt         += parseFloat(itemRow.find('.purity-weight').val())  || 0;
-            sum995           += parseFloat(itemRow.find('.col-995').val())         || 0;
-            sumMakingTaxable += parseFloat(itemRow.find('.taxable-amount').val())  || 0;
-            sumMaterial      += parseFloat(itemRow.find('.material-value').val())  || 0;
-            sumVAT           += parseFloat(itemRow.find('.vat-amount').val())      || 0;
+            sumNetWt       += parseFloat(itemRow.find('.purity-weight').val())  || 0;
+            sum995         += parseFloat(itemRow.find('.col-995').val())         || 0;
+            sumMakingValue += parseFloat(itemRow.find('.making-value').val())   || 0;  // making only
+            sumMaterial    += parseFloat(itemRow.find('.material-value').val())  || 0;
+            sumVAT         += parseFloat(itemRow.find('.vat-amount').val())      || 0;
+            sumItemTotal   += parseFloat(itemRow.find('.item-total').val())      || 0;
 
             if (materialType === 'gold') sumGoldGross += grossVal;
 
@@ -782,16 +785,14 @@ $(document).ready(function () {
             });
         });
 
-        const makingTotalWithVat = sumMakingTaxable + sumVAT;
-        // Net Amount = Material Val + Diamond Parts Val + Stone Parts Val + Making (incl VAT)
-        const netTotal = sumMaterial + totalDiamondVal + totalStoneVal + makingTotalWithVat;
+        const netTotal = sumItemTotal;  // material + making + parts + vat
 
         $('#sum_gold_gross_weight').val(sumGoldGross.toFixed(3));
         $('#sum_diamond_cts').val(totalDiamondCTS.toFixed(3));
         $('#sum_stone_qty').val(totalStoneQty.toFixed(2));
         $('#sum_purity_weight').val(sumNetWt.toFixed(3));
         $('#sum_995').val(sum995.toFixed(3));
-        $('#sum_making_value').val(makingTotalWithVat.toFixed(2));
+        $('#sum_making_value').val(sumMakingValue.toFixed(2));  // making only
         $('#sum_material_value').val(sumMaterial.toFixed(2));
         $('#sum_diamond_value').val(totalDiamondVal.toFixed(2));
         $('#sum_stone_value').val(totalStoneVal.toFixed(2));
@@ -807,7 +808,7 @@ $(document).ready(function () {
             $('input[name="material_weight"]').val(sum995.toFixed(3));
             $('input[name="material_purity"]').val(sumNetWt.toFixed(3));
             $('input[name="material_value"]').val(sumMaterial.toFixed(2));
-            $('input[name="making_charges"]').val(makingTotalWithVat.toFixed(2));
+            $('input[name="making_charges"]').val(sumMakingValue.toFixed(2));  // making only
         }
     }
 
