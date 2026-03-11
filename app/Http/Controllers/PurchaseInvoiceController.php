@@ -454,7 +454,7 @@ class PurchaseInvoiceController extends Controller
                     <th width="13%" colspan="2">Making</th>
                     <th width="7%"  rowspan="2">Material</th>
                     <th width="8%"  rowspan="2">Material Val</th>
-                    <th width="6%"  rowspan="2">Taxable</th>
+                    <th width="6%"  rowspan="2">MC</th>
                     <th width="5%"  rowspan="2">VAT%</th>
                     <th width="7%"  rowspan="2">Item Total</th>
                 </tr>
