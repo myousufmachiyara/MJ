@@ -21,6 +21,7 @@ return new class extends Migration
             $table->decimal('rate', 15, 2)->default(0);
             $table->decimal('stone_qty', 15, 3)->default(0);
             $table->decimal('stone_rate', 15, 2)->default(0);
+            $table->decimal('certification_charges', 15, 2)->default(0);
             $table->decimal('total', 15, 2)->default(0);
             $table->string('part_description')->nullable();
             $table->timestamps();

@@ -17,6 +17,7 @@ class PurchaseInvoiceItemPart extends Model
         'rate',       // Diamond rate (AED/Ct)
         'stone_qty',  // Stone carats
         'stone_rate', // Stone rate (AED/Ct)
+        'certification_charges',
         'total',      // (qty × rate) + (stone_qty × stone_rate)
     ];
 
@@ -25,6 +26,7 @@ class PurchaseInvoiceItemPart extends Model
         'rate'       => 'decimal:2',
         'stone_qty'  => 'decimal:3',
         'stone_rate' => 'decimal:2',
+        'certification_charges' => 'decimal:2',
         'total'      => 'decimal:2',
     ];
 
@@ -92,9 +94,10 @@ class PurchaseInvoiceItemPart extends Model
     public function getBreakdownAttribute(): array
     {
         return [
-            'diamond_value' => $this->part_value,
-            'stone_value'   => $this->stone_value,
-            'total'         => $this->total,
+            'diamond_value'          => $this->part_value,
+            'stone_value'            => $this->stone_value,
+            'certification_charges'  => (float) ($this->certification_charges ?? 0),
+            'total'                  => $this->total,
         ];
     }
 
@@ -109,8 +112,8 @@ class PurchaseInvoiceItemPart extends Model
     public function recalculate(): static
     {
         $this->total = ($this->qty * $this->rate)
-            + (($this->stone_qty ?? 0) * ($this->stone_rate ?? 0));
-
+            + (($this->stone_qty ?? 0) * ($this->stone_rate ?? 0))
+            + (($this->certification_charges ?? 0));
         return $this;
     }
 

@@ -502,7 +502,7 @@ $(document).ready(function () {
                         <thead>
                             <tr>
                                 <th>Part</th><th>Description</th><th>Diamond Ct.</th><th>Rate</th>
-                                <th>Stone Ct.</th><th>Stone Rate</th><th>Total</th><th></th>
+                                <th>Stone Ct.</th><th>Stone Rate</th><th>Cert. Charges</th><th>Total</th><th></th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -533,6 +533,7 @@ $(document).ready(function () {
             <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][rate]" step="any" value="${data.rate || 0}" class="form-control part-rate"></td>
             <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][stone_qty]" step="any" value="${data.stone_qty || 0}" class="form-control part-stone-qty"></td>
             <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][stone_rate]" step="any" value="${data.stone_rate || 0}" class="form-control part-stone-rate"></td>
+            <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][certification_charges]" step="any" value="${data.certification_charges || 0}" class="form-control part-cert-charges"></td>
             <td><input type="number" name="items[${itemIndex}][parts][${partIndex}][total]" step="any" value="${data.total || 0}" class="form-control part-total" readonly></td>
             <td><button type="button" class="btn btn-sm btn-danger remove-part"><i class="fas fa-times"></i></button></td>
         </tr>`;
@@ -845,14 +846,15 @@ $(document).ready(function () {
     });
 
     // ================= PARTS CALCULATION =================
-    $(document).on('input', '.part-qty, .part-rate, .part-stone-qty, .part-stone-rate', function() {
+    $(document).on('input', '.part-qty, .part-rate, .part-stone-qty, .part-stone-rate, .part-cert-charges', function() {
         const row       = $(this).closest('tr');
-        const qty       = parseFloat(row.find('.part-qty').val())        || 0;
-        const rate      = parseFloat(row.find('.part-rate').val())       || 0;
-        const stoneQty  = parseFloat(row.find('.part-stone-qty').val())  || 0;
-        const stoneRate = parseFloat(row.find('.part-stone-rate').val()) || 0;
+        const qty       = parseFloat(row.find('.part-qty').val())             || 0;
+        const rate      = parseFloat(row.find('.part-rate').val())            || 0;
+        const stoneQty  = parseFloat(row.find('.part-stone-qty').val())       || 0;
+        const stoneRate = parseFloat(row.find('.part-stone-rate').val())      || 0;
+        const certChg   = parseFloat(row.find('.part-cert-charges').val())    || 0;
 
-        row.find('.part-total').val(((qty * rate) + (stoneQty * stoneRate)).toFixed(2));
+        row.find('.part-total').val(((qty * rate) + (stoneQty * stoneRate) + certChg).toFixed(2));
 
         const itemRow = row.closest('.parts-row').prev('.item-row');
         recalcItemGrossWeight(itemRow);
@@ -889,10 +891,11 @@ $(document).ready(function () {
                     currentItemRow.find('.vat-percent').val(row['VAT %'] || 0);
                     recalcItemGrossWeight(currentItemRow);
                 }
-                if (row['Part Name'] && row['Part Name'].trim() !== '' && currentItemRow) {
+                if (row['Part Name'] && row['Part Name'].trim() !== "" && currentItemRow) {
                     const partsRow = currentItemRow.next('.parts-row');
                     partsRow.show();
                     partsRow.find('.add-part').click();
+
                     const currentPartRow = partsRow.find('.part-item-row').last();
                     currentPartRow.find('.item-name-input').val(row['Part Name']);
                     currentPartRow.find('input[name*="[part_description]"]').val(row['Part Desc'] || '');
@@ -900,7 +903,9 @@ $(document).ready(function () {
                     currentPartRow.find('.part-rate').val(row['Part Rate'] || 0);
                     currentPartRow.find('.part-stone-qty').val(row['Stone Qty'] || 0);
                     currentPartRow.find('.part-stone-rate').val(row['Stone Rate'] || 0);
-                    currentPartRow.find('.part-qty').trigger('input');
+                    currentPartRow.find('.part-cert-charges').val(row['Cert. Charges'] || 0);  // ← ADD THIS
+
+                    currentPartRow.find('.part-qty').trigger('input');  // fires the calculation listener which reads all fields including cert charges
                 }
             });
 
