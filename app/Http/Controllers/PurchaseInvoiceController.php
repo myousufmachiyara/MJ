@@ -1156,7 +1156,7 @@ class PurchaseInvoiceController extends Controller
                     // CR gold inventory — your stock went out
                     $entries[] = [
                         'voucher_id' => $voucher->id,
-                        'account_id' => $acct('110001'),
+                        'account_id' => $acct('104001'),
                         'debit'      => 0,
                         'credit'     => $materialCredit,
                         'narration'  => 'Gold inventory issued to vendor as material payment'
@@ -1210,7 +1210,7 @@ class PurchaseInvoiceController extends Controller
             'cr_currency_payable'      => $currencyCredit,
             // material+making cost specific
             'dr_vendor_ap_material'    => $isMaterial ? $materialCredit : 0,
-            'cr_110001_gold_inventory' => $isMaterial ? $materialCredit : 0,
+            'cr_104001_gold_inventory' => $isMaterial ? $materialCredit : 0,
             'cr_vendor_currency'       => $isMaterial ? $currencyCredit : 0,
             // Totals
             'total_debit'              => $sumDebits,
