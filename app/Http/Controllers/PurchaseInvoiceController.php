@@ -1018,53 +1018,114 @@ class PurchaseInvoiceController extends Controller
             );
         }
 
+        // ── Shared credit split amounts (used by all payment methods) ─────────
+        // Material portion → always credited to Vendor AP (vendor supplied the raw material)
+        // Currency portion (MC + parts + VAT) → credited to cash/bank/vendor depending on method
+        $materialCredit = round($totals['gold_material'] + $totals['diamond_material'], 2);
+        $currencyCredit = round(
+            $totals['making'] + $totals['gold_parts'] + $totals['diamond_parts'] + $totals['vat'],
+            2
+        );
+
         // ── CREDIT entries ────────────────────────────────────────────────────
         switch ($invoice->payment_method) {
 
             case 'credit':
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->vendor_id,
-                    'debit'      => 0,
-                    'credit'     => $totalDebit,
-                    'narration'  => 'Purchase on credit — payable to vendor — Inv# ' . $invoice->invoice_no,
-                ];
+                // Both material and currency portions are owed to vendor on credit.
+                // Kept as two narrated entries for ledger clarity; net effect = $totalDebit to vendor AP.
+                if ($materialCredit > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->vendor_id,
+                        'debit'      => 0,
+                        'credit'     => $materialCredit,
+                        'narration'  => 'Material payable to vendor (credit) — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+                if ($currencyCredit > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->vendor_id,
+                        'debit'      => 0,
+                        'credit'     => $currencyCredit,
+                        'narration'  => 'MC + parts + VAT payable to vendor (credit) — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
                 break;
 
             case 'cash':
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $acct('101001'),
-                    'debit'      => 0,
-                    'credit'     => $totalDebit,
-                    'narration'  => 'Cash paid for purchase — Inv# ' . $invoice->invoice_no,
-                ];
+                // Material cost → vendor AP (we owe them for raw material)
+                // MC + parts + VAT → paid immediately from cash
+                if ($materialCredit > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->vendor_id,
+                        'debit'      => 0,
+                        'credit'     => $materialCredit,
+                        'narration'  => 'Material payable to vendor (cash purchase) — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+                if ($currencyCredit > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $acct('101001'),
+                        'debit'      => 0,
+                        'credit'     => $currencyCredit,
+                        'narration'  => 'Cash paid for MC + parts + VAT — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
                 break;
 
             case 'cheque':
                 if (!$invoice->bank_name) {
                     throw new \Exception('Bank account required for cheque payment (Inv# ' . $invoice->invoice_no . ').');
                 }
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->bank_name,
-                    'debit'      => 0,
-                    'credit'     => $totalDebit,
-                    'narration'  => 'Cheque #' . $invoice->cheque_no . ' — Inv# ' . $invoice->invoice_no,
-                ];
+                // Material cost → vendor AP
+                // MC + parts + VAT → paid by cheque from bank
+                if ($materialCredit > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->vendor_id,
+                        'debit'      => 0,
+                        'credit'     => $materialCredit,
+                        'narration'  => 'Material payable to vendor (cheque purchase) — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+                if ($currencyCredit > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->bank_name,
+                        'debit'      => 0,
+                        'credit'     => $currencyCredit,
+                        'narration'  => 'Cheque #' . $invoice->cheque_no . ' for MC + parts + VAT — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
                 break;
 
             case 'bank_transfer':
                 if (!$invoice->transfer_from_bank) {
                     throw new \Exception('Transfer-from bank required for bank transfer (Inv# ' . $invoice->invoice_no . ').');
                 }
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->transfer_from_bank,
-                    'debit'      => 0,
-                    'credit'     => $totalDebit,
-                    'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id . ' — Inv# ' . $invoice->invoice_no,
-                ];
+                // Material cost → vendor AP
+                // MC + parts + VAT → paid by bank transfer
+                if ($materialCredit > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->vendor_id,
+                        'debit'      => 0,
+                        'credit'     => $materialCredit,
+                        'narration'  => 'Material payable to vendor (bank transfer) — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+                if ($currencyCredit > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->transfer_from_bank,
+                        'debit'      => 0,
+                        'credit'     => $currencyCredit,
+                        'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id . ' for MC + parts + VAT — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
                 break;
 
             case 'material+making cost':
@@ -1081,18 +1142,12 @@ class PurchaseInvoiceController extends Controller
                 // Net Vendor AP effect = CR currencyCredit − DR materialCredit
                 // This equals the cash you still owe the vendor after the gold handover.
 
-                $materialValue  = round($totals['gold_material'] + $totals['diamond_material'], 2);
-                $currencyCredit = round(
-                    $totals['making'] + $totals['gold_parts'] + $totals['diamond_parts'] + $totals['vat'],
-                    2
-                );
-
-                if ($materialValue > 0) {
+                if ($materialCredit > 0) {
                     // DR vendor AP — settles vendor's claim for the material portion
                     $entries[] = [
                         'voucher_id' => $voucher->id,
                         'account_id' => $invoice->vendor_id,
-                        'debit'      => $materialValue,
+                        'debit'      => $materialCredit,
                         'credit'     => 0,
                         'narration'  => 'Metal sale fixing — vendor AP settled by gold inventory handover'
                                         . ' (' . ($invoice->material_given_by ?? 'vendor') . ')'
@@ -1103,7 +1158,7 @@ class PurchaseInvoiceController extends Controller
                         'voucher_id' => $voucher->id,
                         'account_id' => $acct('110001'),
                         'debit'      => 0,
-                        'credit'     => $materialValue,
+                        'credit'     => $materialCredit,
                         'narration'  => 'Gold inventory issued to vendor as material payment'
                                         . ' — Inv# ' . $invoice->invoice_no,
                     ];
@@ -1141,26 +1196,25 @@ class PurchaseInvoiceController extends Controller
             );
         }
 
-        $materialValue = round($totals['gold_material'] + $totals['diamond_material'], 2);
-
         Log::info('Purchase accounting entries created', [
-            'invoice_no'              => $invoice->invoice_no,
-            'voucher_no'              => $voucher->voucher_no,
-            'payment_method'          => $invoice->payment_method,
+            'invoice_no'               => $invoice->invoice_no,
+            'voucher_no'               => $voucher->voucher_no,
+            'payment_method'           => $invoice->payment_method,
             // Debit breakdown
-            'dr_510001_gold'          => $goldDebit,
-            'dr_510002_diamond'       => $diamondDebit,
-            'dr_510003_making'        => $totals['making'],
-            'dr_105001_vat'           => $totals['vat'],
+            'dr_510001_gold'           => $goldDebit,
+            'dr_510002_diamond'        => $diamondDebit,
+            'dr_510003_making'         => $totals['making'],
+            'dr_105001_vat'            => $totals['vat'],
+            // Credit split (applies to all methods)
+            'cr_vendor_material'       => $materialCredit,
+            'cr_currency_payable'      => $currencyCredit,
             // material+making cost specific
-            'dr_vendor_ap_material'   => $isMaterial ? $materialValue : 0,
-            'cr_110001_gold_inventory'=> $isMaterial ? $materialValue : 0,
-            'cr_vendor_currency'      => $isMaterial
-                ? round($totals['making'] + $totals['gold_parts'] + $totals['diamond_parts'] + $totals['vat'], 2)
-                : 0,
+            'dr_vendor_ap_material'    => $isMaterial ? $materialCredit : 0,
+            'cr_110001_gold_inventory' => $isMaterial ? $materialCredit : 0,
+            'cr_vendor_currency'       => $isMaterial ? $currencyCredit : 0,
             // Totals
-            'total_debit'             => $sumDebits,
-            'total_credit'            => $sumCredits,
+            'total_debit'              => $sumDebits,
+            'total_credit'             => $sumCredits,
         ]);
 
         return $voucher;
