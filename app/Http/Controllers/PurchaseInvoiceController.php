@@ -59,7 +59,6 @@ class PurchaseInvoiceController extends Controller
             'Part Name', 'Part Desc', 'Part Qty', 'Part Rate', 'Stone Qty', 'Stone Rate', 'Cert. Charges',
         ]);
 
-        // Sample rows — item rows have empty part columns, part rows have empty item columns
         fputcsv($handle, ['18K Gold Bracelet', 'Handmade Chain Design', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '', '']);
         fputcsv($handle, ['', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50', '75.00']);
         fputcsv($handle, ['22K Wedding Band', 'Plain Polished', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '', '']);
@@ -80,13 +79,11 @@ class PurchaseInvoiceController extends Controller
     public function store(Request $request)
     {
         $this->clearIrrelevantPaymentFields($request);
-
         $this->validateInvoice($request);
 
         try {
             DB::beginTransaction();
 
-            // ── Invoice number ────────────────────────────────────────────────
             $isTaxable   = $request->boolean('is_taxable');
             $prefix      = $isTaxable ? 'PUR-TAX-' : 'PUR-';
             $lastInvoice = PurchaseInvoice::withTrashed()
@@ -96,7 +93,6 @@ class PurchaseInvoiceController extends Controller
             $nextNumber = $lastInvoice ? ((int) str_replace($prefix, '', $lastInvoice->invoice_no)) + 1 : 1;
             $invoiceNo  = $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
 
-            // ── Create invoice header (net_amount filled after items loop) ────
             $invoice = PurchaseInvoice::create([
                 'invoice_no'           => $invoiceNo,
                 'is_taxable'           => $isTaxable,
@@ -132,9 +128,7 @@ class PurchaseInvoiceController extends Controller
 
             [$totals, $position] = $this->createItems($invoice, $request->items, $request, 1);
 
-            // ── Net amount ────────────────────────────────────────────────────
-            $calculatedNet = $invoice->items()->sum('item_total');
-
+            $calculatedNet    = $invoice->items()->sum('item_total');
             $calculatedNetAed = $request->currency === 'USD'
                 ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
                 : $calculatedNet;
@@ -144,10 +138,7 @@ class PurchaseInvoiceController extends Controller
                 'net_amount_aed' => $calculatedNetAed,
             ]);
 
-            // ── Attachments ───────────────────────────────────────────────────
             $this->storeAttachments($request, $invoice);
-
-            // ── Accounting ────────────────────────────────────────────────────
             $this->createPurchaseAccountingEntries($invoice, $totals);
 
             DB::commit();
@@ -180,7 +171,6 @@ class PurchaseInvoiceController extends Controller
         $banks           = ChartOfAccounts::where('account_type', 'bank')->get();
         $products        = Product::with('measurementUnit')->get();
 
-        // gold_rate_aed is stored as AED/gram → convert back to AED/oz for display
         $goldAedOunce = ($purchaseInvoice->gold_rate_aed ?? 0) * 31.1035;
         $diamondAedCt = $purchaseInvoice->diamond_rate_aed ?? 0;
 
@@ -234,7 +224,6 @@ class PurchaseInvoiceController extends Controller
     {
         $invoice = PurchaseInvoice::findOrFail($id);
 
-        // ── Printed-item guard ────────────────────────────────────────────────
         $incomingBarcodes  = collect($request->items)->pluck('barcode_number')->filter()->values();
         $printedAndDeleted = $invoice->items()
             ->where('is_printed', true)
@@ -291,8 +280,7 @@ class PurchaseInvoiceController extends Controller
 
             [$totals] = $this->createItems($invoice, $request->items, $request, 1, preservePrinted: true);
 
-            $calculatedNet = $invoice->items()->sum('item_total');
-
+            $calculatedNet    = $invoice->items()->sum('item_total');
             $calculatedNetAed = $request->currency === 'USD'
                 ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
                 : $calculatedNet;
@@ -350,7 +338,6 @@ class PurchaseInvoiceController extends Controller
             'vouchers.entries.account',
         ])->findOrFail($id);
 
-        // Totals from stored values
         $totalMaterialAed = $invoice->items->sum('material_value');
         $totalMakingAed   = $invoice->items->sum('making_value');
         $totalVatAed      = $invoice->items->sum('vat_amount');
@@ -369,7 +356,6 @@ class PurchaseInvoiceController extends Controller
             return $item->parts->sum('total');
         });
 
-        // Currency payable = MC + Parts + VAT
         $totalCurrencyPayable = $totalMakingAed + $totalPartsAed + $totalVatAed;
 
         $pdf = new myPDF();
@@ -380,7 +366,6 @@ class PurchaseInvoiceController extends Controller
         $pdf->SetMargins(10, 10, 10);
         $pdf->setCellPadding(1.2);
 
-        // ── PAGE 1: PURCHASE INVOICE ──────────────────────────────────────────
         $pdf->AddPage();
 
         $logoPath = public_path('assets/img/mj-logo.jpeg');
@@ -429,7 +414,6 @@ class PurchaseInvoiceController extends Controller
         </table>';
         $pdf->writeHTML($vendorHtml, true, false, false, false);
 
-        // ── Items table ───────────────────────────────────────────────────────
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
@@ -486,7 +470,6 @@ class PurchaseInvoiceController extends Controller
 
                 foreach ($item->parts as $part) {
                     $displayPartName = $part->item_name ?: ($part->product->name ?? 'Part');
-                    // ── Compact single-line part row aligned to 15 columns ────
                     $html .= '
                     <tr style="font-size:7px;background-color:#fcfcfc;text-align:center;">
                         <td width="3%"></td>
@@ -524,7 +507,6 @@ class PurchaseInvoiceController extends Controller
 
         $pdf->writeHTML($html, true, false, false, false);
 
-        // ── SUMMARY ───────────────────────────────────────────────────────────
         $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
 
         $summaryHtml = '
@@ -635,7 +617,6 @@ class PurchaseInvoiceController extends Controller
         $pdf->SetXY(130, $y);
         $pdf->Cell(50, 5, "Authorized Signature", 0, 0, 'C');
 
-        // ── Material fixing pages ─────────────────────────────────────────────
         if (str_contains(strtolower($invoice->payment_method), 'material')) {
             $pdf->AddPage();
             $this->renderMetalFixingPage($pdf, $invoice, $totalMaterialAed, 'PARTY COPY');
@@ -643,7 +624,6 @@ class PurchaseInvoiceController extends Controller
             $this->renderMetalFixingPage($pdf, $invoice, $totalMaterialAed, 'ACCOUNTS COPY');
         }
 
-        // ── Currency payment pages (MC + Parts + VAT) ─────────────────────────
         $pdf->AddPage();
         $this->renderCurrencyPaymentPage($pdf, $invoice, $totalMakingAed, $totalPartsAed, $totalVatAed, 'PARTY COPY');
         $pdf->AddPage();
@@ -667,21 +647,6 @@ class PurchaseInvoiceController extends Controller
     // PRIVATE HELPERS
     // =========================================================================
 
-    /**
-     * Create item rows and their parts for a given invoice.
-     *
-     * Formulas (must match blade calculateRow exactly):
-     *   purity_weight  = net_weight × purity
-     *   col_995        = purity_weight / 0.995
-     *   making_value   = net_weight × making_rate
-     *   material_value = rate × purity_weight
-     *   partsTotal     = Σ (qty×rate + stone_qty×stone_rate + certification_charges) per part
-     *   taxable        = making_value  (VAT is on MC only, not parts)
-     *   vat_amount     = taxable × (vat_percent / 100)
-     *   item_total     = material_value + making_value + partsTotal + vat_amount
-     *
-     * @return array  [ $totals, $position ]
-     */
     private function createItems(
         PurchaseInvoice $invoice,
         array $items,
@@ -690,24 +655,22 @@ class PurchaseInvoiceController extends Controller
         bool $preservePrinted = false
     ): array {
         $totals = [
-            'gold_material'    => 0.0,  // material_value for gold items
-            'diamond_material' => 0.0,  // material_value for diamond items
-            'material'         => 0.0,  // total material_value (all types)
-            'making'           => 0.0,  // total making_value
-            'gold_parts'       => 0.0,  // parts total on gold items → merged into 510001
-            'diamond_parts'    => 0.0,  // parts total on diamond items → merged into 510002
-            'diamond_val'      => 0.0,  // Σ (part qty × part rate)   — for PDF summary only
-            'stone_val'        => 0.0,  // Σ (stone qty × stone rate) — for PDF summary only
+            'gold_material'    => 0.0,
+            'diamond_material' => 0.0,
+            'material'         => 0.0,
+            'making'           => 0.0,
+            'gold_parts'       => 0.0,
+            'diamond_parts'    => 0.0,
+            'diamond_val'      => 0.0,
+            'stone_val'        => 0.0,
             'vat'              => 0.0,
         ];
 
-        $position = $startPosition;
-
+        $position         = $startPosition;
         $goldRateAedGram  = (float) ($request->gold_rate_aed    ?? 0);
         $diamondRateAedCt = (float) ($request->diamond_rate_aed ?? 0);
 
         foreach ($items as $itemData) {
-
             $netWeight   = (float) ($itemData['net_weight']   ?? 0);
             $grossWeight = (float) ($itemData['gross_weight'] ?? 0);
             $purity      = (float) ($itemData['purity']       ?? 0);
@@ -715,15 +678,12 @@ class PurchaseInvoiceController extends Controller
             $vatPercent  = (float) ($itemData['vat_percent']  ?? 0);
             $matType     = $itemData['material_type'] ?? 'gold';
 
-            // ── Row calculations ──────────────────────────────────────────────
             $purityWeight  = $netWeight * $purity;
             $col995        = $purityWeight > 0 ? $purityWeight / 0.995 : 0;
             $makingValue   = $netWeight * $makingRate;
-
             $rate          = $matType === 'gold' ? $goldRateAedGram : $diamondRateAedCt;
             $materialValue = $rate * $purityWeight;
 
-            // ── Parts ─────────────────────────────────────────────────────────
             $partsData      = $itemData['parts'] ?? [];
             $partsTotal     = 0.0;
             $itemDiamondVal = 0.0;
@@ -745,12 +705,10 @@ class PurchaseInvoiceController extends Controller
                 $itemStoneVal   += $stoneValue;
             }
 
-            // ── Taxable = making only (VAT is on MC, not parts) ───────────────
             $taxableAmount = $makingValue;
             $vatAmount     = $taxableAmount * ($vatPercent / 100);
             $itemTotal     = $materialValue + $makingValue + $partsTotal + $vatAmount;
 
-            // ── Barcode / printed status ──────────────────────────────────────
             $existingBarcode   = $itemData['barcode_number'] ?? null;
             $wasAlreadyPrinted = false;
             if ($preservePrinted && $existingBarcode) {
@@ -781,7 +739,6 @@ class PurchaseInvoiceController extends Controller
                 'is_printed'       => $wasAlreadyPrinted,
             ]);
 
-            // ── Create parts ──────────────────────────────────────────────────
             foreach ($partsData as $partData) {
                 $qty         = (float) ($partData['qty']                   ?? 0);
                 $partRate    = (float) ($partData['rate']                  ?? 0);
@@ -803,7 +760,6 @@ class PurchaseInvoiceController extends Controller
                 ]);
             }
 
-            // ── Accumulate totals ─────────────────────────────────────────────
             if ($matType === 'gold') {
                 $totals['gold_material'] += $materialValue;
                 $totals['gold_parts']    += $partsTotal;
@@ -823,9 +779,6 @@ class PurchaseInvoiceController extends Controller
         return [$totals, $position];
     }
 
-    /**
-     * Store file attachments linked to an invoice.
-     */
     private function storeAttachments(Request $request, PurchaseInvoice $invoice): void
     {
         if ($request->hasFile('attachments')) {
@@ -836,9 +789,6 @@ class PurchaseInvoiceController extends Controller
         }
     }
 
-    /**
-     * Null out payment fields that don't belong to the selected payment method.
-     */
     private function clearIrrelevantPaymentFields(Request $request): void
     {
         if ($request->payment_method !== 'cheque') {
@@ -863,9 +813,6 @@ class PurchaseInvoiceController extends Controller
         }
     }
 
-    /**
-     * Validate the invoice request.
-     */
     private function validateInvoice(Request $request): void
     {
         $request->validate([
@@ -910,31 +857,21 @@ class PurchaseInvoiceController extends Controller
     /**
      * Create accounting voucher + double-entry lines for a purchase invoice.
      *
-     * ── DEBIT entries (all payment methods) ──────────────────────────────────
-     *   510001 — Gold Material Purchases   = gold material_value + gold parts total
-     *   510002 — Diamond Material Purchases = diamond material_value + diamond parts total
-     *   510003 — Making Charges Expense    = making_value only
-     *   105001 — VAT Input Tax Recoverable
+     * DEBIT entries (all methods):
+     *   510001  Gold Material + Gold Parts
+     *   510002  Diamond Material + Diamond Parts
+     *   510003  Making Charges
+     *   105001  Input VAT Recoverable
      *
-     * ── CREDIT entries ────────────────────────────────────────────────────────
-     *   credit / cash / cheque / bank_transfer:
-     *     Single credit to vendor AP or bank for the full totalDebit.
+     * CREDIT entries:
+     *   $materialCredit = gold_material + diamond_material
+     *   $currencyCredit = $totalDebit - $materialCredit   ← derived to avoid rounding gaps
      *
-     *   material+making cost:
-     *     You give your own gold inventory to the vendor as part payment.
-     *     This is a SALE of your material — your inventory goes out.
-     *
-     *     Entry 1 — Metal Sale Fixing (material portion):
-     *       DR  Vendor AP          (vendor owes you less — you gave them gold)
-     *       CR  110001 Gold Inv.   (your gold stock goes out)
-     *
-     *     Entry 2 — Currency Payable (MC + parts + VAT still owed in cash):
-     *       CR  Vendor AP          (remaining liability to vendor)
-     *
-     *     Net effect on Vendor AP:
-     *       DR materialCredit  (reduces what vendor is owed for material)
-     *       CR currencyCredit  (adds liability for MC + parts + VAT)
-     *     Together with the purchase debits, the journal balances.
+     *   credit       → vendor AP for both portions
+     *   cash         → vendor AP (material) + 101001 Cash (currency)
+     *   cheque       → vendor AP (material) + bank account (currency)
+     *   bank_transfer→ vendor AP (material) + transfer bank (currency)
+     *   material+MC  → DR vendor AP + CR 104001 (gold out); CR vendor AP (currency owed)
      */
     protected function createPurchaseAccountingEntries(PurchaseInvoice $invoice, array $totals): Voucher
     {
@@ -966,7 +903,7 @@ class PurchaseInvoiceController extends Controller
 
         $entries = [];
 
-        // ── DEBIT entries — purchase expense accounts ─────────────────────────
+        // ── DEBIT entries ─────────────────────────────────────────────────────
         $goldDebit    = round($totals['gold_material']    + $totals['gold_parts'],    2);
         $diamondDebit = round($totals['diamond_material'] + $totals['diamond_parts'], 2);
 
@@ -1018,21 +955,18 @@ class PurchaseInvoiceController extends Controller
             );
         }
 
-        // ── Shared credit split amounts (used by all payment methods) ─────────
-        // Material portion → always credited to Vendor AP (vendor supplied the raw material)
-        // Currency portion (MC + parts + VAT) → credited to cash/bank/vendor depending on method
+        // ── Credit split ──────────────────────────────────────────────────────
+        // $materialCredit → always goes to Vendor AP (vendor supplied the raw material)
+        // $currencyCredit → derived as remainder to guarantee credits = debits exactly,
+        //                   eliminating any floating-point rounding gap.
         $materialCredit = round($totals['gold_material'] + $totals['diamond_material'], 2);
-        $currencyCredit = round(
-            $totals['making'] + $totals['gold_parts'] + $totals['diamond_parts'] + $totals['vat'],
-            2
-        );
+        $currencyCredit = round($totalDebit - $materialCredit, 2); // ← key fix for imbalance
 
         // ── CREDIT entries ────────────────────────────────────────────────────
         switch ($invoice->payment_method) {
 
             case 'credit':
-                // Both material and currency portions are owed to vendor on credit.
-                // Kept as two narrated entries for ledger clarity; net effect = $totalDebit to vendor AP.
+                // Both portions owed to vendor; two entries for narration clarity.
                 if ($materialCredit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
@@ -1054,8 +988,7 @@ class PurchaseInvoiceController extends Controller
                 break;
 
             case 'cash':
-                // Material cost → vendor AP (we owe them for raw material)
-                // MC + parts + VAT → paid immediately from cash
+                // Material → vendor AP; currency → cash paid immediately.
                 if ($materialCredit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
@@ -1078,10 +1011,11 @@ class PurchaseInvoiceController extends Controller
 
             case 'cheque':
                 if (!$invoice->bank_name) {
-                    throw new \Exception('Bank account required for cheque payment (Inv# ' . $invoice->invoice_no . ').');
+                    throw new \Exception(
+                        'Bank account required for cheque payment (Inv# ' . $invoice->invoice_no . ').'
+                    );
                 }
-                // Material cost → vendor AP
-                // MC + parts + VAT → paid by cheque from bank
+                // Material → vendor AP; currency → bank (cheque).
                 if ($materialCredit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
@@ -1104,10 +1038,11 @@ class PurchaseInvoiceController extends Controller
 
             case 'bank_transfer':
                 if (!$invoice->transfer_from_bank) {
-                    throw new \Exception('Transfer-from bank required for bank transfer (Inv# ' . $invoice->invoice_no . ').');
+                    throw new \Exception(
+                        'Transfer-from bank required for bank transfer (Inv# ' . $invoice->invoice_no . ').'
+                    );
                 }
-                // Material cost → vendor AP
-                // MC + parts + VAT → paid by bank transfer
+                // Material → vendor AP; currency → transfer bank.
                 if ($materialCredit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
@@ -1123,27 +1058,22 @@ class PurchaseInvoiceController extends Controller
                         'account_id' => $invoice->transfer_from_bank,
                         'debit'      => 0,
                         'credit'     => $currencyCredit,
-                        'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id . ' for MC + parts + VAT — Inv# ' . $invoice->invoice_no,
+                        'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id
+                                        . ' for MC + parts + VAT — Inv# ' . $invoice->invoice_no,
                     ];
                 }
                 break;
 
             case 'material+making cost':
-                // ── Material portion: you SELL your gold inventory to the vendor ──
+                // You hand over your own gold inventory to the vendor as part payment.
                 //
-                // You hand over raw gold to the vendor.
-                // From your books this is a disposal of inventory:
-                //   DR  Vendor AP   — vendor owes you less (they received your gold)
-                //   CR  110001      — your gold stock goes out
+                // Material portion (gold inventory goes out):
+                //   DR  Vendor AP   — vendor's claim for material is settled
+                //   CR  104001      — gold inventory leaves your books
                 //
-                // ── Currency portion: remaining cash liability to vendor ─────────
-                //   CR  Vendor AP   — MC + parts + VAT still owed by you in cash
-                //
-                // Net Vendor AP effect = CR currencyCredit − DR materialCredit
-                // This equals the cash you still owe the vendor after the gold handover.
-
+                // Currency portion (MC + parts + VAT still owed in cash):
+                //   CR  Vendor AP   — remaining liability to vendor
                 if ($materialCredit > 0) {
-                    // DR vendor AP — settles vendor's claim for the material portion
                     $entries[] = [
                         'voucher_id' => $voucher->id,
                         'account_id' => $invoice->vendor_id,
@@ -1153,19 +1083,16 @@ class PurchaseInvoiceController extends Controller
                                         . ' (' . ($invoice->material_given_by ?? 'vendor') . ')'
                                         . ' — Inv# ' . $invoice->invoice_no,
                     ];
-                    // CR gold inventory — your stock went out
                     $entries[] = [
                         'voucher_id' => $voucher->id,
-                        'account_id' => $acct('104001'),
+                        'account_id' => $acct('104001'), // Gold Inventory
                         'debit'      => 0,
                         'credit'     => $materialCredit,
                         'narration'  => 'Gold inventory issued to vendor as material payment'
                                         . ' — Inv# ' . $invoice->invoice_no,
                     ];
                 }
-
                 if ($currencyCredit > 0) {
-                    // CR vendor AP — remaining cash liability for MC + parts + VAT
                     $entries[] = [
                         'voucher_id' => $voucher->id,
                         'account_id' => $invoice->vendor_id,
@@ -1200,19 +1127,15 @@ class PurchaseInvoiceController extends Controller
             'invoice_no'               => $invoice->invoice_no,
             'voucher_no'               => $voucher->voucher_no,
             'payment_method'           => $invoice->payment_method,
-            // Debit breakdown
             'dr_510001_gold'           => $goldDebit,
             'dr_510002_diamond'        => $diamondDebit,
-            'dr_510003_making'         => $totals['making'],
-            'dr_105001_vat'            => $totals['vat'],
-            // Credit split (applies to all methods)
+            'dr_510003_making'         => round($totals['making'], 2),
+            'dr_105001_vat'            => round($totals['vat'], 2),
             'cr_vendor_material'       => $materialCredit,
             'cr_currency_payable'      => $currencyCredit,
-            // material+making cost specific
             'dr_vendor_ap_material'    => $isMaterial ? $materialCredit : 0,
             'cr_104001_gold_inventory' => $isMaterial ? $materialCredit : 0,
             'cr_vendor_currency'       => $isMaterial ? $currencyCredit : 0,
-            // Totals
             'total_debit'              => $sumDebits,
             'total_credit'             => $sumCredits,
         ]);
@@ -1231,18 +1154,6 @@ class PurchaseInvoiceController extends Controller
 
     // ── PDF helpers ───────────────────────────────────────────────────────────
 
-    /**
-     * Render the Metal Sale Fixing page.
-     *
-     * This document records that YOU sold (gave) your raw gold to the vendor
-     * as part payment for the purchased jewelry. From the vendor's perspective
-     * their account is CREDITED (they owe you less). From your books, your
-     * gold inventory goes out (CR 110001) and vendor AP is debited.
-     *
-     * Rate display:
-     *   USD invoice → gold_rate_usd (USD/oz), materialAED = value × exchange_rate
-     *   AED invoice → gold_rate_aed (AED/gram), materialAED = value as-is
-     */
     private function renderMetalFixingPage($pdf, $invoice, $totalMaterialVal, string $copyType = 'PARTY COPY'): void
     {
         $logoPath = public_path('assets/img/mj-logo.jpeg');
@@ -1293,7 +1204,6 @@ class PurchaseInvoiceController extends Controller
         $pdf->Ln(2);
         $pdf->writeHTML('<b>WE HAVE</b>', true, false, false, false);
 
-        // ── SOLD (not BOUGHT) — you gave your gold to the vendor ─────────────
         $pdf->writeHTML('
         <table width="100%" style="border:1px solid #000;"><tr><td>
             SOLD FINE GOLD <b>' . number_format($totalPureWt, 3) . ' (GMS) @ '
@@ -1303,7 +1213,6 @@ class PurchaseInvoiceController extends Controller
 
         $words = $pdf->convertCurrencyToWords($materialAED, 'AED');
 
-        // ── CREDITED to vendor AP — their payable to you reduces ─────────────
         $pdf->writeHTML('
         <table width="100%" cellpadding="4" style="border:1px solid #000;">
             <tr>
