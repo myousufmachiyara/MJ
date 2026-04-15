@@ -16,32 +16,31 @@ return new class extends Migration
             $table->unsignedBigInteger('purchase_invoice_id');
 
             /* ================= PRODUCT ================= */
-
-            $table->string('item_name')->nullable();              // manual name
+            $table->string('item_name')->nullable();
             $table->unsignedBigInteger('product_id')->nullable();
             $table->unsignedBigInteger('variation_id')->nullable();
-            $table->string('item_description')->nullable(); // for custom descriptions
-            $table->decimal('net_weight', 15, 3)->default(0);
+            $table->string('item_description')->nullable();
+            $table->decimal('net_weight', 15, 4)->default(0);
 
             /* ================= ITEM DETAILS ================= */
-            $table->decimal('gross_weight', 15, 3)->default(0);
-            $table->decimal('purity', 10, 3)->default(0); // percentage
-            $table->decimal('purity_weight', 15, 3)->default(0); // calculated
-            $table->decimal('col_995', 15, 3)->default(0);
-            $table->decimal('making_rate', 15, 2)->default(0);
-            $table->decimal('making_value', 18, 2)->default(0);
-            $table->decimal('parts_total', 15, 2)->default(0);
-            $table->decimal('material_rate', 18, 4)->default(0); // material cost based on metal_rate
-            $table->string('material_type'); // for custom descriptions
-            $table->decimal('material_value', 18, 2)->default(0); // total value of metals
-            $table->decimal('taxable_amount', 18, 2)->default(0);
-            $table->decimal('vat_percent', 5, 2)->default(0); 
-            $table->decimal('vat_amount', 18, 2)->default(0); // optional, for direct VAT calculation
-            $table->decimal('item_total', 18, 2)->default(0); // optional, for direct VAT calculation
+            $table->decimal('gross_weight', 15, 4)->default(0);
+            $table->decimal('purity', 10, 4)->default(0);
+            $table->decimal('purity_weight', 15, 4)->default(0);
+            $table->decimal('col_995', 15, 4)->default(0);
+            $table->decimal('making_rate', 15, 4)->default(0);
+            $table->decimal('making_value', 18, 4)->default(0);
+            $table->decimal('parts_total', 15, 4)->default(0);
+            $table->decimal('material_rate', 18, 4)->default(0);
+            $table->string('material_type');
+            $table->decimal('material_value', 18, 4)->default(0);
+            $table->decimal('taxable_amount', 18, 4)->default(0);
+            $table->decimal('vat_percent', 5, 4)->default(0);
+            $table->decimal('vat_amount', 18, 4)->default(0);
+            $table->decimal('item_total', 18, 4)->default(0);
 
             /* ================= METAL RATES PER ITEM ================= */
-            $table->decimal('gold_rate', 18, 2)->nullable();
-            $table->decimal('diamond_rate', 18, 2)->nullable();
+            $table->decimal('gold_rate', 18, 4)->nullable();
+            $table->decimal('diamond_rate', 18, 4)->nullable();
 
             /* ================= REMARKS & FILES ================= */
             $table->string('remarks')->nullable();

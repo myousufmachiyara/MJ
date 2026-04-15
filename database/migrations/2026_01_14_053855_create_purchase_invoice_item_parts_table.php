@@ -15,14 +15,14 @@ return new class extends Migration
             $table->id();
             $table->foreignId('purchase_invoice_item_id')->constrained()->onDelete('cascade');
             $table->foreignId('product_id')->nullable();
-            $table->string('item_name')->nullable();              // manual name
+            $table->string('item_name')->nullable();
             $table->foreignId('variation_id')->nullable();
-            $table->decimal('qty', 15, 3)->default(0);
-            $table->decimal('rate', 15, 2)->default(0);
-            $table->decimal('stone_qty', 15, 3)->default(0);
-            $table->decimal('stone_rate', 15, 2)->default(0);
-            $table->decimal('certification_charges', 15, 2)->default(0);
-            $table->decimal('total', 15, 2)->default(0);
+            $table->decimal('qty', 15, 4)->default(0);
+            $table->decimal('rate', 15, 4)->default(0);
+            $table->decimal('stone_qty', 15, 4)->default(0);
+            $table->decimal('stone_rate', 15, 4)->default(0);
+            $table->decimal('certification_charges', 15, 4)->default(0);
+            $table->decimal('total', 15, 4)->default(0);
             $table->string('part_description')->nullable();
             $table->timestamps();
         });

@@ -23,11 +23,11 @@ class PurchaseInvoiceItemPart extends Model
 
     protected $casts = [
         'qty'        => 'decimal:3',
-        'rate'       => 'decimal:2',
+        'rate'       => 'decimal:4',
         'stone_qty'  => 'decimal:3',
-        'stone_rate' => 'decimal:2',
-        'certification_charges' => 'decimal:2',
-        'total'      => 'decimal:2',
+        'stone_rate' => 'decimal:4',
+        'certification_charges' => 'decimal:4',
+        'total'      => 'decimal:4',
     ];
 
     // =========================================================================

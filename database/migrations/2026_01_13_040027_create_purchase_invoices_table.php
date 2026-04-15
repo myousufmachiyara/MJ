@@ -47,10 +47,10 @@ return new class extends Migration
             $table->decimal('transfer_amount', 18, 2)->nullable();
 
             /* ================= MATERIAL + MAKING ================= */
-            $table->decimal('material_weight', 15, 3)->nullable();
-            $table->decimal('material_purity', 10, 3)->nullable();
-            $table->decimal('material_value', 18, 2)->nullable();
-            $table->decimal('making_charges', 18, 2)->nullable();
+            $table->decimal('material_weight', 15, 4)->nullable();
+            $table->decimal('material_purity', 10, 4)->nullable();
+            $table->decimal('material_value', 18, 4)->nullable();
+            $table->decimal('making_charges', 18, 4)->nullable();
             $table->string('material_received_by', 100)->nullable();
             $table->string('material_given_by', 100)->nullable();
 

@@ -45,28 +45,28 @@ class PurchaseInvoiceItem extends Model
 
     protected $casts = [
         // Weight
-        'net_weight'    => 'decimal:3',
-        'gross_weight'  => 'decimal:3',
-        'purity'        => 'decimal:3',
-        'purity_weight' => 'decimal:3',
-        'col_995'       => 'decimal:3',
+        'net_weight'    => 'decimal:4',
+        'gross_weight'  => 'decimal:4',
+        'purity'        => 'decimal:4',
+        'purity_weight' => 'decimal:4',
+        'col_995'       => 'decimal:4',
 
         // Making
-        'making_rate'   => 'decimal:2',
-        'making_value'  => 'decimal:2',
+        'making_rate'   => 'decimal:4',
+        'making_value'  => 'decimal:4',
 
         // Material
         'material_rate'  => 'decimal:4',  // AED/gram needs 4dp
-        'material_value' => 'decimal:2',
+        'material_value' => 'decimal:4',
 
         // Parts
-        'parts_total'    => 'decimal:2',
+        'parts_total'    => 'decimal:4',
 
         // Totals
-        'taxable_amount' => 'decimal:2',
-        'vat_percent'    => 'decimal:2',
-        'vat_amount'     => 'decimal:2',
-        'item_total'     => 'decimal:2',
+        'taxable_amount' => 'decimal:4',
+        'vat_percent'    => 'decimal:4',
+        'vat_amount'     => 'decimal:4',
+        'item_total'     => 'decimal:4',
 
         'is_printed'     => 'boolean',
     ];
