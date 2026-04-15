@@ -388,7 +388,8 @@ class PurchaseInvoiceController extends Controller
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', '', 9);
 
-        $goldRateDisplay    = $invoice->currency === 'USD' ? $invoice->gold_rate_usd    : $invoice->gold_rate_aed_ounce;
+        $goldRateUsdOz  = $invoice->gold_rate_usd        ?? 0;
+        $goldRateAedOz  = $invoice->gold_rate_aed_ounce  ?? 0;
         $diamondRateDisplay = $invoice->currency === 'USD' ? $invoice->diamond_rate_usd : $invoice->diamond_rate_aed;
 
         $vendorHtml = '
@@ -405,8 +406,9 @@ class PurchaseInvoiceController extends Controller
                     <table border="1" cellpadding="3" width="100%">
                         <tr><td width="45%"><b>Date</b></td><td width="55%">' . Carbon::parse($invoice->invoice_date)->format('d.m.Y') . '</td></tr>
                         <tr><td><b>Invoice No</b></td><td>' . $invoice->invoice_no . '</td></tr>
-                        <tr><td><b>Gold Rate (' . $invoice->currency . '/oz)</b></td><td>' . number_format($goldRateDisplay, 2) . '</td></tr>
-                        <tr><td><b>Gold Rate (AED/g)</b></td><td>' . number_format($invoice->gold_rate_aed, 4) . '</td></tr>
+                        <tr><td><b>Gold Rate (USD/oz)</b></td><td>' . number_format($goldRateUsdOz, 2)  . '</td></tr>
+                        <tr><td><b>Gold Rate (AED/oz)</b></td><td>' . number_format($goldRateAedOz, 2)  . '</td></tr>
+                        <tr><td><b>Gold Rate (AED/g)</b></td><td>'  . number_format($invoice->gold_rate_aed, 4) . '</td></tr>
                         <tr><td><b>Diamond Rate (' . $invoice->currency . '/Ct)</b></td><td>' . number_format($diamondRateDisplay, 2) . '</td></tr>
                     </table>
                 </td>
