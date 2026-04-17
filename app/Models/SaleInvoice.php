@@ -21,12 +21,12 @@ class SaleInvoice extends Model
         'net_amount_aed',
         'payment_method',
         'payment_term',
-        // cheque
+        // Cheque
         'cheque_no',
         'cheque_date',
         'bank_name',
         'cheque_amount',
-        // bank transfer
+        // Bank transfer
         'transfer_from_bank',
         'transfer_to_bank',
         'account_title',
@@ -34,14 +34,14 @@ class SaleInvoice extends Model
         'transaction_id',
         'transfer_date',
         'transfer_amount',
-        // material+making
+        // Material + making
         'material_weight',
         'material_purity',
         'material_value',
         'making_charges',
         'material_received_by',
         'material_given_by',
-        // rates
+        // Rates
         'gold_rate_usd',
         'gold_rate_aed_ounce',
         'gold_rate_aed',
@@ -49,16 +49,35 @@ class SaleInvoice extends Model
         'diamond_rate_aed',
         'purchase_gold_rate_aed',
         'purchase_making_rate_aed',
-        // meta
+        // Meta
         'created_by',
         'received_by',
     ];
 
     protected $casts = [
-        'invoice_date' => 'date',
-        'cheque_date'  => 'date',
-        'transfer_date'=> 'date',
-        'is_taxable'   => 'boolean',
+        'invoice_date'  => 'date',
+        'cheque_date'   => 'date',
+        'transfer_date' => 'date',
+        'is_taxable'    => 'boolean',
+
+        // Use float (not decimal:N) so arithmetic works correctly.
+        // decimal:N returns a string in Laravel, which breaks sum() and comparisons.
+        'net_amount'               => 'float',
+        'net_amount_aed'           => 'float',
+        'exchange_rate'            => 'float',
+        'cheque_amount'            => 'float',
+        'transfer_amount'          => 'float',
+        'material_weight'          => 'float',
+        'material_purity'          => 'float',
+        'material_value'           => 'float',
+        'making_charges'           => 'float',
+        'gold_rate_usd'            => 'float',
+        'gold_rate_aed_ounce'      => 'float',
+        'gold_rate_aed'            => 'float',
+        'diamond_rate_usd'         => 'float',
+        'diamond_rate_aed'         => 'float',
+        'purchase_gold_rate_aed'   => 'float',
+        'purchase_making_rate_aed' => 'float',
     ];
 
     // ── Relationships ──────────────────────────────────────────────────────
@@ -88,10 +107,10 @@ class SaleInvoice extends Model
         return $this->hasMany(SaleInvoiceAttachment::class);
     }
 
+    // morphMany is the correct way — matches how PurchaseInvoice uses vouchers()
     public function vouchers()
     {
-        return $this->hasMany(Voucher::class, 'reference_id')
-            ->where('reference_type', self::class);
+        return $this->morphMany(Voucher::class, 'reference');
     }
 
     public function createdBy()

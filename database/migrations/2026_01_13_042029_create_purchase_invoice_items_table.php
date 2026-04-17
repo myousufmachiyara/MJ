@@ -44,7 +44,7 @@ return new class extends Migration
 
             /* ================= REMARKS & FILES ================= */
             $table->string('remarks')->nullable();
-            $table->string('barcode_number')->nullable()->unique();
+            $table->string('barcode_number')->nullable()->index();
             $table->boolean('is_printed')->default(false);
             $table->timestamps();
 

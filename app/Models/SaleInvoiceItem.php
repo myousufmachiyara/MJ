@@ -34,8 +34,27 @@ class SaleInvoiceItem extends Model
     ];
 
     protected $casts = [
-        'is_printed' => 'boolean',
+        // Use float so arithmetic and sum() work correctly.
+        // decimal:N returns a string in Laravel which breaks calculations.
+        'gross_weight'   => 'float',
+        'purity'         => 'float',
+        'purity_weight'  => 'float',
+        'col_995'        => 'float',
+        'making_rate'    => 'float',
+        'making_value'   => 'float',
+        'parts_total'    => 'float',
+        'material_rate'  => 'float',
+        'material_value' => 'float',
+        'taxable_amount' => 'float',
+        'vat_percent'    => 'float',
+        'vat_amount'     => 'float',
+        'item_total'     => 'float',
+        'gold_rate'      => 'float',
+        'diamond_rate'   => 'float',
+        'is_printed'     => 'boolean',
     ];
+
+    // ── Relationships ──────────────────────────────────────────────────────
 
     public function saleInvoice()
     {

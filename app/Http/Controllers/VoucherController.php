@@ -13,8 +13,9 @@ use App\Services\myPDF;
 class VoucherController extends Controller
 {
     // =========================================================================
-    // VALID VOUCHER TYPES — add any new types here and they flow everywhere
+    // VALID VOUCHER TYPES
     // =========================================================================
+
     private const TYPES = [
         'purchase' => 'Purchase',
         'sale'     => 'Sale',
@@ -25,20 +26,16 @@ class VoucherController extends Controller
 
     // =========================================================================
     // INDEX
-    // Loads both simple (ac_dr_sid / ac_cr_sid) and complex (entries) vouchers
-    // and normalises them into display_debits / display_credits / display_total
-    // so the Blade never has to branch.
-    //
-    // KEY FIX: also eager-loads 'reference' (polymorphic) so we can resolve the
-    // human-readable invoice_no / order_no instead of just the raw reference_id.
+    // Loads both simple and complex vouchers and normalises them for Blade.
     // =========================================================================
+
     public function index($type)
     {
         $vouchers = Voucher::with([
-                'debitAccount',    // for simple vouchers
-                'creditAccount',   // for simple vouchers
-                'entries.account', // for complex (auto-generated) vouchers
-                'reference',       // ← NEW: source document (PurchaseInvoice, SaleInvoice…)
+                'debitAccount',
+                'creditAccount',
+                'entries.account',
+                'reference',
             ])
             ->where('voucher_type', $type)
             ->orderBy('voucher_date', 'desc')
@@ -46,7 +43,7 @@ class VoucherController extends Controller
             ->get()
             ->map(function (Voucher $v) {
 
-                // ── Normalise debit / credit display ──────────────────────────
+                // ── Normalise debit / credit for display ──────────────────────
                 if ($v->isSimple()) {
                     $v->display_debits  = [['account' => $v->debitAccount->name  ?? 'N/A', 'amount' => $v->amount ?? 0]];
                     $v->display_credits = [['account' => $v->creditAccount->name ?? 'N/A', 'amount' => $v->amount ?? 0]];
@@ -68,24 +65,18 @@ class VoucherController extends Controller
                     $v->is_auto       = !is_null($v->reference_type);
                 }
 
-                // ── Reference label ───────────────────────────────────────────
-                // Prefer human-readable invoice_no from the loaded reference.
-                // Falls back to "#ID" if the reference model is missing.
-                $v->reference_label     = null;
-                $v->reference_link      = null;
+                // ── Source document label + link ──────────────────────────────
+                $v->reference_label = null;
+                $v->reference_link  = null;
 
                 if ($v->reference_type && $v->reference_id) {
                     $shortClass = class_basename($v->reference_type);
-
-                    // Resolve the invoice / document number from the relation
-                    $docNo = $v->reference?->invoice_no
-                          ?? $v->reference?->order_no
-                          ?? ('#' . $v->reference_id);
+                    $docNo      = $v->reference?->invoice_no
+                               ?? $v->reference?->order_no
+                               ?? ('#' . $v->reference_id);
 
                     $v->reference_label = $shortClass . ' · ' . $docNo;
-
-                    // Build a link to the source document's show/edit route
-                    $v->reference_link = match($shortClass) {
+                    $v->reference_link  = match ($shortClass) {
                         'PurchaseInvoice' => route('purchase_invoices.edit', $v->reference_id),
                         'SaleInvoice'     => route('sale_invoices.edit',     $v->reference_id),
                         default           => null,
@@ -95,6 +86,8 @@ class VoucherController extends Controller
                 return $v;
             });
 
+        // All COA accounts — used in add/edit modal dropdowns.
+        // Grouped by type so the Blade can render optgroups.
         $accounts   = ChartOfAccounts::orderBy('account_code')->get();
         $validTypes = self::TYPES;
 
@@ -102,11 +95,12 @@ class VoucherController extends Controller
     }
 
     // =========================================================================
-    // SHOW  (used by edit modal fetch)
+    // SHOW  (used by the edit modal JS fetch)
     // =========================================================================
+
     public function show($type, $id)
     {
-        $voucher = Voucher::with(['debitAccount', 'creditAccount', 'entries.account', 'reference'])
+        $voucher = Voucher::with(['debitAccount', 'creditAccount', 'entries.account'])
             ->findOrFail($id);
 
         return response()->json([
@@ -130,8 +124,9 @@ class VoucherController extends Controller
     }
 
     // =========================================================================
-    // CREATE
+    // CREATE  (standalone create page — not used in this app; modal is primary)
     // =========================================================================
+
     public function create($type)
     {
         $accounts   = ChartOfAccounts::orderBy('account_code')->get();
@@ -140,8 +135,9 @@ class VoucherController extends Controller
     }
 
     // =========================================================================
-    // EDIT
+    // EDIT  (standalone edit page — not used in this app; modal is primary)
     // =========================================================================
+
     public function edit($type, $id)
     {
         $voucher    = Voucher::findOrFail($id);
@@ -151,12 +147,22 @@ class VoucherController extends Controller
     }
 
     // =========================================================================
-    // STORE  (simple / manual vouchers only)
+    // STORE
+    //
+    // Accepts manual payment/receipt/journal vouchers.
+    // The debit and credit accounts are selected from Chart of Accounts —
+    // this covers ALL payment channels:
+    //   Cash    → select 101001 Cash in Hand
+    //   Bank    → select 102001 Meezan Bank / 102002 HBL Bank etc.
+    //   Cheque  → select the bank COA account (same as bank transfer)
+    //   Vendor  → select vendor AP account (205001 etc.)
+    //   Customer→ select customer AR account (103001 etc.)
     // =========================================================================
+
     public function store(Request $request, $type)
     {
         try {
-            $data = $request->validate([
+            $request->validate([
                 'voucher_date' => 'required|date',
                 'ac_dr_sid'    => 'required|exists:chart_of_accounts,id',
                 'ac_cr_sid'    => 'required|exists:chart_of_accounts,id|different:ac_dr_sid',
@@ -175,31 +181,37 @@ class VoucherController extends Controller
             Voucher::create([
                 'voucher_no'   => Voucher::generateVoucherNo($type),
                 'voucher_type' => $type,
-                'voucher_date' => $data['voucher_date'],
-                'ac_dr_sid'    => $data['ac_dr_sid'],
-                'ac_cr_sid'    => $data['ac_cr_sid'],
-                'amount'       => $data['amount'],
-                'remarks'      => $data['remarks'] ?? null,
-                'attachments'  => $attachments,
+                'voucher_date' => $request->voucher_date,
+                'ac_dr_sid'    => $request->ac_dr_sid,
+                'ac_cr_sid'    => $request->ac_cr_sid,
+                'amount'       => $request->amount,
+                'remarks'      => $request->remarks,
+                'attachments'  => $attachments ?: null,
                 'created_by'   => auth()->id(),
             ]);
 
             return back()->with('success', ucfirst($type) . ' voucher added successfully.');
 
         } catch (\Throwable $e) {
-            Log::error("VoucherController::store [{$type}] — " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return back()->with('error', 'Something went wrong while adding the voucher. Check logs.');
+            Log::error("VoucherController::store [{$type}] — " . $e->getMessage(), [
+                'file'  => $e->getFile(),
+                'line'  => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return back()->with('error', 'Something went wrong: ' . $e->getMessage());
         }
     }
 
     // =========================================================================
     // UPDATE
     // =========================================================================
+
     public function update(Request $request, $type, $id)
     {
         try {
             $voucher = Voucher::findOrFail($id);
 
+            // Auto-generated vouchers cannot be edited here — edit the source invoice
             if (!$voucher->isSimple()) {
                 return back()->with('error',
                     'This voucher was auto-generated from ' .
@@ -208,7 +220,7 @@ class VoucherController extends Controller
                 );
             }
 
-            $data = $request->validate([
+            $request->validate([
                 'voucher_date' => 'required|date',
                 'ac_dr_sid'    => 'required|exists:chart_of_accounts,id',
                 'ac_cr_sid'    => 'required|exists:chart_of_accounts,id|different:ac_dr_sid',
@@ -225,30 +237,36 @@ class VoucherController extends Controller
             }
 
             $voucher->update([
-                'voucher_date' => $data['voucher_date'],
-                'ac_dr_sid'    => $data['ac_dr_sid'],
-                'ac_cr_sid'    => $data['ac_cr_sid'],
-                'amount'       => $data['amount'],
-                'remarks'      => $data['remarks'] ?? null,
-                'attachments'  => $attachments,
+                'voucher_date' => $request->voucher_date,
+                'ac_dr_sid'    => $request->ac_dr_sid,
+                'ac_cr_sid'    => $request->ac_cr_sid,
+                'amount'       => $request->amount,
+                'remarks'      => $request->remarks,
+                'attachments'  => $attachments ?: null,
             ]);
 
             return back()->with('success', ucfirst($type) . ' voucher updated successfully.');
 
         } catch (\Throwable $e) {
-            Log::error("VoucherController::update [{$type}] ID {$id} — " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return back()->with('error', 'Something went wrong while updating the voucher. Check logs.');
+            Log::error("VoucherController::update [{$type}] ID {$id} — " . $e->getMessage(), [
+                'file'  => $e->getFile(),
+                'line'  => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return back()->with('error', 'Something went wrong: ' . $e->getMessage());
         }
     }
 
     // =========================================================================
     // DESTROY
     // =========================================================================
+
     public function destroy($type, $id)
     {
         try {
             $voucher = Voucher::findOrFail($id);
 
+            // Delete any uploaded attachments
             if (!empty($voucher->attachments)) {
                 foreach ($voucher->attachments as $file) {
                     if (Storage::disk('public')->exists($file)) {
@@ -257,6 +275,7 @@ class VoucherController extends Controller
                 }
             }
 
+            // For complex vouchers also delete the accounting_entries rows
             if (!$voucher->isSimple()) {
                 AccountingEntry::where('voucher_id', $voucher->id)->delete();
             }
@@ -266,15 +285,20 @@ class VoucherController extends Controller
             return back()->with('success', ucfirst($type) . ' voucher deleted successfully.');
 
         } catch (\Throwable $e) {
-            Log::error("VoucherController::destroy [{$type}] ID {$id} — " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return back()->with('error', 'Something went wrong while deleting the voucher. Check logs.');
+            Log::error("VoucherController::destroy [{$type}] ID {$id} — " . $e->getMessage(), [
+                'file'  => $e->getFile(),
+                'line'  => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return back()->with('error', 'Something went wrong: ' . $e->getMessage());
         }
     }
 
     // =========================================================================
-    // PRINT  — handles both simple and complex vouchers
+    // PRINT — PDF voucher, supports both simple and complex vouchers
     // =========================================================================
-public function print($type, $id)
+
+    public function print($type, $id)
     {
         $voucher = Voucher::with([
             'debitAccount',
@@ -284,15 +308,14 @@ public function print($type, $id)
             'creator',
         ])->findOrFail($id);
 
-        // ── Resolve reference string ──────────────────────────────────────────
-        $shortClass = $voucher->reference_type ? class_basename($voucher->reference_type) : null;
-        $docNo      = $voucher->reference?->invoice_no ?? $voucher->reference?->order_no ?? null;
-        $refString  = $docNo ? "{$docNo}" : null;
+        // ── Reference document label ──────────────────────────────────────────
+        $docNo     = $voucher->reference?->invoice_no ?? $voucher->reference?->order_no ?? null;
+        $refString = $docNo;
 
-        // ── Build unified debit/credit rows ───────────────────────────────────
+        // ── Build unified debit / credit row collections ──────────────────────
         if ($voucher->isSimple()) {
             $debitLines  = collect([[
-                'account'   => $voucher->debitAccount->name ?? '-',
+                'account'   => $voucher->debitAccount->name  ?? '-',
                 'amount'    => $voucher->amount ?? 0,
                 'narration' => $voucher->remarks ?? '',
             ]]);
@@ -301,25 +324,27 @@ public function print($type, $id)
                 'amount'    => $voucher->amount ?? 0,
                 'narration' => '',
             ]]);
-            $printTotal = $voucher->amount ?? 0;
+            $printTotal = (float) ($voucher->amount ?? 0);
         } else {
             $debitEntries  = $voucher->entries->where('debit',  '>', 0)->values();
             $creditEntries = $voucher->entries->where('credit', '>', 0)->values();
-            $debitLines    = $debitEntries->map(fn($e) => [
+
+            $debitLines  = $debitEntries->map(fn($e) => [
                 'account'   => $e->account->name ?? '-',
-                'amount'    => $e->debit,
+                'amount'    => (float) $e->debit,
                 'narration' => $e->narration ?? '',
             ]);
-            $creditLines   = $creditEntries->map(fn($e) => [
+            $creditLines = $creditEntries->map(fn($e) => [
                 'account'   => $e->account->name ?? '-',
-                'amount'    => $e->credit,
+                'amount'    => (float) $e->credit,
                 'narration' => $e->narration ?? '',
             ]);
-            $printTotal = $debitEntries->sum('debit');
+            $printTotal = (float) $debitEntries->sum('debit');
         }
 
-        // ── PDF setup — identical to PurchaseInvoiceController ────────────────
-        $pdf = new MyPDF();   // ← same class as purchase invoice
+        // ── PDF setup — same as PurchaseInvoiceController ─────────────────────
+        // FIX: was "new MyPDF()" — correct class name is "new myPDF()" (lowercase m)
+        $pdf = new myPDF();
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
         $pdf->SetCreator('ERP');
@@ -328,7 +353,7 @@ public function print($type, $id)
         $pdf->setCellPadding(1.2);
         $pdf->AddPage();
 
-        // ── Company header — identical HTML to purchase invoice ───────────────
+        // ── Company header ────────────────────────────────────────────────────
         $logoPath = public_path('assets/img/mj-logo.jpeg');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="85">' : '';
 
@@ -350,7 +375,7 @@ public function print($type, $id)
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', '', 9);
 
-        // ── Voucher meta block (mirrors invoice date/number table) ────────────
+        // ── Meta block ───────────────────────────────────────────────────────
         $metaHtml = '
         <table cellpadding="3" width="100%">
             <tr>
@@ -385,9 +410,7 @@ public function print($type, $id)
         $pdf->Ln(2);
 
         // ── Accounting entries table ──────────────────────────────────────────
-        // Layout: # | Particulars (Dr) | Particulars (Cr) | Debit AED | Credit AED
-        // This mirrors double-entry format better than the old 5-column layout.
-        $maxRows = max($debitLines->count(), $creditLines->count());
+        $maxRows  = max($debitLines->count(), $creditLines->count());
         $rowsHtml = '';
 
         for ($i = 0; $i < $maxRows; $i++) {
@@ -397,18 +420,13 @@ public function print($type, $id)
 
             $rowsHtml .= '
             <tr style="background-color:' . $bg . ';text-align:center;">
-                <td width="4%">'  . ($i + 1) . '</td>
-                <td width="20%" style="text-align:left;">' . htmlspecialchars($dr['account'] ?? '') . '</td>
+                <td width="4%">' . ($i + 1) . '</td>
+                <td width="20%" style="text-align:left;">'         . htmlspecialchars($dr['account']   ?? '') . '</td>
                 <td width="20%" style="text-align:left;color:#555;">' . htmlspecialchars($cr['account'] ?? '') . '</td>
-                <td width="13%" style="text-align:right;">'
-                    . ($dr ? number_format($dr['amount'], 2) : '') .
-                '</td>
-                <td width="13%" style="text-align:right;">'
-                    . ($cr ? number_format($cr['amount'], 2) : '') .
-                '</td>
+                <td width="13%" style="text-align:right;">'        . ($dr ? number_format($dr['amount'], 2) : '') . '</td>
+                <td width="13%" style="text-align:right;">'        . ($cr ? number_format($cr['amount'], 2) : '') . '</td>
                 <td width="30%" style="text-align:left;font-size:8px;color:#666;">'
-                    . htmlspecialchars($dr['narration'] ?? $cr['narration'] ?? '') .
-                '</td>
+                    . htmlspecialchars($dr['narration'] ?? $cr['narration'] ?? '') . '</td>
             </tr>';
         }
 
@@ -440,22 +458,21 @@ public function print($type, $id)
         // ── Amount in words ───────────────────────────────────────────────────
         $pdf->Ln(3);
         $pdf->SetFont('helvetica', 'B', 9);
-        $wordsAED = $pdf->convertCurrencyToWords($printTotal, 'AED');
-        $pdf->Cell(0, 5, 'Amount in Words (AED): ' . $wordsAED, 0, 1, 'L');
+        $words = $pdf->convertCurrencyToWords($printTotal, 'AED');
+        $pdf->Cell(0, 5, 'Amount in Words (AED): ' . $words, 0, 1, 'L');
 
-        // ── Separator line ────────────────────────────────────────────────────
         $pdf->Ln(2);
         $pdf->Line(10, $pdf->GetY(), 200, $pdf->GetY());
         $pdf->Ln(3);
 
-        // ── Signatures — matches purchase invoice style ───────────────────────
+        // ── Signatures ───────────────────────────────────────────────────────
         $pdf->Ln(35);
         $y = $pdf->GetY();
         $pdf->Line(20,  $y, 80,  $y);
         $pdf->Line(130, $y, 190, $y);
         $pdf->SetFont('helvetica', '', 9);
-        $pdf->SetXY(20,  $y + 1); $pdf->Cell(60, 5, "Prepared By", 0, 0, 'C');
-        $pdf->SetXY(130, $y + 1); $pdf->Cell(60, 5, "Authorized Signature", 0, 0, 'C');
+        $pdf->SetXY(20,  $y + 1); $pdf->Cell(60, 5, 'Prepared By',          0, 0, 'C');
+        $pdf->SetXY(130, $y + 1); $pdf->Cell(60, 5, 'Authorized Signature', 0, 0, 'C');
 
         return $pdf->Output(strtolower($type) . '_' . $voucher->voucher_no . '.pdf', 'I');
     }

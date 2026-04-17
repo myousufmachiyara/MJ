@@ -116,21 +116,17 @@
             <div class="card-body py-2 bg-primary bg-opacity-10">
               <div class="row align-items-end g-2">
                 <div class="col-auto d-flex align-items-center">
-                  <i class="fas fa-barcode fa-2x text-primary me-2"></i>
-                  <strong class="text-primary">Barcode Scanner</strong>
+                  <i class="fas fa-barcode fa-2x text-light me-2"></i>
+                  <strong class="text-light">Barcode Scanner</strong>
                 </div>
                 <div class="col-md-5">
                   <div class="input-group">
-                    <input type="text"
-                           id="barcode_scan_input"
-                           class="form-control form-control-lg fw-bold"
-                           placeholder="Scan barcode or type &amp; press Enter…"
-                           autocomplete="off">
+                    <input type="text" id="barcode_scan_input" class="form-control" placeholder="Scan barcode or type &amp; press Enter…" autocomplete="off">
                     <button type="button" class="btn btn-primary fw-bold" id="barcode_scan_btn">
                       <i class="fas fa-search"></i> Search
                     </button>
                   </div>
-                  <small class="text-muted">USB/Bluetooth scanners supported. Scanned item is auto-added as a new row.</small>
+                  <small class="text-light">USB/Bluetooth scanners supported. Scanned item is auto-added as a new row.</small>
                 </div>
                 <div class="col-md-5">
                   <div id="barcode_scan_result" class="alert mb-0 py-2 px-3 d-none" role="alert" style="font-size:.9rem;"></div>

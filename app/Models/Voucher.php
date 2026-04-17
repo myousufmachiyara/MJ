@@ -24,17 +24,17 @@ class Voucher extends Model
     ];
 
     protected $casts = [
-        'attachments' => 'array',
+        'attachments'  => 'array',
         'voucher_date' => 'date',
+        'amount'       => 'float',
     ];
 
-    // ========================================
+    // =========================================================================
     // RELATIONSHIPS
-    // ========================================
-    
+    // =========================================================================
+
     /**
-     * Polymorphic relationship to source document
-     * (PurchaseInvoice, SaleInvoice, etc.)
+     * Source document (PurchaseInvoice, SaleInvoice, etc.)
      */
     public function reference()
     {
@@ -42,7 +42,7 @@ class Voucher extends Model
     }
 
     /**
-     * Multiple accounting entries for complex vouchers
+     * Multiple accounting entries — used by auto-generated (complex) vouchers.
      */
     public function entries()
     {
@@ -50,7 +50,7 @@ class Voucher extends Model
     }
 
     /**
-     * Debit account for simple vouchers
+     * Debit COA account — used by simple (manual) vouchers.
      */
     public function debitAccount()
     {
@@ -58,7 +58,7 @@ class Voucher extends Model
     }
 
     /**
-     * Credit account for simple vouchers
+     * Credit COA account — used by simple (manual) vouchers.
      */
     public function creditAccount()
     {
@@ -66,125 +66,100 @@ class Voucher extends Model
     }
 
     /**
-     * User who created the voucher
+     * User who created the voucher.
      */
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    /**
-     * Related production (if voucher is for production)
-     */
-    public function production()
-    {
-        return $this->hasOne(Production::class, 'voucher_id');
-    }
-
-    // ========================================
+    // =========================================================================
     // SCOPES
-    // ========================================
-    
-    /**
-     * Filter by voucher type
-     */
+    // =========================================================================
+
     public function scopeType($query, $type)
     {
         return $query->where('voucher_type', $type);
     }
 
-    /**
-     * Filter by date range
-     */
     public function scopeDateRange($query, $startDate, $endDate)
     {
         return $query->whereBetween('voucher_date', [$startDate, $endDate]);
     }
 
-    /**
-     * Filter by reference (e.g., all vouchers for PurchaseInvoices)
-     */
-    public function scopeReference($query, $referenceType)
+    public function scopeForReference($query, $referenceType)
     {
         return $query->where('reference_type', $referenceType);
     }
 
-    // ========================================
-    // HELPER METHODS
-    // ========================================
-    
+    // =========================================================================
+    // HELPERS
+    // =========================================================================
+
     /**
-     * Check if voucher is simple (single Dr/Cr pair)
+     * Simple voucher = single Dr/Cr pair (payment, receipt, journal).
+     * Complex voucher = multiple entries (auto-generated from invoices).
      */
-    public function isSimple()
+    public function isSimple(): bool
     {
-        return !is_null($this->ac_dr_sid) && !is_null($this->ac_cr_sid) && !is_null($this->amount);
+        return !is_null($this->ac_dr_sid)
+            && !is_null($this->ac_cr_sid)
+            && !is_null($this->amount);
+    }
+
+    public function isComplex(): bool
+    {
+        return !$this->isSimple();
+    }
+
+    public function getTotalDebitAttribute(): float
+    {
+        return $this->isSimple()
+            ? (float) $this->amount
+            : (float) $this->entries()->sum('debit');
+    }
+
+    public function getTotalCreditAttribute(): float
+    {
+        return $this->isSimple()
+            ? (float) $this->amount
+            : (float) $this->entries()->sum('credit');
+    }
+
+    public function isBalanced(): bool
+    {
+        return abs($this->total_debit - $this->total_credit) < 0.01;
     }
 
     /**
-     * Check if voucher is complex (multiple entries)
+     * Generate the next sequential voucher number for a given type.
+     *
+     * Prefixes:
+     *   purchase → PV    sale    → SV
+     *   payment  → PAY   receipt → RV
+     *   journal  → JV
      */
-    public function isComplex()
-    {
-        return $this->entries()->exists();
-    }
-
-    /**
-     * Get total debit amount (works for both simple and complex)
-     */
-    public function getTotalDebitAttribute()
-    {
-        if ($this->isSimple()) {
-            return $this->amount;
-        }
-        return $this->entries()->sum('debit');
-    }
-
-    /**
-     * Get total credit amount (works for both simple and complex)
-     */
-    public function getTotalCreditAttribute()
-    {
-        if ($this->isSimple()) {
-            return $this->amount;
-        }
-        return $this->entries()->sum('credit');
-    }
-
-    /**
-     * Check if voucher is balanced
-     */
-    public function isBalanced()
-    {
-        return abs($this->total_debit - $this->total_credit) < 0.01; // Allow 0.01 rounding difference
-    }
-
-    /**
-     * Generate next voucher number
-     */
-    public static function generateVoucherNo($type)
+    public static function generateVoucherNo(string $type): string
     {
         $prefixes = [
             'purchase' => 'PV',
-            'sale' => 'SV',
-            'payment' => 'PAY',
-            'receipt' => 'RV',
-            'journal' => 'JV',
-            'purchase_return' => 'PR',
-            'sale_return' => 'SR',
+            'sale'     => 'SV',
+            'payment'  => 'PAY',
+            'receipt'  => 'RV',
+            'journal'  => 'JV',
         ];
 
         $prefix = $prefixes[$type] ?? 'VO';
-        
-        $lastVoucher = self::withTrashed()
+
+        $last = self::withTrashed()
             ->where('voucher_no', 'LIKE', $prefix . '-%')
             ->orderBy('id', 'desc')
             ->first();
 
-        $nextNumber = $lastVoucher 
-            ? intval(str_replace($prefix . '-', '', $lastVoucher->voucher_no)) + 1 
+        $next = $last
+            ? (int) str_replace($prefix . '-', '', $last->voucher_no) + 1
             : 1;
 
-        return $prefix . '-' . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+        return $prefix . '-' . str_pad($next, 5, '0', STR_PAD_LEFT);
     }
 }

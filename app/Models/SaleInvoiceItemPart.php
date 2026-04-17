@@ -19,6 +19,17 @@ class SaleInvoiceItemPart extends Model
         'total',
     ];
 
+    protected $casts = [
+        // Use float so arithmetic and sum() work correctly.
+        'qty'        => 'float',
+        'rate'       => 'float',
+        'stone_qty'  => 'float',
+        'stone_rate' => 'float',
+        'total'      => 'float',
+    ];
+
+    // ── Relationships ──────────────────────────────────────────────────────
+
     public function saleInvoiceItem()
     {
         return $this->belongsTo(SaleInvoiceItem::class);
