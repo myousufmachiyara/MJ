@@ -689,7 +689,7 @@
         let newGross = baseGross + (totalDiamondCTS / 5) + (totalStoneCTS / 5);
 
         // Gross Wt is readonly so .val() does not trigger any input event — no guard needed
-        itemRow.find('.gross-weight').val(newGross.toFixed(3));
+        itemRow.find('.gross-weight').val(newGross.toFixed(4));
 
         calculateRow(itemRow);
         calculateTotals();
@@ -734,13 +734,13 @@
         const vatAmount     = taxableAmount * vatPercent / 100;
         const itemTotal     = materialValue + makingValue + partsTotal + vatAmount;
 
-        row.find('.taxable-amount').val(taxableAmount.toFixed(2));  // shows making only
-        row.find('.vat-amount').val(vatAmount.toFixed(2));
-        row.find('.item-total').val(itemTotal.toFixed(2));
-        row.find('.purity-weight').val(netWt.toFixed(3));
-        row.find('.col-995').val(col995.toFixed(3));
-        row.find('.making-value').val(makingValue.toFixed(2));
-        row.find('.material-value').val(materialValue.toFixed(2));
+        row.find('.taxable-amount').val(taxableAmount.toFixed(4));  // shows making only
+        row.find('.vat-amount').val(vatAmount.toFixed(4));
+        row.find('.item-total').val(itemTotal.toFixed(4));
+        row.find('.purity-weight').val(netWt.toFixed(4));
+        row.find('.col-995').val(col995.toFixed(4));
+        row.find('.making-value').val(makingValue.toFixed(4));
+        row.find('.material-value').val(materialValue.toFixed(4));
     }
 
     function calculateTotals() {
@@ -789,30 +789,30 @@
 
         const netTotal = sumItemTotal;  // material + making + parts + vat
 
-        $('#sum_gold_gross_weight').val(sumGoldGross.toFixed(3));
-        $('#sum_diamond_cts').val(totalDiamondCTS.toFixed(3));
-        $('#sum_stone_qty').val(totalStoneQty.toFixed(2));
-        $('#sum_purity_weight').val(sumNetWt.toFixed(3));
-        $('#sum_995').val(sum995.toFixed(3));
-        $('#sum_making_value').val(sumMakingValue.toFixed(2));
-        $('#sum_material_value').val(sumMaterial.toFixed(2));
-        $('#sum_vat_amount').val(sumVAT.toFixed(2));
-        $('#sum_diamond_value').val(totalDiamondVal.toFixed(2));
-        $('#sum_stone_value').val(totalStoneVal.toFixed(2));
-        $('#net_amount_display').val(netTotal.toFixed(2));
-        $('#net_amount').val(netTotal.toFixed(2));
+        $('#sum_gold_gross_weight').val(sumGoldGross.toFixed(4));
+        $('#sum_diamond_cts').val(totalDiamondCTS.toFixed(4));
+        $('#sum_stone_qty').val(totalStoneQty.toFixed(4));
+        $('#sum_purity_weight').val(sumNetWt.toFixed(4));
+        $('#sum_995').val(sum995.toFixed(4));
+        $('#sum_making_value').val(sumMakingValue.toFixed(4));
+        $('#sum_material_value').val(sumMaterial.toFixed(4));
+        $('#sum_vat_amount').val(sumVAT.toFixed(4));
+        $('#sum_diamond_value').val(totalDiamondVal.toFixed(4));
+        $('#sum_stone_value').val(totalStoneVal.toFixed(4));
+        $('#net_amount_display').val(netTotal.toFixed(4));
+        $('#net_amount').val(netTotal.toFixed(4));
 
         const currency = $('#currency').val();
         const exRate   = parseFloat($('#exchange_rate').val()) || 1;
         $('#converted_total').val(
-            currency === 'USD' ? (netTotal * exRate).toFixed(2) : netTotal.toFixed(2)
+            currency === 'USD' ? (netTotal * exRate).toFixed(4) : netTotal.toFixed(4)
         );
 
         if ($('#payment_method').val() === 'material+making cost') {
-            $('input[name="material_weight"]').val(sum995.toFixed(3));
-            $('input[name="material_purity"]').val(sumNetWt.toFixed(3));
-            $('input[name="material_value"]').val(sumMaterial.toFixed(2));
-            $('input[name="making_charges"]').val(sumMakingValue.toFixed(2));  // making only
+            $('input[name="material_weight"]').val(sum995.toFixed(4));
+            $('input[name="material_purity"]').val(sumNetWt.toFixed(4));
+            $('input[name="material_value"]').val(sumMaterial.toFixed(4));
+            $('input[name="making_charges"]').val(sumMakingValue.toFixed(4));  // making only
         }
     }
 
@@ -823,7 +823,7 @@
 
         if (id === 'gold_rate_usd' || id === 'exchange_rate') {
             const goldUsd = parseFloat($('#gold_rate_usd').val()) || 0;
-            $('#gold_rate_aed_ounce').val((goldUsd * exRate).toFixed(2));
+            $('#gold_rate_aed_ounce').val((goldUsd * exRate).toFixed(4));
         }
         const goldAedOunceFinal = parseFloat($('#gold_rate_aed_ounce').val()) || 0;
         $('#gold_rate_aed').val((goldAedOunceFinal / TROY_OUNCE_TO_GRAM).toFixed(4));
@@ -860,7 +860,7 @@
         const certChg   = parseFloat(row.find('.part-cert-charges').val())   || 0;
 
         const total = (qty * rate) + (stoneQty * stoneRate) + certChg;
-        row.find('.part-total').val(total.toFixed(2));
+        row.find('.part-total').val(total.toFixed(4));
 
         const itemRow = row.closest('.parts-row').prev('.item-row');
         recalcItemGrossWeight(itemRow);

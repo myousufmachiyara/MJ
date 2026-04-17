@@ -4,11 +4,11 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+// ============================================================
+// Migration 1: sale_invoices
+// ============================================================
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('sale_invoices', function (Blueprint $table) {
@@ -17,7 +17,7 @@ return new class extends Migration
             /* ================= BASIC ================= */
             $table->string('invoice_no', 20)->unique();
             $table->boolean('is_taxable')->default(1);
-            $table->unsignedBigInteger('customer_id');          // vendor_id → customer_id
+            $table->unsignedBigInteger('customer_id');
             $table->date('invoice_date');
             $table->text('remarks')->nullable();
 
@@ -39,7 +39,7 @@ return new class extends Migration
 
             /* ================= BANK TRANSFER ================= */
             $table->unsignedBigInteger('transfer_from_bank')->nullable();
-            $table->string('transfer_to_bank', 150)->nullable();   // Customer bank name
+            $table->string('transfer_to_bank', 150)->nullable();
             $table->string('account_title', 150)->nullable();
             $table->string('account_no', 100)->nullable();
             $table->string('transaction_id', 100)->nullable();
@@ -47,22 +47,32 @@ return new class extends Migration
             $table->decimal('transfer_amount', 18, 2)->nullable();
 
             /* ================= MATERIAL + MAKING ================= */
-            $table->decimal('material_weight', 15, 3)->nullable();
-            $table->decimal('material_purity', 10, 3)->nullable();
-            $table->decimal('material_value', 18, 2)->nullable();
-            $table->decimal('making_charges', 18, 2)->nullable();
+            $table->decimal('material_weight', 15, 4)->nullable();
+            $table->decimal('material_purity', 10, 4)->nullable();
+            $table->decimal('material_value', 18, 4)->nullable();
+            $table->decimal('making_charges', 18, 4)->nullable();
             $table->string('material_received_by', 100)->nullable();
             $table->string('material_given_by', 100)->nullable();
 
-            /* ================= METAL RATES (FIXED) ================= */
-            $table->decimal('gold_rate_aed', 18, 4)->nullable();
+            /* ================= METAL RATES ================= */
+            // Gold — three columns:
+            //   gold_rate_usd       : user input (USD/oz)
+            //   gold_rate_aed_ounce : AED/oz — auto-filled (USD × exchange_rate)
+            //   gold_rate_aed       : AED/gram — used in all calculations (÷ 31.1035)
             $table->decimal('gold_rate_usd', 18, 4)->nullable();
-            $table->decimal('diamond_rate_aed', 18, 4)->nullable();
-            $table->decimal('diamond_rate_usd', 18, 4)->nullable();
+            $table->decimal('gold_rate_aed_ounce', 18, 4)->nullable();
+            $table->decimal('gold_rate_aed', 18, 4)->nullable();
 
-            /* ================= PURCHASE / COST RATES (for profit %) ================= */
-            $table->decimal('purchase_gold_rate_aed', 18, 4)->nullable();   // cost gold rate per gram
-            $table->decimal('purchase_making_rate_aed', 18, 4)->nullable(); // cost making rate per gram
+            // Diamond — two columns:
+            //   diamond_rate_usd : user input (USD/Ct)
+            //   diamond_rate_aed : AED/Ct (USD × exchange_rate or direct entry)
+            $table->decimal('diamond_rate_usd', 18, 4)->nullable();
+            $table->decimal('diamond_rate_aed', 18, 4)->nullable();
+
+            /* ================= PROFIT CALC RATES ================= */
+            // Stored at invoice level for reference
+            $table->decimal('purchase_gold_rate_aed', 18, 4)->nullable();
+            $table->decimal('purchase_making_rate_aed', 18, 4)->nullable();
 
             /* ================= META ================= */
             $table->unsignedBigInteger('created_by');
@@ -78,9 +88,6 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('sale_invoices');

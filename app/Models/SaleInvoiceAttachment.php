@@ -11,8 +11,8 @@ class SaleInvoiceAttachment extends Model
         'file_path',
     ];
 
-    public function invoice()
+    public function saleInvoice()
     {
-        return $this->belongsTo(SaleInvoice::class, 'sale_invoice_id');
+        return $this->belongsTo(SaleInvoice::class);
     }
 }

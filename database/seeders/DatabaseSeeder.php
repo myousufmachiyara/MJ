@@ -5,6 +5,8 @@ namespace Database\Seeders;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use App\Models\HeadOfAccounts;
 use App\Models\SubHeadOfAccounts;
 use App\Models\ChartOfAccounts;
@@ -22,27 +24,28 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $now = now();
+        $now    = now();
         $userId = 1;
 
-        // 🔑 Create Super Admin User
+        // ── Users & Roles ──────────────────────────────────────────────────────
+
         $admin = User::firstOrCreate(
             ['username' => 'admin'],
             [
-                'name' => 'Admin',
-                'email' => 'admin@gmail.com',
+                'name'     => 'Admin',
+                'email'    => 'admin@gmail.com',
                 'password' => Hash::make('12345678'),
             ]
         );
 
-        $superAdmin = Role::firstOrCreate(['name' => 'superadmin']);
-        $admin->assignRole($superAdmin);
+        $superAdminRole = Role::firstOrCreate(['name' => 'superadmin']);
+        $admin->assignRole($superAdminRole);
 
         $managerUser = User::firstOrCreate(
             ['username' => 'm.kashif'],
             [
-                'name' => 'M.Kashif',
-                'email' => null,
+                'name'     => 'M.Kashif',
+                'email'    => null,
                 'password' => Hash::make('12345678'),
             ]
         );
@@ -50,17 +53,16 @@ class DatabaseSeeder extends Seeder
         $managerRole = Role::firstOrCreate(['name' => 'manager']);
         $managerUser->assignRole($managerRole);
 
-        // 📌 Functional Modules
+        // ── Permissions ────────────────────────────────────────────────────────
+
         $modules = [
             'user_roles', 'users',
             'coa', 'shoa',
             'products', 'product_categories', 'product_subcategories', 'attributes',
             'purities',
-            'locations', 'stock_transfer',
             'purchase_invoices', 'purchase_return',
             'sale_invoices', 'sale_return',
-            'payment_vouchers', 'vouchers',
-            'production', 'production_receiving', 'production_return',
+            'vouchers',
         ];
 
         $managerModules = [
@@ -69,7 +71,7 @@ class DatabaseSeeder extends Seeder
             'purities',
             'purchase_invoices', 'purchase_return',
             'sale_invoices', 'sale_return',
-            'payment_vouchers', 'vouchers',
+            'vouchers',
         ];
 
         $actions = ['index', 'create', 'edit', 'delete', 'print'];
@@ -80,73 +82,93 @@ class DatabaseSeeder extends Seeder
             }
         }
 
+        // Report permissions
+        foreach (['inventory', 'purchase', 'sales', 'accounts'] as $report) {
+            Permission::firstOrCreate(['name' => "reports.$report"]);
+        }
+
+        // Sync superadmin with everything
+        $superAdminRole->syncPermissions(Permission::all());
+
+        // Manager gets module + report permissions
         $managerPermissions = [];
         foreach ($managerModules as $module) {
             foreach ($actions as $action) {
                 $managerPermissions[] = "$module.$action";
             }
         }
-
-        $reports = ['inventory', 'purchase', 'production', 'sales', 'accounts'];
-        foreach ($reports as $report) {
-            Permission::firstOrCreate(['name' => "reports.$report"]);
-        }
-
-        $reportPermissions = ['reports.inventory', 'reports.purchase', 'reports.sales', 'reports.accounts'];
-
-        $superAdmin->syncPermissions(Permission::all());
+        $managerPermissions = array_merge($managerPermissions, [
+            'reports.inventory', 'reports.purchase', 'reports.sales', 'reports.accounts',
+        ]);
         $managerRole->syncPermissions(
-            Permission::whereIn('name', array_merge($managerPermissions, $reportPermissions))->get()
+            Permission::whereIn('name', $managerPermissions)->get()
         );
 
-        // ---------------------
-        // HEADS OF ACCOUNTS
-        // ---------------------
-        HeadOfAccounts::insert([
-            ['id' => 1, 'name' => 'Assets',      'created_at' => $now, 'updated_at' => $now],
-            ['id' => 2, 'name' => 'Liabilities', 'created_at' => $now, 'updated_at' => $now],
-            ['id' => 3, 'name' => 'Equity',      'created_at' => $now, 'updated_at' => $now],
-            ['id' => 4, 'name' => 'Revenue',     'created_at' => $now, 'updated_at' => $now],
-            ['id' => 5, 'name' => 'Expenses',    'created_at' => $now, 'updated_at' => $now],
-        ]);
+        // ── Heads of Accounts ──────────────────────────────────────────────────
 
-        // ---------------------
-        // SUB HEADS
-        // ---------------------
-        SubHeadOfAccounts::insert([
-            ['id' =>  1, 'hoa_id' => 1, 'name' => 'Cash & Cash Equivalents',     'created_at' => $now, 'updated_at' => $now],
-            ['id' =>  2, 'hoa_id' => 1, 'name' => 'Bank Accounts',               'created_at' => $now, 'updated_at' => $now],
-            ['id' =>  3, 'hoa_id' => 1, 'name' => 'Inventory',                   'created_at' => $now, 'updated_at' => $now],
-            ['id' =>  4, 'hoa_id' => 1, 'name' => 'Accounts Receivable',         'created_at' => $now, 'updated_at' => $now],
-            ['id' =>  5, 'hoa_id' => 1, 'name' => 'VAT Recoverable (Input Tax)', 'created_at' => $now, 'updated_at' => $now],
-            ['id' =>  6, 'hoa_id' => 2, 'name' => 'Accounts Payable',            'created_at' => $now, 'updated_at' => $now],
-            ['id' =>  7, 'hoa_id' => 2, 'name' => 'VAT Payable (Output Tax)',    'created_at' => $now, 'updated_at' => $now],
-            ['id' =>  8, 'hoa_id' => 3, 'name' => 'Owner Capital',               'created_at' => $now, 'updated_at' => $now],
-            ['id' =>  9, 'hoa_id' => 3, 'name' => 'Retained Earnings',           'created_at' => $now, 'updated_at' => $now],
-            ['id' => 10, 'hoa_id' => 4, 'name' => 'Sales Revenue',               'created_at' => $now, 'updated_at' => $now],
-            ['id' => 11, 'hoa_id' => 4, 'name' => 'Service Income',              'created_at' => $now, 'updated_at' => $now],
-            ['id' => 12, 'hoa_id' => 5, 'name' => 'Material Purchases',          'created_at' => $now, 'updated_at' => $now],
-            ['id' => 13, 'hoa_id' => 5, 'name' => 'Manufacturing & Making',      'created_at' => $now, 'updated_at' => $now],
-            ['id' => 14, 'hoa_id' => 5, 'name' => 'Operating Expenses',          'created_at' => $now, 'updated_at' => $now],
-        ]);
+        // Use firstOrCreate so re-seeding doesn't fail on duplicate IDs
+        $heads = [
+            ['id' => 1, 'name' => 'Assets'],
+            ['id' => 2, 'name' => 'Liabilities'],
+            ['id' => 3, 'name' => 'Equity'],
+            ['id' => 4, 'name' => 'Revenue'],
+            ['id' => 5, 'name' => 'Expenses'],
+        ];
 
-        // ---------------------
-        // CHART OF ACCOUNTS
-        // ---------------------
+        foreach ($heads as $head) {
+            HeadOfAccounts::firstOrCreate(
+                ['id' => $head['id']],
+                array_merge($head, ['created_at' => $now, 'updated_at' => $now])
+            );
+        }
+
+        // ── Sub Heads of Accounts ──────────────────────────────────────────────
+
+        $subHeads = [
+            ['id' =>  1, 'hoa_id' => 1, 'name' => 'Cash & Cash Equivalents'],
+            ['id' =>  2, 'hoa_id' => 1, 'name' => 'Bank Accounts'],
+            ['id' =>  3, 'hoa_id' => 1, 'name' => 'Inventory'],
+            ['id' =>  4, 'hoa_id' => 1, 'name' => 'Accounts Receivable'],
+            ['id' =>  5, 'hoa_id' => 1, 'name' => 'VAT Recoverable (Input Tax)'],
+            ['id' =>  6, 'hoa_id' => 2, 'name' => 'Accounts Payable'],
+            ['id' =>  7, 'hoa_id' => 2, 'name' => 'VAT Payable (Output Tax)'],
+            ['id' =>  8, 'hoa_id' => 3, 'name' => 'Owner Capital'],
+            ['id' =>  9, 'hoa_id' => 3, 'name' => 'Retained Earnings'],
+            ['id' => 10, 'hoa_id' => 4, 'name' => 'Sales Revenue'],
+            ['id' => 11, 'hoa_id' => 4, 'name' => 'Service Income'],
+            ['id' => 12, 'hoa_id' => 5, 'name' => 'Material Purchases'],
+            ['id' => 13, 'hoa_id' => 5, 'name' => 'Manufacturing & Making'],
+            ['id' => 14, 'hoa_id' => 5, 'name' => 'Operating Expenses'],
+        ];
+
+        foreach ($subHeads as $sub) {
+            SubHeadOfAccounts::firstOrCreate(
+                ['id' => $sub['id']],
+                array_merge($sub, ['created_at' => $now, 'updated_at' => $now])
+            );
+        }
+
+        // ── Chart of Accounts ──────────────────────────────────────────────────
+
         $coaData = [
-            // Assets
+            // Assets — cash
             ['account_code' => '101001', 'shoa_id' =>  1, 'name' => 'Cash in Hand',                 'account_type' => 'cash'],
+            // Assets — bank
             ['account_code' => '102001', 'shoa_id' =>  2, 'name' => 'Meezan Bank',                  'account_type' => 'bank'],
             ['account_code' => '102002', 'shoa_id' =>  2, 'name' => 'HBL Bank',                     'account_type' => 'bank'],
+            // Assets — inventory
             ['account_code' => '104001', 'shoa_id' =>  3, 'name' => 'Gold Inventory',               'account_type' => 'asset'],
             ['account_code' => '104002', 'shoa_id' =>  3, 'name' => 'Diamond Inventory',            'account_type' => 'asset'],
             ['account_code' => '104003', 'shoa_id' =>  3, 'name' => 'Parts Inventory',              'account_type' => 'asset'],
+            // Assets — receivable / customers
             ['account_code' => '103001', 'shoa_id' =>  4, 'name' => 'Customer 01',                  'account_type' => 'customer'],
             ['account_code' => '103002', 'shoa_id' =>  4, 'name' => 'Customer 02',                  'account_type' => 'customer'],
+            // Assets — VAT input
             ['account_code' => '105001', 'shoa_id' =>  5, 'name' => 'VAT Input Tax Recoverable',    'account_type' => 'asset'],
-            // Liabilities
+            // Liabilities — vendors / payable
             ['account_code' => '205001', 'shoa_id' =>  6, 'name' => 'Vendor 01',                    'account_type' => 'vendor'],
             ['account_code' => '205002', 'shoa_id' =>  6, 'name' => 'Vendor 02',                    'account_type' => 'vendor'],
+            // Liabilities — VAT output
             ['account_code' => '208001', 'shoa_id' =>  7, 'name' => 'Output VAT Payable',           'account_type' => 'liability'],
             // Equity
             ['account_code' => '301001', 'shoa_id' =>  8, 'name' => 'Owner Capital',                'account_type' => 'equity'],
@@ -156,11 +178,12 @@ class DatabaseSeeder extends Seeder
             ['account_code' => '401002', 'shoa_id' => 10, 'name' => 'Diamond Sales Revenue',        'account_type' => 'revenue'],
             ['account_code' => '402001', 'shoa_id' => 11, 'name' => 'Making Charges Income',        'account_type' => 'revenue'],
             ['account_code' => '403001', 'shoa_id' => 10, 'name' => 'Parts Sales Revenue',          'account_type' => 'revenue'],
-            // Expenses
+            // Expenses — material purchases
             ['account_code' => '510001', 'shoa_id' => 12, 'name' => 'Material Purchases (Gold)',    'account_type' => 'expenses'],
             ['account_code' => '510002', 'shoa_id' => 12, 'name' => 'Material Purchases (Diamond)', 'account_type' => 'expenses'],
             ['account_code' => '510003', 'shoa_id' => 13, 'name' => 'Making Charges Expense',       'account_type' => 'expenses'],
             ['account_code' => '510004', 'shoa_id' => 12, 'name' => 'Parts Purchases',              'account_type' => 'expenses'],
+            // Expenses — operating
             ['account_code' => '601001', 'shoa_id' => 14, 'name' => 'Salaries & Wages',             'account_type' => 'expenses'],
             ['account_code' => '601002', 'shoa_id' => 14, 'name' => 'Rent Expense',                 'account_type' => 'expenses'],
             ['account_code' => '601003', 'shoa_id' => 14, 'name' => 'Utilities Expense',            'account_type' => 'expenses'],
@@ -168,29 +191,31 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($coaData as $item) {
-            ChartOfAccounts::create(array_merge($item, [
-                'receivables'  => 0.00,
-                'payables'     => 0.00,
-                'trn'          => null,
-                'opening_date' => $now,
-                'credit_limit' => 0.00,
-                'remarks'      => null,
-                'address'      => null,
-                'contact_no'   => null,
-                'created_by'   => $userId,
-                'updated_by'   => $userId,
-            ]));
+            ChartOfAccounts::firstOrCreate(
+                ['account_code' => $item['account_code']],
+                array_merge($item, [
+                    'receivables'  => 0.00,
+                    'payables'     => 0.00,
+                    'trn'          => null,
+                    'opening_date' => $now,
+                    'credit_limit' => 0.00,
+                    'remarks'      => null,
+                    'address'      => null,
+                    'contact_no'   => null,
+                    'created_by'   => $userId,
+                    'updated_by'   => $userId,
+                ])
+            );
         }
 
-        // ---------------------
-        // PURITIES
-        // ---------------------
+        // ── Purities ───────────────────────────────────────────────────────────
+
         $purities = [
-            ['label' => '24K (99.9%)', 'value' => 0.99, 'sort_order' => 1],
-            ['label' => '22K (92%)',   'value' => 0.92, 'sort_order' => 2],
-            ['label' => '21K (88%)',   'value' => 0.88, 'sort_order' => 3],
-            ['label' => '18K (75%)',   'value' => 0.75, 'sort_order' => 4],
-            ['label' => '14K (60%)',   'value' => 0.60, 'sort_order' => 5],
+            ['label' => '24K (99.9%)', 'value' => 0.999, 'sort_order' => 1],
+            ['label' => '22K (92%)',   'value' => 0.92,  'sort_order' => 2],
+            ['label' => '21K (88%)',   'value' => 0.88,  'sort_order' => 3],
+            ['label' => '18K (75%)',   'value' => 0.75,  'sort_order' => 4],
+            ['label' => '14K (60%)',   'value' => 0.60,  'sort_order' => 5],
             ['label' => '9K (37.5%)',  'value' => 0.375, 'sort_order' => 6],
         ];
 
@@ -198,10 +223,9 @@ class DatabaseSeeder extends Seeder
             Purity::firstOrCreate(['value' => $row['value']], $row);
         }
 
-        // ---------------------
-        // MEASUREMENT UNITS
-        // ---------------------
-        MeasurementUnit::insert([
+        // ── Measurement Units ──────────────────────────────────────────────────
+
+        $units = [
             ['id' => 1, 'name' => 'Carat',      'shortcode' => 'ct'],
             ['id' => 2, 'name' => 'Milligram',  'shortcode' => 'mg'],
             ['id' => 3, 'name' => 'Kilogram',   'shortcode' => 'kg'],
@@ -210,63 +234,88 @@ class DatabaseSeeder extends Seeder
             ['id' => 6, 'name' => 'Karat',      'shortcode' => 'K'],
             ['id' => 7, 'name' => 'Millimeter', 'shortcode' => 'mm'],
             ['id' => 8, 'name' => 'Pieces',     'shortcode' => 'pcs'],
-        ]);
+        ];
 
-        // ---------------------
-        // PRODUCT CATEGORIES
-        // ---------------------
-        ProductCategory::insert([
-            ['id' =>  1, 'name' => 'Diamond',  'code' => 'DIAM', 'created_at' => now(), 'updated_at' => now()],
-            ['id' =>  2, 'name' => 'Gold',     'code' => 'GOLD', 'created_at' => now(), 'updated_at' => now()],
-            ['id' =>  3, 'name' => 'Stone',    'code' => 'STON', 'created_at' => now(), 'updated_at' => now()],
-            ['id' =>  4, 'name' => 'Chain',    'code' => 'CHAI', 'created_at' => now(), 'updated_at' => now()],
-            ['id' =>  5, 'name' => 'Ring',     'code' => 'RING', 'created_at' => now(), 'updated_at' => now()],
-            ['id' =>  6, 'name' => 'Earing',   'code' => 'EARI', 'created_at' => now(), 'updated_at' => now()],
-            ['id' =>  7, 'name' => 'Pendent',  'code' => 'PEND', 'created_at' => now(), 'updated_at' => now()],
-            ['id' =>  8, 'name' => 'Bracelet', 'code' => 'BRAC', 'created_at' => now(), 'updated_at' => now()],
-            ['id' =>  9, 'name' => 'Bangel',   'code' => 'BANG', 'created_at' => now(), 'updated_at' => now()],
-            ['id' => 10, 'name' => 'Necklace', 'code' => 'NECK', 'created_at' => now(), 'updated_at' => now()],
-        ]);
+        foreach ($units as $unit) {
+            MeasurementUnit::firstOrCreate(['id' => $unit['id']], $unit);
+        }
 
-        ProductSubcategory::insert([
+        // ── Product Categories ─────────────────────────────────────────────────
+
+        $categories = [
+            ['id' =>  1, 'name' => 'Diamond',  'code' => 'DIAM'],
+            ['id' =>  2, 'name' => 'Gold',     'code' => 'GOLD'],
+            ['id' =>  3, 'name' => 'Stone',    'code' => 'STON'],
+            ['id' =>  4, 'name' => 'Chain',    'code' => 'CHAI'],
+            ['id' =>  5, 'name' => 'Ring',     'code' => 'RING'],
+            ['id' =>  6, 'name' => 'Earing',   'code' => 'EARI'],
+            ['id' =>  7, 'name' => 'Pendent',  'code' => 'PEND'],
+            ['id' =>  8, 'name' => 'Bracelet', 'code' => 'BRAC'],
+            ['id' =>  9, 'name' => 'Bangel',   'code' => 'BANG'],
+            ['id' => 10, 'name' => 'Necklace', 'code' => 'NECK'],
+        ];
+
+        foreach ($categories as $cat) {
+            ProductCategory::firstOrCreate(
+                ['id' => $cat['id']],
+                array_merge($cat, ['created_at' => $now, 'updated_at' => $now])
+            );
+        }
+
+        // ── Product Sub Categories ─────────────────────────────────────────────
+
+        $subCategories = [
             // Diamond
-            ['category_id' => 1, 'name' => 'Diamond I',     'code' => 'DIAM-I',     'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 1, 'name' => 'Diamond SI',    'code' => 'DIAM-SI',    'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 1, 'name' => 'Diamond VS-SI', 'code' => 'DIAM-SI-VS', 'created_at' => now(), 'updated_at' => now()],
+            ['category_id' => 1, 'name' => 'Diamond I',     'code' => 'DIAM-I'],
+            ['category_id' => 1, 'name' => 'Diamond SI',    'code' => 'DIAM-SI'],
+            ['category_id' => 1, 'name' => 'Diamond VS-SI', 'code' => 'DIAM-SI-VS'],
             // Gold
-            ['category_id' => 2, 'name' => 'WG 14 CR.', 'code' => 'GOLD-WG14', 'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 2, 'name' => 'WG 18 CR.', 'code' => 'GOLD-WG18', 'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 2, 'name' => 'PG 14 CR.', 'code' => 'GOLD-PG14', 'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 2, 'name' => 'PG 18 CR.', 'code' => 'GOLD-PG18', 'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 2, 'name' => 'YG 14 CR.', 'code' => 'GOLD-YG14', 'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 2, 'name' => 'YG 18 CR.', 'code' => 'GOLD-YG18', 'created_at' => now(), 'updated_at' => now()],
+            ['category_id' => 2, 'name' => 'WG 14 CR.', 'code' => 'GOLD-WG14'],
+            ['category_id' => 2, 'name' => 'WG 18 CR.', 'code' => 'GOLD-WG18'],
+            ['category_id' => 2, 'name' => 'PG 14 CR.', 'code' => 'GOLD-PG14'],
+            ['category_id' => 2, 'name' => 'PG 18 CR.', 'code' => 'GOLD-PG18'],
+            ['category_id' => 2, 'name' => 'YG 14 CR.', 'code' => 'GOLD-YG14'],
+            ['category_id' => 2, 'name' => 'YG 18 CR.', 'code' => 'GOLD-YG18'],
             // Stone
-            ['category_id' => 3, 'name' => 'Stone 1', 'code' => 'STON-1', 'created_at' => now(), 'updated_at' => now()],
+            ['category_id' => 3, 'name' => 'Stone 1', 'code' => 'STON-1'],
             // Chain
-            ['category_id' => 4, 'name' => 'WG 18 Cr', 'code' => 'CHAI-WG18', 'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 4, 'name' => 'YG 18 Cr', 'code' => 'CHAI-YG18', 'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 4, 'name' => 'PG 18 Cr', 'code' => 'CHAI-PG18', 'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 4, 'name' => 'WG 14 Cr', 'code' => 'CHAI-WG14', 'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 4, 'name' => 'YG 14 Cr', 'code' => 'CHAI-YG14', 'created_at' => now(), 'updated_at' => now()],
-            ['category_id' => 4, 'name' => 'PG 14 Cr', 'code' => 'CHAI-PG14', 'created_at' => now(), 'updated_at' => now()],
-        ]);
+            ['category_id' => 4, 'name' => 'WG 18 Cr', 'code' => 'CHAI-WG18'],
+            ['category_id' => 4, 'name' => 'YG 18 Cr', 'code' => 'CHAI-YG18'],
+            ['category_id' => 4, 'name' => 'PG 18 Cr', 'code' => 'CHAI-PG18'],
+            ['category_id' => 4, 'name' => 'WG 14 Cr', 'code' => 'CHAI-WG14'],
+            ['category_id' => 4, 'name' => 'YG 14 Cr', 'code' => 'CHAI-YG14'],
+            ['category_id' => 4, 'name' => 'PG 14 Cr', 'code' => 'CHAI-PG14'],
+        ];
 
-        // ---------------------
-        // ATTRIBUTES
-        // ---------------------
-        $shape = Attribute::create(['name' => 'Shape', 'slug' => Str::slug('Shape')]);
+        foreach ($subCategories as $sub) {
+            ProductSubcategory::firstOrCreate(
+                ['code' => $sub['code']],
+                array_merge($sub, ['created_at' => $now, 'updated_at' => $now])
+            );
+        }
 
-        foreach ([
+        // ── Attributes ─────────────────────────────────────────────────────────
+
+        $shape = Attribute::firstOrCreate(
+            ['slug' => Str::slug('Shape')],
+            ['name' => 'Shape']
+        );
+
+        $shapeValues = [
             'Round', 'Princess', 'Emerald', 'Asscher', 'Marquise',
             'Oval', 'Radiant', 'Pear', 'Cushion', 'Heart',
             'Baguette', 'Trillion', 'Rose Cut', 'Old Mine Cut', 'Cabochon',
-        ] as $s) {
-            AttributeValue::create(['attribute_id' => $shape->id, 'value' => $s]);
+        ];
+        foreach ($shapeValues as $value) {
+            AttributeValue::firstOrCreate(['attribute_id' => $shape->id, 'value' => $value]);
         }
 
-        $size = Attribute::create(['name' => 'Size', 'slug' => Str::slug('Size')]);
+        $size = Attribute::firstOrCreate(
+            ['slug' => Str::slug('Size')],
+            ['name' => 'Size']
+        );
 
-        foreach ([
+        $sizeValues = [
             '0.01 ct (1.0 mm)', '0.05 ct (2.5 mm)', '0.10 ct (3.0 mm)',
             '0.25 ct (4.0 mm)', '0.50 ct (5.0 mm)', '0.75 ct (5.8 mm)',
             '1.00 ct (6.5 mm)', '1.50 ct (7.5 mm)', '2.00 ct (8.2 mm)', '3.00 ct (9.5 mm)',
@@ -274,8 +323,9 @@ class DatabaseSeeder extends Seeder
             'Size 20', 'Size 22', 'Size 24', 'Size 26', 'Size 28',
             '14 cm', '16 cm', '18 cm', '20 cm', '22 cm', '24 cm',
             '55 mm', '57 mm', '60 mm', '62 mm', '65 mm', '67 mm', '70 mm',
-        ] as $sz) {
-            AttributeValue::create(['attribute_id' => $size->id, 'value' => $sz]);
+        ];
+        foreach ($sizeValues as $value) {
+            AttributeValue::firstOrCreate(['attribute_id' => $size->id, 'value' => $value]);
         }
     }
 }

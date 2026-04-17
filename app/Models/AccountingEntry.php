@@ -15,9 +15,13 @@ class AccountingEntry extends Model
     ];
 
     protected $casts = [
-        'debit' => 'decimal:2',
-        'credit' => 'decimal:2',
+        // Use float so arithmetic works correctly in PHP without string issues.
+        // 'decimal:2' returns a string in Laravel which breaks sum() and comparisons.
+        'debit'  => 'float',
+        'credit' => 'float',
     ];
+
+    // ── Relationships ──────────────────────────────────────────────────────
 
     public function voucher()
     {
