@@ -6849,9 +6849,9 @@ html.sidebar-light:not(.dark) ul.nav-main li .nav-children li a:hover, html.side
 
 .btn.btn-sm {
 	font-size: 12.8px;
-	font-size: 0.6rem;
+	font-size: 0.8rem;
 	padding: 4.8px 10.4px;
-	padding: 0.2rem 0.5rem;
+	padding: 0.3rem 0.65rem;
 }
 
 .btn.btn-lg {
@@ -17731,13 +17731,14 @@ p.drop-caps.drop-caps-style-2:first-letter {
 	border: none;
 	box-shadow: 0 1px 2px 1px rgba(0, 0, 0, 0.2);
 	box-sizing: content-box;
-	left: -100px !important;
+	left: 0px !important;
 	padding: 0px 0px;
 	top: 41px !important;
 	transform: none !important;
 	width: 100%;
 	/* min-width: 0; */
 	z-index: 992;
+	margin: 0px -100px !important;
 }
 
 .userbox .dropdown-menu li {
@@ -21738,3 +21739,4 @@ input[type="number"]::-webkit-inner-spin-button {
 input[type="number"] {
     -moz-appearance: textfield;
 }
+
