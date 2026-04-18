@@ -41,7 +41,7 @@ class SalesReportController extends Controller
                 case 'PM': $paymentSummary = $this->buildPaymentSummary($from, $to, $customerId);  break;
             }
 
-            return view('reports.sale_reports', compact(
+            return view('reports.sales_reports', compact(
                 'saleRegister', 'customerWise', 'profitReport',
                 'itemAnalysis', 'paymentSummary',
                 'customers', 'from', 'to', 'tab', 'customerId'

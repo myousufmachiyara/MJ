@@ -3,397 +3,401 @@
 
 @section('content')
 <div class="tabs">
-    {{-- NAV TABS --}}
-    <ul class="nav nav-tabs">
-        <li class="nav-item"><a class="nav-link {{ $tab=='IL'?'active':'' }}" data-bs-toggle="tab" href="#IL">Item Ledger</a></li>
-        <li class="nav-item"><a class="nav-link {{ $tab=='SR'?'active':'' }}" data-bs-toggle="tab" href="#SR">Stock Inhand</a></li>
-        <li class="nav-item"><a class="nav-link {{ $tab=='STR'?'active':'' }}" data-bs-toggle="tab" href="#STR">Stock Transfer</a></li>
-        <li class="nav-item"><a class="nav-link {{ $tab=='NMI'?'active':'' }}" data-bs-toggle="tab" href="#NMI">Non-Moving Items</a></li>
-        <li class="nav-item"><a class="nav-link {{ $tab=='ROL'?'active':'' }}" data-bs-toggle="tab" href="#ROL">Reorder Level</a></li>
-    </ul>
+  <ul class="nav nav-tabs">
+    <li class="nav-item">
+      <a class="nav-link {{ $tab=='SIH'?'active':'' }}" href="{{ route('reports.inventory', ['tab'=>'SIH','from_date'=>$from,'to_date'=>$to]) }}">
+        Stock In Hand
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {{ $tab=='PI'?'active':'' }}" href="{{ route('reports.inventory', ['tab'=>'PI','from_date'=>$from,'to_date'=>$to]) }}">
+        Purchased Items
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {{ $tab=='SI'?'active':'' }}" href="{{ route('reports.inventory', ['tab'=>'SI','from_date'=>$from,'to_date'=>$to]) }}">
+        Sold Items
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {{ $tab=='WS'?'active':'' }}" href="{{ route('reports.inventory', ['tab'=>'WS','from_date'=>$from,'to_date'=>$to]) }}">
+        Weight Summary
+      </a>
+    </li>
+  </ul>
 
-    <div class="tab-content mt-3">
+  <div class="tab-content mt-3">
 
-        {{-- ITEM LEDGER --}}
-        <div id="IL" class="tab-pane fade {{ $tab=='IL'?'show active':'' }}">
-            <form method="GET" class="mb-3">
-                <input type="hidden" name="tab" value="IL">
-                <div class="row">
-                    <div class="col-md-3">
-                        <label>Product</label>
-                        <select name="item_id" class="form-control">
-                            <option value="">-- All Products --</option>
-                            @foreach($products as $product)
-                                <option value="{{ $product->id }}" {{ request('item_id') == $product->id ? 'selected' : '' }}>
-                                    {{ $product->name }}
-                                </option>
-                                @foreach($product->variations as $var)
-                                    <option value="{{ $product->id }}-{{ $var->id }}" {{ request('item_id') == $product->id.'-'.$var->id ? 'selected' : '' }}>
-                                        {{ $product->name }} ({{ $var->sku }})
-                                    </option>
-                                @endforeach
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label>From Date</label>
-                        <input type="date" name="from_date" value="{{ request('from_date', $from) }}" class="form-control">
-                    </div>
-                    <div class="col-md-3">
-                        <label>To Date</label>
-                        <input type="date" name="to_date" value="{{ request('to_date', $to) }}" class="form-control">
-                    </div>
-
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">Filter</button>
-                    </div>
-                </div>
-            </form>
-
-            @php
-                $totalIn  = collect($itemLedger)->sum('qty_in');
-                $totalOut = collect($itemLedger)->sum('qty_out');
-                $balance  = $totalIn - $totalOut;
-            @endphp
-
-            <div class="mb-3 text-end">
-                <h5 class="card-title">Closing Balance: <span class="text-danger">{{ $balance }}</span></h5>
-            </div>
-
-            <table class="table table-bordered table-striped">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Type</th>
-                        <th>Description</th>
-                        <th>Product</th>
-                        <th>Variation</th>
-                        <th>Qty In</th>
-                        <th>Qty Out</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($itemLedger as $row)
-                        <tr>
-                            <td>{{ $row['date'] }}</td>
-                            <td>{{ $row['type'] }}</td>
-                            <td>{{ $row['description'] }}</td>
-                            <td>{{ $row['product'] }}</td>
-                            <td>{{ $row['variation'] ?? '-' }}</td>
-                            <td class="text-success">{{ $row['qty_in'] }}</td>
-                            <td class="text-danger">{{ $row['qty_out'] }}</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="7" class="text-center">No ledger records found.</td></tr>
-                    @endforelse
-                </tbody>
-                @if(count($itemLedger))
-                <tfoot>
-                    <tr>
-                        <th colspan="5" class="text-end">Totals</th>
-                        <th class="text-success">{{ $totalIn }}</th>
-                        <th class="text-danger">{{ $totalOut }}</th>
-                    </tr>
-                    <tr>
-                        <th colspan="5" class="text-end">Closing Balance</th>
-                        <th colspan="2" class="text-primary">{{ $balance }}</th>
-                    </tr>
-                </tfoot>
-                @endif
-            </table>
+    {{-- ================================================================== --}}
+    {{-- 1. STOCK IN HAND                                                    --}}
+    {{-- Controller: $unsoldItems — purchased items NOT yet sold             --}}
+    {{-- ================================================================== --}}
+    <div id="SIH" class="tab-pane fade {{ $tab=='SIH'?'show active':'' }}">
+      <form method="GET" action="{{ route('reports.inventory') }}" class="row g-2 mb-3">
+        <input type="hidden" name="tab" value="SIH">
+        <div class="col-md-2">
+          <label class="small text-muted">As of Date</label>
+          <input type="date" name="to_date" class="form-control" value="{{ $to }}">
         </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button class="btn btn-primary w-100" type="submit">Filter</button>
+        </div>
+      </form>
 
-        {{-- STOCK INHAND --}}
-        <div id="SR" class="tab-pane fade {{ $tab=='SR'?'show active':'' }}">
-            <form method="GET" class="mb-3">
-                <input type="hidden" name="tab" value="SR">
-                <div class="row">
-                    <div class="col-md-3">
-                        <label>Product</label>
-                        <select name="item_id" class="form-control">
-                            <option value="">-- All Products --</option>
-                            @foreach($products as $product)
-                                <option value="{{ $product->id }}" {{ request('item_id') == $product->id ? 'selected' : '' }}>
-                                    {{ $product->name }}
-                                </option>
-                                @foreach($product->variations as $var)
-                                    <option value="{{ $product->id }}-{{ $var->id }}" {{ request('item_id') == $product->id.'-'.$var->id ? 'selected' : '' }}>
-                                        {{ $product->name }} ({{ $var->sku }})
-                                    </option>
-                                @endforeach
-                            @endforeach
-                        </select>
-                    </div>
+      @php
+        $totalItems   = $unsoldItems->count();
+        $totalValue   = $unsoldItems->sum('item_total');
+        $totalGrossWt = $unsoldItems->sum('gross_weight');
+        $totalPurityWt= $unsoldItems->sum('purity_weight');
+      @endphp
 
-                    {{-- costing method --}}
-                    <div class="col-md-3">
-                        <label>Costing Method</label>
-                        <select name="costing_method" class="form-control">
-                            <option value="avg" {{ request('costing_method') == 'avg' ? 'selected' : '' }}>Average Rate</option>
-                            <option value="max" {{ request('costing_method') == 'max' ? 'selected' : '' }}>Max Rate</option>
-                            <option value="min" {{ request('costing_method') == 'min' ? 'selected' : '' }}>Min Rate</option>
-                            <option value="latest" {{ request('costing_method') == 'latest' ? 'selected' : '' }}>Latest Rate</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">Filter</button>
-                    </div>
-                </div>
-            </form>
-
-            @php
-                $grandTotal = collect($stockInHand)->sum('total');
-                $grandQty   = collect($stockInHand)->sum('quantity');
-            @endphp
-
-            <div class="mb-3 text-end">
-                <h3 class="card-title">Total Stock Value: <span class="text-danger">{{ number_format($grandTotal, 2) }}</span></h3>
+      <div class="row mb-3">
+        <div class="col-md-3">
+          <div class="card text-center">
+            <div class="card-body py-2">
+              <div class="text-muted small">Items In Stock</div>
+              <h4 class="text-primary mb-0">{{ $totalItems }}</h4>
             </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card text-center">
+            <div class="card-body py-2">
+              <div class="text-muted small">Total Stock Value (AED)</div>
+              <h4 class="text-danger mb-0">{{ number_format($totalValue, 2) }}</h4>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card text-center">
+            <div class="card-body py-2">
+              <div class="text-muted small">Total Gross Weight (g)</div>
+              <h4 class="text-success mb-0">{{ number_format($totalGrossWt, 3) }}</h4>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="card text-center">
+            <div class="card-body py-2">
+              <div class="text-muted small">Total Purity Weight (g)</div>
+              <h4 class="text-warning mb-0">{{ number_format($totalPurityWt, 3) }}</h4>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <table class="table table-bordered table-striped">
-            <thead>
-                <tr>
-                    <th>Product</th>
-                    <th>Variation</th>
-                    <th>Quantity</th>
-                    <th>Cost Price (Per Unit)</th>
-                    <th>Total Cost</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse($stockInHand as $stock)
-                    <tr>
-                        <td>{{ $stock['product'] }}</td>
-                        <td>{{ $stock['variation'] ?? '-' }}</td>
-                        <td>{{ $stock['quantity'] }}</td>
-                        <td>{{ number_format($stock['price'], 2) }}</td>
-                        <td>{{ number_format($stock['total'], 2) }}</td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="5" class="text-center">No stock data found.</td>
-                    </tr>
-                @endforelse
-            </tbody>
-            @if(count($stockInHand))
-            <tfoot>
-                <tr>
-                    <th colspan="2" class="text-end">Grand Total</th>
-                    <th>{{ $grandQty }}</th>
-                    <th>-</th>
-                    <th>{{ number_format($grandTotal, 2) }}</th>
-                </tr>
-            </tfoot>
-            @endif
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped table-sm datatable">
+          <thead class="table-light">
+            <tr>
+              <th>Barcode</th>
+              <th>Item Name</th>
+              <th>Vendor</th>
+              <th>Invoice</th>
+              <th>Date</th>
+              <th>Material</th>
+              <th class="text-end">Purity</th>
+              <th class="text-end">Gross Wt</th>
+              <th class="text-end">Purity Wt</th>
+              <th class="text-end">Material Val</th>
+              <th class="text-end">Making Val</th>
+              <th class="text-end">Item Total</th>
+              <th>Printed</th>
+            </tr>
+          </thead>
+          <tbody>
+            @forelse($unsoldItems as $row)
+              <tr>
+                <td><code>{{ $row['barcode'] }}</code></td>
+                <td>{{ $row['item_name'] }}</td>
+                <td>{{ $row['vendor'] }}</td>
+                <td>{{ $row['purchase_invoice'] }}</td>
+                <td>{{ $row['purchase_date'] }}</td>
+                <td><span class="badge bg-{{ $row['material_type']==='Gold'?'warning text-dark':'info text-dark' }}">{{ $row['material_type'] }}</span></td>
+                <td class="text-end">{{ $row['purity'] }}</td>
+                <td class="text-end">{{ number_format($row['gross_weight'], 3) }}</td>
+                <td class="text-end">{{ number_format($row['purity_weight'], 3) }}</td>
+                <td class="text-end">{{ number_format($row['material_value'], 2) }}</td>
+                <td class="text-end">{{ number_format($row['making_value'], 2) }}</td>
+                <td class="text-end fw-bold">{{ number_format($row['item_total'], 2) }}</td>
+                <td>
+                  @if($row['is_printed'])
+                    <span class="badge bg-success">Yes</span>
+                  @else
+                    <span class="badge bg-secondary">No</span>
+                  @endif
+                </td>
+              </tr>
+            @empty
+              <tr><td colspan="13" class="text-center text-muted">No stock in hand.</td></tr>
+            @endforelse
+          </tbody>
+          @if($unsoldItems->count())
+          <tfoot class="table-light fw-bold">
+            <tr>
+              <td colspan="7">Totals</td>
+              <td class="text-end">{{ number_format($totalGrossWt, 3) }}</td>
+              <td class="text-end">{{ number_format($totalPurityWt, 3) }}</td>
+              <td class="text-end">{{ number_format($unsoldItems->sum('material_value'), 2) }}</td>
+              <td class="text-end">{{ number_format($unsoldItems->sum('making_value'), 2) }}</td>
+              <td class="text-end">{{ number_format($totalValue, 2) }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+          @endif
         </table>
-
-        </div>
-
-        {{-- STOCK TRANSFER --}}
-        <div id="STR" class="tab-pane fade {{ $tab=='STR'?'show active':'' }}">
-            <form method="GET" class="mb-3">
-                <input type="hidden" name="tab" value="STR">
-                <div class="row">
-                    <div class="col-md-3">
-                        <label>From Location</label>
-                        <select name="from_location_id" class="form-control">
-                            <option value="">-- All --</option>
-                            @foreach($locations as $loc)
-                                <option value="{{ $loc->id }}" {{ request('from_location_id') == $loc->id ? 'selected' : '' }}>
-                                    {{ $loc->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label>To Location</label>
-                        <select name="to_location_id" class="form-control">
-                            <option value="">-- All --</option>
-                            @foreach($locations as $loc)
-                                <option value="{{ $loc->id }}" {{ request('to_location_id') == $loc->id ? 'selected' : '' }}>
-                                    {{ $loc->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label>From Date</label>
-                        <input type="date" name="from_date" 
-                            value="{{ request('from_date', $from ?? now()->startOfMonth()->format('Y-m-d')) }}" 
-                            class="form-control">
-                    </div>
-                    <div class="col-md-2">
-                        <label>To Date</label>
-                        <input type="date" name="to_date" 
-                            value="{{ request('to_date', $to ?? now()->format('Y-m-d')) }}" 
-                            class="form-control">
-                    </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">Filter</button>
-                    </div>
-                </div>
-            </form>
-
-            <table class="table table-bordered table-striped">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Reference</th>
-                        <th>Product</th>
-                        <th>Variation</th>
-                        <th>From Location</th>
-                        <th>To Location</th>
-                        <th>Quantity</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($stockTransfers as $st)
-                        <tr>
-                            <td>{{ $st['date'] }}</td>
-                            <td>{{ $st['reference'] }}</td>
-                            <td>{{ $st['product'] }}</td>
-                            <td>{{ $st['variation'] ?? '-' }}</td>
-                            <td>{{ $st['from'] }}</td>
-                            <td>{{ $st['to'] }}</td>
-                            <td>{{ $st['quantity'] }}</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="7" class="text-center">No stock transfer data found.</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-
-        {{-- NON-MOVING --}}
-        <div id="NMI" class="tab-pane fade {{ $tab=='NMI'?'show active':'' }}">
-            <form method="GET" class="mb-3">
-                <input type="hidden" name="tab" value="NMI">
-                <div class="row">
-                    <div class="col-md-3">
-                        <label>Product</label>
-                        <select name="item_id" class="form-control">
-                            <option value="">-- All Products --</option>
-                            @foreach($products as $product)
-                                <option value="{{ $product->id }}" {{ request('item_id') == $product->id ? 'selected' : '' }}>
-                                    {{ $product->name }}
-                                </option>
-                                @foreach($product->variations as $var)
-                                    <option value="{{ $product->id }}-{{ $var->id }}" {{ request('item_id') == $product->id.'-'.$var->id ? 'selected' : '' }}>
-                                        {{ $product->name }} ({{ $var->sku }})
-                                    </option>
-                                @endforeach
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label>Threshold (Months)</label>
-                        <input type="number" name="months" value="{{ request('months', 3) }}" min="1" class="form-control">
-                    </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">Filter</button>
-                    </div>
-                </div>
-            </form>
-
-            <table class="table table-bordered table-striped">
-                <thead>
-                    <tr><th>Item</th><th>Last Transaction Date</th><th>Days Since Last Movement</th></tr>
-                </thead>
-                <tbody>
-                    @forelse($nonMovingItems as $nmi)
-                        <tr>
-                            <td>{{ $nmi['product'] }} {{ $nmi['variation'] ? '('.$nmi['variation'].')':'' }}</td>
-                            <td>{{ $nmi['last_date'] }}</td>
-                            <td>{{ $nmi['days_inactive'] }}</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="3" class="text-center">No non-moving items found</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-
-        {{-- REORDER --}}
-        <div id="ROL" class="tab-pane fade {{ $tab=='ROL'?'show active':'' }}">
-            <form method="GET" class="mb-3">
-                <input type="hidden" name="tab" value="ROL">
-                <div class="row">
-                    <div class="col-md-3">
-                        <label>Product</label>
-                        <select name="item_id" class="form-control">
-                            <option value="">-- All Products --</option>
-                            @foreach($products as $product)
-                                <option value="{{ $product->id }}" {{ request('item_id') == $product->id ? 'selected' : '' }}>
-                                    {{ $product->name }}
-                                </option>
-                                @foreach($product->variations as $var)
-                                    <option value="{{ $product->id }}-{{ $var->id }}" {{ request('item_id') == $product->id.'-'.$var->id ? 'selected' : '' }}>
-                                        {{ $product->name }} ({{ $var->sku }})
-                                    </option>
-                                @endforeach
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="col-md-2 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary w-100">Filter</button>
-                    </div>
-                </div>
-            </form>
-
-            <table class="table table-bordered table-striped">
-                <thead>
-                    <tr><th>Item</th><th>Stock Inhand</th><th>Reorder Level</th><th>Status</th></tr>
-                </thead>
-                <tbody>
-                    @forelse($reorderLevel as $rl)
-                        <tr>
-                            <td>{{ $rl['product'] }} {{ $rl['variation'] ? '('.$rl['variation'].')':'' }}</td>
-                            <td>{{ $rl['stock_inhand'] }}</td>
-                            <td>{{ $rl['reorder_level'] }}</td>
-                            <td>
-                                @if($rl['stock_inhand'] <= $rl['reorder_level'])
-                                    <span class="badge bg-danger">Reorder Required</span>
-                                @else
-                                    <span class="badge bg-success">Sufficient</span>
-                                @endif
-                            </td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="4" class="text-center">No items at/below reorder level</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-
+      </div>
     </div>
+
+    {{-- ================================================================== --}}
+    {{-- 2. PURCHASED ITEMS                                                  --}}
+    {{-- Controller: $purchasedItems                                         --}}
+    {{-- ================================================================== --}}
+    <div id="PI" class="tab-pane fade {{ $tab=='PI'?'show active':'' }}">
+      <form method="GET" action="{{ route('reports.inventory') }}" class="row g-2 mb-3">
+        <input type="hidden" name="tab" value="PI">
+        <div class="col-md-2"><input type="date" name="from_date" class="form-control" value="{{ $from }}"></div>
+        <div class="col-md-2"><input type="date" name="to_date" class="form-control" value="{{ $to }}"></div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button class="btn btn-primary w-100" type="submit">Filter</button>
+        </div>
+      </form>
+
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped table-sm datatable">
+          <thead class="table-light">
+            <tr>
+              <th>Barcode</th><th>Item Name</th><th>Vendor</th><th>Invoice</th><th>Date</th>
+              <th>Material</th><th class="text-end">Purity</th><th class="text-end">Gross Wt</th>
+              <th class="text-end">Purity Wt</th><th class="text-end">Material Val</th>
+              <th class="text-end">Making Val</th><th class="text-end">VAT</th>
+              <th class="text-end">Item Total</th><th>Currency</th>
+            </tr>
+          </thead>
+          <tbody>
+            @forelse($purchasedItems as $row)
+              <tr>
+                <td><code>{{ $row['barcode'] }}</code></td>
+                <td>{{ $row['item_name'] }}</td>
+                <td>{{ $row['vendor'] }}</td>
+                <td>{{ $row['purchase_invoice'] }}</td>
+                <td>{{ $row['purchase_date'] }}</td>
+                <td><span class="badge bg-{{ $row['material_type']==='Gold'?'warning text-dark':'info text-dark' }}">{{ $row['material_type'] }}</span></td>
+                <td class="text-end">{{ $row['purity'] }}</td>
+                <td class="text-end">{{ number_format($row['gross_weight'], 3) }}</td>
+                <td class="text-end">{{ number_format($row['purity_weight'], 3) }}</td>
+                <td class="text-end">{{ number_format($row['material_value'], 2) }}</td>
+                <td class="text-end">{{ number_format($row['making_value'], 2) }}</td>
+                <td class="text-end">{{ number_format($row['vat_amount'], 2) }}</td>
+                <td class="text-end fw-bold">{{ number_format($row['item_total'], 2) }}</td>
+                <td>{{ $row['currency'] }}</td>
+              </tr>
+            @empty
+              <tr><td colspan="14" class="text-center text-muted">No purchased items found.</td></tr>
+            @endforelse
+          </tbody>
+          @if($purchasedItems->count())
+          <tfoot class="table-light fw-bold">
+            <tr>
+              <td colspan="8">Totals</td>
+              <td class="text-end">{{ number_format($purchasedItems->sum('purity_weight'), 3) }}</td>
+              <td class="text-end">{{ number_format($purchasedItems->sum('material_value'), 2) }}</td>
+              <td class="text-end">{{ number_format($purchasedItems->sum('making_value'), 2) }}</td>
+              <td class="text-end">{{ number_format($purchasedItems->sum('vat_amount'), 2) }}</td>
+              <td class="text-end">{{ number_format($purchasedItems->sum('item_total'), 2) }}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+          @endif
+        </table>
+      </div>
+    </div>
+
+    {{-- ================================================================== --}}
+    {{-- 3. SOLD ITEMS                                                       --}}
+    {{-- Controller: $soldItems (with cost, profit, margin)                  --}}
+    {{-- ================================================================== --}}
+    <div id="SI" class="tab-pane fade {{ $tab=='SI'?'show active':'' }}">
+      <form method="GET" action="{{ route('reports.inventory') }}" class="row g-2 mb-3">
+        <input type="hidden" name="tab" value="SI">
+        <div class="col-md-2"><input type="date" name="from_date" class="form-control" value="{{ $from }}"></div>
+        <div class="col-md-2"><input type="date" name="to_date" class="form-control" value="{{ $to }}"></div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button class="btn btn-primary w-100" type="submit">Filter</button>
+        </div>
+      </form>
+
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped table-sm datatable">
+          <thead class="table-light">
+            <tr>
+              <th>Barcode</th><th>Item Name</th><th>Customer</th><th>Invoice</th><th>Date</th>
+              <th>Material</th><th class="text-end">Purity</th><th class="text-end">Gross Wt</th>
+              <th class="text-end">Purity Wt</th><th class="text-end">Material Val</th>
+              <th class="text-end">Making Val</th><th class="text-end">Sale Total</th>
+              <th class="text-end">Cost</th><th class="text-end">Profit</th><th class="text-end">Margin%</th>
+            </tr>
+          </thead>
+          <tbody>
+            @forelse($soldItems as $row)
+              @php $marginColor = $row['margin'] >= 0 ? 'text-success' : 'text-danger'; @endphp
+              <tr>
+                <td><code>{{ $row['barcode'] }}</code></td>
+                <td>{{ $row['item_name'] }}</td>
+                <td>{{ $row['customer'] }}</td>
+                <td>{{ $row['sale_invoice'] }}</td>
+                <td>{{ $row['sale_date'] }}</td>
+                <td><span class="badge bg-{{ $row['material_type']==='Gold'?'warning text-dark':'info text-dark' }}">{{ $row['material_type'] }}</span></td>
+                <td class="text-end">{{ $row['purity'] }}</td>
+                <td class="text-end">{{ number_format($row['gross_weight'], 3) }}</td>
+                <td class="text-end">{{ number_format($row['purity_weight'], 3) }}</td>
+                <td class="text-end">{{ number_format($row['material_value'], 2) }}</td>
+                <td class="text-end">{{ number_format($row['making_value'], 2) }}</td>
+                <td class="text-end fw-bold">{{ number_format($row['item_total'], 2) }}</td>
+                <td class="text-end">{{ number_format($row['cost'], 2) }}</td>
+                <td class="text-end {{ $marginColor }} fw-bold">{{ number_format($row['profit'], 2) }}</td>
+                <td class="text-end {{ $marginColor }}">{{ $row['margin'] }}%</td>
+              </tr>
+            @empty
+              <tr><td colspan="15" class="text-center text-muted">No sold items found.</td></tr>
+            @endforelse
+          </tbody>
+          @if($soldItems->count())
+          <tfoot class="table-light fw-bold">
+            <tr>
+              <td colspan="11">Totals</td>
+              <td class="text-end">{{ number_format($soldItems->sum('item_total'), 2) }}</td>
+              <td class="text-end">{{ number_format($soldItems->sum('cost'), 2) }}</td>
+              <td class="text-end {{ $soldItems->sum('profit') >= 0 ? 'text-success' : 'text-danger' }}">
+                {{ number_format($soldItems->sum('profit'), 2) }}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+          @endif
+        </table>
+      </div>
+    </div>
+
+    {{-- ================================================================== --}}
+    {{-- 4. WEIGHT SUMMARY                                                   --}}
+    {{-- Controller: $weightSummary (array)                                  --}}
+    {{-- ================================================================== --}}
+    <div id="WS" class="tab-pane fade {{ $tab=='WS'?'show active':'' }}">
+      <form method="GET" action="{{ route('reports.inventory') }}" class="row g-2 mb-3">
+        <input type="hidden" name="tab" value="WS">
+        <div class="col-md-2"><input type="date" name="from_date" class="form-control" value="{{ $from }}"></div>
+        <div class="col-md-2"><input type="date" name="to_date" class="form-control" value="{{ $to }}"></div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button class="btn btn-primary w-100" type="submit">Filter</button>
+        </div>
+      </form>
+
+      @if(!empty($weightSummary))
+      <div class="row">
+
+        {{-- Gold Summary --}}
+        <div class="col-md-6">
+          <div class="card mb-3">
+            <div class="card-header bg-warning text-dark"><strong>Gold Movement</strong></div>
+            <div class="card-body p-0">
+              <table class="table table-sm mb-0">
+                <thead class="table-light">
+                  <tr><th>Period</th><th class="text-end">Items</th><th class="text-end">Gross Wt</th><th class="text-end">Purity Wt</th><th class="text-end">Value (AED)</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Purchased</td>
+                    <td class="text-end">{{ $weightSummary['gold_purchased_count'] }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['gold_purchased_gross'], 3) }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['gold_purchased_purity'], 3) }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['gold_purchased_value'], 2) }}</td>
+                  </tr>
+                  <tr>
+                    <td>Sold</td>
+                    <td class="text-end">{{ $weightSummary['gold_sold_count'] }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['gold_sold_gross'], 3) }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['gold_sold_purity'], 3) }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['gold_sold_value'], 2) }}</td>
+                  </tr>
+                  <tr class="table-warning fw-bold">
+                    <td>In Hand</td>
+                    <td class="text-end">{{ $weightSummary['gold_inhand_count'] }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['gold_inhand_gross'], 3) }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['gold_inhand_purity'], 3) }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['gold_inhand_value'], 2) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {{-- Diamond Summary --}}
+        <div class="col-md-6">
+          <div class="card mb-3">
+            <div class="card-header bg-info text-dark"><strong>Diamond Movement</strong></div>
+            <div class="card-body p-0">
+              <table class="table table-sm mb-0">
+                <thead class="table-light">
+                  <tr><th>Period</th><th class="text-end">Items</th><th class="text-end">Gross Wt</th><th class="text-end">Purity Wt</th><th class="text-end">Value (AED)</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Purchased</td>
+                    <td class="text-end">{{ $weightSummary['diamond_purchased_count'] }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['diamond_purchased_gross'], 3) }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['diamond_purchased_purity'], 3) }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['diamond_purchased_value'], 2) }}</td>
+                  </tr>
+                  <tr>
+                    <td>Sold</td>
+                    <td class="text-end">{{ $weightSummary['diamond_sold_count'] }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['diamond_sold_gross'], 3) }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['diamond_sold_purity'], 3) }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['diamond_sold_value'], 2) }}</td>
+                  </tr>
+                  <tr class="table-info fw-bold">
+                    <td>In Hand</td>
+                    <td class="text-end">{{ $weightSummary['diamond_inhand_count'] }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['diamond_inhand_gross'], 3) }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['diamond_inhand_purity'], 3) }}</td>
+                    <td class="text-end">{{ number_format($weightSummary['diamond_inhand_value'], 2) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {{-- Overall value totals --}}
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+              <div class="row text-center">
+                <div class="col-md-4">
+                  <div class="text-muted small">Total Purchased Value (AED)</div>
+                  <h4 class="text-primary">{{ number_format($weightSummary['total_purchased_value'], 2) }}</h4>
+                </div>
+                <div class="col-md-4">
+                  <div class="text-muted small">Total Sold Value (AED)</div>
+                  <h4 class="text-success">{{ number_format($weightSummary['total_sold_value'], 2) }}</h4>
+                </div>
+                <div class="col-md-4">
+                  <div class="text-muted small">Total In Hand Value (AED)</div>
+                  <h4 class="text-danger">{{ number_format($weightSummary['total_inhand_value'], 2) }}</h4>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      @else
+        <div class="alert alert-info">Select a date range and click Filter to see weight summary.</div>
+      @endif
+    </div>
+
+  </div>{{-- end tab-content --}}
 </div>
-
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        try {
-            const urlParams = new URLSearchParams(window.location.search);
-            let tab = urlParams.get('tab') || window.location.hash.replace('#', '');
-
-            if (tab) {
-                const selector = `.nav-link[href="#${tab}"]`;
-                const el = document.querySelector(selector);
-                if (el && typeof bootstrap !== 'undefined') {
-                    const tabInstance = new bootstrap.Tab(el);
-                    tabInstance.show();
-                    history.replaceState(null, null, window.location.pathname + window.location.search + '#' + tab);
-                } else if (el) {
-                    document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
-                    el.classList.add('active');
-                    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('show','active'));
-                    const pane = document.querySelector(el.getAttribute('href'));
-                    if (pane) pane.classList.add('show','active');
-                }
-            }
-        } catch (e) {
-            console.error('Tab activation error', e);
-        }
-    });
-</script>
-
 @endsection
