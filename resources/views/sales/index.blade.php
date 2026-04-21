@@ -57,16 +57,16 @@
                 </td>
                 <td>
                   <div class="btn-group btn-group-sm">
-                    <a href="{{ route('sale_invoices.edit', $invoice->id) }}" class="btn btn-warning" title="Edit">
+                    <a href="{{ route('sale_invoices.edit', $invoice->id) }}" class="text-primary" title="Edit">
                       <i class="fas fa-edit"></i>
                     </a>
-                    <a href="{{ route('sale_invoices.print', $invoice->id) }}" class="btn btn-secondary" target="_blank" title="Print">
+                    <a href="{{ route('sale_invoices.print', $invoice->id) }}" class="text-success" target="_blank" title="Print">
                       <i class="fas fa-print"></i>
                     </a>
                     <form method="POST" action="{{ route('sale_invoices.destroy', $invoice->id) }}"
                           onsubmit="return confirm('Delete Invoice #{{ $invoice->invoice_no }}? This cannot be undone.')">
                       @csrf @method('DELETE')
-                      <button type="submit" class="btn btn-danger" title="Delete">
+                      <button type="submit" class="text-danger" title="Delete">
                         <i class="fas fa-trash"></i>
                       </button>
                     </form>
