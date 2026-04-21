@@ -24,6 +24,7 @@ use App\Http\Controllers\{
     SaleReturnController,
     PermissionController,
     ProductSubcategoryController,
+    ConsignmentController,
 };
 
 Auth::routes();
@@ -110,4 +111,21 @@ Route::middleware(['auth'])->group(function () {
         // Sale profit PDF — must be defined BEFORE the generic 'sale' GET above won't conflict (different path)
         Route::get('sale/{id}/print-profit', [SalesReportController::class, 'printProfit'])->name('print-profit');
     });
+
+    // ── Consignments ──────────────────────────────────────────────────────────
+    // NOTE: Static routes MUST come before parameterised ones in Laravel.
+    //   'consignments/scan-barcode' and 'consignments/create' must be above 'consignments/{id}'
+    Route::get ('consignments/scan-barcode', [ConsignmentController::class, 'scanBarcode'])->name('consignments.scan_barcode');
+    Route::get ('consignments/create',       [ConsignmentController::class, 'create'])     ->name('consignments.create');
+    Route::get ('consignments',              [ConsignmentController::class, 'index'])      ->name('consignments.index');
+    Route::post('consignments',              [ConsignmentController::class, 'store'])      ->name('consignments.store');
+
+    Route::get   ('consignments/{id}/barcodes', [ConsignmentController::class, 'printBarcodes'])->name('consignments.barcodes');
+    Route::get   ('consignments/{id}/print',    [ConsignmentController::class, 'print'])        ->name('consignments.print');
+    Route::get   ('consignments/{id}/edit',     [ConsignmentController::class, 'edit'])         ->name('consignments.edit');
+    Route::get   ('consignments/{id}',          [ConsignmentController::class, 'show'])         ->name('consignments.show');
+    Route::put   ('consignments/{id}',          [ConsignmentController::class, 'update'])       ->name('consignments.update');
+    Route::delete('consignments/{id}',          [ConsignmentController::class, 'destroy'])      ->name('consignments.destroy');
+
+    Route::post('consignments/{consignmentId}/return-item/{itemId}', [ConsignmentController::class, 'returnItem'])->name('consignments.return-item');
 });

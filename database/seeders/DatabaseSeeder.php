@@ -63,6 +63,7 @@ class DatabaseSeeder extends Seeder
             'purchase_invoices', 'purchase_return',
             'sale_invoices', 'sale_return',
             'vouchers',
+            'consignments',   // ← NEW
         ];
 
         $managerModules = [
@@ -72,6 +73,7 @@ class DatabaseSeeder extends Seeder
             'purchase_invoices', 'purchase_return',
             'sale_invoices', 'sale_return',
             'vouchers',
+            'consignments',   // ← NEW — manager can access consignments
         ];
 
         $actions = ['index', 'create', 'edit', 'delete', 'print'];
@@ -106,7 +108,6 @@ class DatabaseSeeder extends Seeder
 
         // ── Heads of Accounts ──────────────────────────────────────────────────
 
-        // Use firstOrCreate so re-seeding doesn't fail on duplicate IDs
         $heads = [
             ['id' => 1, 'name' => 'Assets'],
             ['id' => 2, 'name' => 'Liabilities'],

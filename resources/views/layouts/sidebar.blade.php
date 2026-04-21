@@ -77,7 +77,6 @@
           @endif
 
           {{-- Products --}}
-          {{-- FIX: was 'product-categories.index' (hyphen) — correct permission uses underscore --}}
           @if(
             auth()->user()->can('product_categories.index') ||
             auth()->user()->can('product_subcategories.index') ||
@@ -170,6 +169,16 @@
             <a class="nav-link" href="{{ route('vouchers.index', 'purchase') }}">
               <i class="fa fa-money-check"></i>
               <span>Vouchers</span>
+            </a>
+          </li>
+          @endcan
+
+          {{-- Consignments --}}
+          @can('consignments.index')
+          <li class="{{ request()->routeIs('consignments.*') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('consignments.index') }}">
+              <i class="fas fa-handshake"></i>
+              <span>Consignments</span>
             </a>
           </li>
           @endcan

@@ -51,17 +51,17 @@ class SaleInvoiceController extends Controller
     public function scanBarcode(Request $request)
     {
         $barcode = trim($request->get('barcode'));
-
+ 
         if (!$barcode) {
             return response()->json(['success' => false, 'message' => 'No barcode provided.'], 422);
         }
-
-        // 1. Look in sale_invoice_items first (previously sold items)
+ 
+        // ── 1. Look in sale_invoice_items (previously sold items — re-sell) ──
         $saleItem = SaleInvoiceItem::with('parts')
             ->where('barcode_number', $barcode)
             ->latest()
             ->first();
-
+ 
         if ($saleItem) {
             return response()->json([
                 'success'          => true,
@@ -85,13 +85,50 @@ class SaleInvoiceController extends Controller
                 ])->values()->toArray(),
             ]);
         }
-
-        // 2. Look in purchase_invoice_items
-        $purchaseItem = PurchaseInvoiceItem::with('parts')
+ 
+        // ── 2. Look in consignment_items (inbound CSG- barcodes) ─────────────
+        //    CSG- barcodes are inbound consignment items on our shelf.
+        //    We check these BEFORE purchase items so an override is possible.
+        if (str_starts_with($barcode, 'CSG-')) {
+            // Delegate to the dedicated consignment scan endpoint logic
+            $consignmentItem = \App\Models\ConsignmentItem::with(['parts', 'consignment'])
+                ->where('barcode_number', $barcode)
+                ->where('item_status', 'in_stock')
+                ->first();
+ 
+            if ($consignmentItem) {
+                return response()->json([
+                    'success'          => true,
+                    'source'           => 'consignment',
+                    'consignment_no'   => $consignmentItem->consignment->consignment_no,
+                    'barcode_number'   => $consignmentItem->barcode_number,
+                    'item_name'        => $consignmentItem->item_name,
+                    'item_description' => $consignmentItem->item_description,
+                    'purity'           => $consignmentItem->purity,
+                    'gross_weight'     => $consignmentItem->gross_weight,
+                    'making_rate'      => $consignmentItem->making_rate,
+                    'material_type'    => $consignmentItem->material_type,
+                    'vat_percent'      => $consignmentItem->vat_percent,
+                    'agreed_value'     => $consignmentItem->agreed_value,
+                    'parts'            => $consignmentItem->parts->map(fn($p) => [
+                        'item_name'        => $p->item_name,
+                        'part_description' => $p->part_description,
+                        'qty'              => $p->qty,
+                        'rate'             => $p->rate,
+                        'stone_qty'        => $p->stone_qty,
+                        'stone_rate'       => $p->stone_rate,
+                        'total'            => $p->total,
+                    ])->values()->toArray(),
+                ]);
+            }
+        }
+ 
+        // ── 3. Look in purchase_invoice_items (standard MJ/MJT barcodes) ─────
+        $purchaseItem = \App\Models\PurchaseInvoiceItem::with('parts')
             ->where('barcode_number', $barcode)
             ->latest()
             ->first();
-
+ 
         if ($purchaseItem) {
             return response()->json([
                 'success'          => true,
@@ -115,7 +152,7 @@ class SaleInvoiceController extends Controller
                 ])->values()->toArray(),
             ]);
         }
-
+ 
         return response()->json([
             'success' => false,
             'message' => 'Barcode "' . $barcode . '" not found in any record.',
