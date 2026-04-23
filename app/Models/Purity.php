@@ -9,7 +9,7 @@ class Purity extends Model
     protected $fillable = ['label', 'value', 'sort_order'];
 
     protected $casts = [
-        'value' => 'decimal:2',
+        'value' => 'decimal:4',
     ];
 
     // Always return in sort_order then id order
