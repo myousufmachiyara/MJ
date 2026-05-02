@@ -50,26 +50,37 @@ class PurchaseInvoiceController extends Controller
 
     public function downloadTemplate()
     {
-        $filename = "purchase_import_template.csv";
-        $handle   = fopen('php://output', 'w');
-
-        fputcsv($handle, [
-            'Item Name', 'Description', 'Purity', 'Gross Wt',
-            'Making Rate', 'Material', 'VAT %',
-            'Part Name', 'Part Desc', 'Part Qty', 'Part Rate', 'Stone Qty', 'Stone Rate', 'Cert. Charges',
+        $filename = 'purchase_import_template.csv';
+ 
+        $rows = [
+            // Header row
+            [
+                'Item Name', 'Description', 'Purity', 'Gross Wt',
+                'Making Rate', 'Material', 'VAT %',
+                'Part Name', 'Part Desc', 'Part Qty', 'Part Rate',
+                'Stone Qty', 'Stone Rate', 'Cert. Charges',
+            ],
+            // Sample data rows
+            ['18K Gold Bracelet', 'Handmade Chain Design', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50', '75.00'],
+            ['22K Wedding Band', 'Plain Polished', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '', ''],
+            ['Diamond Engagement Ring', 'Solitaire Setting', '0.75', '4.20', '150.00', 'gold', '5', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0', '200.00'],
+            ['', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10', '0'],
+        ];
+ 
+        // StreamedResponse: Laravel sends headers first, THEN the callback writes body.
+        // This eliminates the "headers already sent" error completely.
+        return response()->streamDownload(function () use ($rows) {
+            $handle = fopen('php://output', 'w');
+            foreach ($rows as $row) {
+                fputcsv($handle, $row);
+            }
+            fclose($handle);
+        }, $filename, [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
-
-        fputcsv($handle, ['18K Gold Bracelet', 'Handmade Chain Design', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '', '']);
-        fputcsv($handle, ['', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50', '75.00']);
-        fputcsv($handle, ['22K Wedding Band', 'Plain Polished', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '', '']);
-        fputcsv($handle, ['Diamond Engagement Ring', 'Solitaire Setting', '0.75', '4.20', '150.00', 'gold', '5', '', '', '', '', '', '', '']);
-        fputcsv($handle, ['', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0', '200.00']);
-        fputcsv($handle, ['', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10', '0']);
-
-        header('Content-Type: text/csv');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        fclose($handle);
-        exit;
     }
 
     // =========================================================================
