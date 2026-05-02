@@ -1297,8 +1297,8 @@ class SaleInvoiceController extends Controller
             <thead>
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
                     <th width="5%">#</th>
-                    <th width="42%" style="text-align:left;">Item Name</th>
-                    <th width="13%">Description</th>
+                    <th width="30%" style="text-align:left;">Item Name</th>
+                    <th width="25%">Description</th>
                     <th width="12%">Gross Wt (g)</th>
                     <th width="10%">Material</th>
                     <th width="18%">Amount (AED)</th>
@@ -1312,8 +1312,8 @@ class SaleInvoiceController extends Controller
             $html .= '
                 <tr style="text-align:center;background-color:#ffffff;">
                     <td width="5%">' . ($i + 1) . '</td>
-                    <td width="42%" style="text-align:left;">' . htmlspecialchars($item->item_name ?: ($item->product->name ?? '-')) . '</td>
-                    <td width="13%" style="text-align:left;">' . htmlspecialchars($item->item_description ?? '-') . '</td>
+                    <td width="30%" style="text-align:left;">' . htmlspecialchars($item->item_name ?: ($item->product->name ?? '-')) . '</td>
+                    <td width="25%" style="text-align:left;">' . htmlspecialchars($item->item_description ?? '-') . '</td>
                     <td width="12%">' . number_format($item->gross_weight, 3) . '</td>
                     <td width="10%">' . ucfirst($item->material_type) . '</td>
                     <td width="18%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
