@@ -1311,12 +1311,12 @@ class SaleInvoiceController extends Controller
         foreach ($invoice->items as $i => $item) {
             $html .= '
                 <tr style="text-align:center;background-color:#ffffff;">
-                    <td>' . ($i + 1) . '</td>
-                    <td style="text-align:left;">' . htmlspecialchars($item->item_name ?: ($item->product->name ?? '-')) . '</td>
-                    <td style="text-align:left;">' . htmlspecialchars($item->item_description ?? '-') . '</td>
-                    <td>' . number_format($item->gross_weight, 3) . '</td>
-                    <td>' . ucfirst($item->material_type) . '</td>
-                    <td style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
+                    <td width="5%">' . ($i + 1) . '</td>
+                    <td width="42%" style="text-align:left;">' . htmlspecialchars($item->item_name ?: ($item->product->name ?? '-')) . '</td>
+                    <td width="13%" style="text-align:left;">' . htmlspecialchars($item->item_description ?? '-') . '</td>
+                    <td width="12%">' . number_format($item->gross_weight, 3) . '</td>
+                    <td width="10%">' . ucfirst($item->material_type) . '</td>
+                    <td width="18%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
                 </tr>';
  
             $totalGrossWeight += $item->gross_weight;
