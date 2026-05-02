@@ -1353,4 +1353,30 @@ class PurchaseInvoiceController extends Controller
         $pdf->Line(155, $y, 195, $y); $pdf->SetXY(155, $y + 1);
         $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
     }
+
+    private function generateInvoiceNo(bool $isTaxable): string
+    {
+        $prefix = $isTaxable ? 'PUR-TAX-' : 'PUR-';
+ 
+        // lockForUpdate() issues SELECT ... FOR UPDATE in MySQL.
+        // Any concurrent request hitting this line will WAIT until
+        // the current transaction commits or rolls back, guaranteeing
+        // each request sees the truly latest invoice_no.
+        $last = PurchaseInvoice::withTrashed()
+            ->where('invoice_no', 'LIKE', $prefix . '%')
+            ->orderByDesc('id')
+            ->lockForUpdate()          // ← the key addition
+            ->first();
+ 
+        if ($last) {
+            // Strip the prefix to get the numeric part.
+            // Works for both 'PUR-00003' and 'PUR-TAX-00003'.
+            $numeric = (int) str_replace($prefix, '', $last->invoice_no);
+            $next    = $numeric + 1;
+        } else {
+            $next = 1;
+        }
+ 
+        return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
+    }
 }
