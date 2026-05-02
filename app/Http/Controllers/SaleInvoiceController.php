@@ -1228,69 +1228,79 @@ class SaleInvoiceController extends Controller
         $pdf->setPrintFooter(false);
         $pdf->SetCreator('Musfira Jewelry');
         $pdf->SetTitle($invoice->invoice_no . ' — Receipt');
-        $pdf->SetMargins(12, 12, 12);
-        $pdf->setCellPadding(2);
+        $pdf->SetMargins(10, 10, 10);   // same as detailed
+        $pdf->setCellPadding(1.2);       // same as detailed
         $pdf->AddPage();
  
-        // ── Header ────────────────────────────────────────────────────────────
+        // ── Header (logo left, company right) — identical to detailed ─────────
         $logoPath = public_path('assets/img/mj-logo.jpeg');
-        $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="70">' : '';
+        $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="85">' : '';
  
         $pdf->writeHTML('
-        <table width="100%" cellpadding="3">
-            <tr>
-                <td width="35%">' . $logoHtml . '</td>
-                <td width="65%" style="text-align:center;">
-                    <strong style="font-size:13px;">MUSFIRA JEWELRY L.L.C</strong><br>
-                    <span style="font-size:8px;">
-                        Suite #M04, Mezzanine floor, Al Buteen 2 Building,<br>
-                        Gold Souq. Gate no.1, Deira, Dubai<br>
+            <table width="100%" cellpadding="3">
+                <tr>
+                    <td width="40%">' . $logoHtml . '</td>
+                    <td width="60%" style="text-align:right;font-size:10px;">
+                        <strong>MUSFIRA JEWELRY L.L.C</strong><br>
+                        Suite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai<br>
                         TRN No: 104902647700003
-                    </span>
-                </td>
-            </tr>
-        </table>', true, false, false, false);
+                    </td>
+                </tr>
+            </table><hr>', true, false, false, false);
  
-        $pdf->Ln(1);
-        $pdf->Line(12, $pdf->GetY(), 198, $pdf->GetY());
+        // ── Title — identical to detailed ─────────────────────────────────────
+        $pdf->SetFont('helvetica', 'B', 11);
+        $pdf->Cell(0, 6, 'SALE RECEIPT', 0, 1, 'C');
         $pdf->Ln(2);
+        $pdf->SetFont('helvetica', '', 9);
  
-        // Receipt / Invoice label
-        $pdf->SetFont('helvetica', 'B', 13);
-        $pdf->Cell(0, 7, 'SALE RECEIPT', 0, 1, 'C');
-        $pdf->Ln(1);
- 
-        // ── Invoice meta ──────────────────────────────────────────────────────
+        // ── Customer block left + Invoice meta table right — same as detailed ─
         $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
  
-        $pdf->writeHTML('
-        <table width="100%" cellpadding="3" style="font-size:9px;">
+        $customerHtml = '
+        <table cellpadding="3" width="100%">
             <tr>
                 <td width="50%">
-                    <b>Customer:</b> ' . ($invoice->customer->name ?? 'Walk-in Customer') . '<br>
-                    <b>Contact:</b> '  . ($invoice->customer->contact_no ?? '-') . '
+                    <b>To:</b><br>
+                    ' . ($invoice->customer->name ?? 'Walk-in Customer') . '<br>
+                    ' . ($invoice->customer->address ?? '') . '<br>
+                    Contact: ' . ($invoice->customer->contact_no ?? '-') . '<br>
+                    TRN: ' . ($invoice->customer->trn ?? '-') . '<br>
                 </td>
-                <td width="50%" style="text-align:right;">
-                    <b>Invoice No:</b> ' . $invoice->invoice_no . '<br>
-                    <b>Date:</b> ' . Carbon::parse($invoice->invoice_date)->format('d-M-Y') . '<br>
-                    <b>Payment:</b> ' . ucwords(str_replace(['+','_'], [' + ',' '], $invoice->payment_method)) . '
+                <td width="50%">
+                    <table border="1" cellpadding="3" width="100%">
+                        <tr>
+                            <td width="45%"><b>Date</b></td>
+                            <td width="55%">' . Carbon::parse($invoice->invoice_date)->format('d.m.Y') . '</td>
+                        </tr>
+                        <tr>
+                            <td><b>Invoice No</b></td>
+                            <td>' . $invoice->invoice_no . '</td>
+                        </tr>
+                        <tr>
+                            <td><b>Payment</b></td>
+                            <td>' . ucwords(str_replace(['+', '_'], [' + ', ' '], $invoice->payment_method)) . '</td>
+                        </tr>
+                        <tr>
+                            <td><b>Currency</b></td>
+                            <td>' . $invoice->currency . '</td>
+                        </tr>
+                    </table>
                 </td>
             </tr>
-        </table>', true, false, false, false);
+        </table>';
+        $pdf->writeHTML($customerHtml, true, false, false, false);
  
-        $pdf->Ln(1);
-        $pdf->Line(12, $pdf->GetY(), 198, $pdf->GetY());
-        $pdf->Ln(2);
- 
-        // ── Items table — simple columns only ─────────────────────────────────
+        // ── Items table — simple: Item | Gross Wt | Material | Amount ─────────
         $html = '
-        <table border="1" cellpadding="5" width="100%" style="font-size:10px;">
+        <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
-                <tr style="background-color:#f0f0f0;font-weight:bold;text-align:center;">
-                    <th width="6%">#</th>
-                    <th width="40%" style="text-align:left;">Item Description</th>
-                    <th width="18%">Gross Weight (g)</th>
-                    <th width="18%">Material</th>
+                <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
+                    <th width="5%">#</th>
+                    <th width="42%" style="text-align:left;">Item Name</th>
+                    <th width="13%">Description</th>
+                    <th width="12%">Gross Wt (g)</th>
+                    <th width="10%">Material</th>
                     <th width="18%">Amount (AED)</th>
                 </tr>
             </thead>
@@ -1299,83 +1309,154 @@ class SaleInvoiceController extends Controller
         $totalGrossWeight = 0;
  
         foreach ($invoice->items as $i => $item) {
-            $itemName = $item->item_name ?: ($item->product->name ?? '-');
-            if ($item->item_description) {
-                $itemName .= "\n" . $item->item_description;
-            }
- 
             $html .= '
-            <tr style="text-align:center;">
-                <td>' . ($i + 1) . '</td>
-                <td style="text-align:left;">' . nl2br(htmlspecialchars($itemName)) . '</td>
-                <td>' . number_format($item->gross_weight, 3) . '</td>
-                <td>' . ucfirst($item->material_type) . '</td>
-                <td style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
-            </tr>';
+                <tr style="text-align:center;background-color:#ffffff;">
+                    <td>' . ($i + 1) . '</td>
+                    <td style="text-align:left;">' . htmlspecialchars($item->item_name ?: ($item->product->name ?? '-')) . '</td>
+                    <td style="text-align:left;">' . htmlspecialchars($item->item_description ?? '-') . '</td>
+                    <td>' . number_format($item->gross_weight, 3) . '</td>
+                    <td>' . ucfirst($item->material_type) . '</td>
+                    <td style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
+                </tr>';
  
             $totalGrossWeight += $item->gross_weight;
         }
  
-        // Totals row
+        // Totals row — matches the net amount row style in detailed print
         $html .= '
-            <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
-                <td colspan="2" style="text-align:right;">TOTAL</td>
-                <td>' . number_format($totalGrossWeight, 3) . ' g</td>
-                <td></td>
-                <td style="font-size:11px;">' . number_format($invoice->net_amount, 2) . '</td>
-            </tr>
-        </tbody></table>';
+                <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
+                    <td colspan="3" style="text-align:right;">Net Invoice Amount</td>
+                    <td>' . number_format($totalGrossWeight, 3) . ' g</td>
+                    <td></td>
+                    <td>' . number_format($invoice->net_amount, 2) . '</td>
+                </tr>
+            </tbody>
+        </table>';
  
         $pdf->writeHTML($html, true, false, false, false);
-        $pdf->Ln(3);
  
-        // ── Amount in words ───────────────────────────────────────────────────
+        // ── Summary block — same two-column layout as detailed ─────────────────
+        $totalMakingAed = $invoice->items->sum('making_value');
+        $totalMatAed    = $invoice->items->sum('material_value');
+        $totalVatAed    = $invoice->items->sum('vat_amount');
+        $totalPartsAed  = $invoice->items->sum('parts_total');
+        $totalCurrPay   = $totalMakingAed + $totalPartsAed + $totalVatAed;
+ 
+        $summaryHtml = '
+        <table width="100%" cellpadding="0" border="0" style="margin-top:10px;">
+            <tr>
+                <td width="45%" valign="top">
+                    <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
+                        <tr style="background-color:#f5f5f5;"><td><b>Payment Details</b></td><td><b>Value</b></td></tr>
+                        <tr><td>Method</td><td>' . ucfirst($invoice->payment_method) . '</td></tr>';
+ 
+        if ($invoice->payment_method === 'credit') {
+            $summaryHtml .= '<tr><td>Payment Term</td><td>' . ($invoice->payment_term ?? '-') . '</td></tr>';
+        }
+        if ($invoice->payment_method === 'cheque') {
+            $summaryHtml .= '
+            <tr><td>Bank Name</td><td>'   . ($invoice->bank->name ?? '-') . '</td></tr>
+            <tr><td>Cheque No</td><td>'   . ($invoice->cheque_no ?? '-') . '</td></tr>
+            <tr><td>Cheque Date</td><td>' . ($invoice->cheque_date ? Carbon::parse($invoice->cheque_date)->format('d.m.Y') : '-') . '</td></tr>';
+        }
+        if ($invoice->payment_method === 'bank_transfer') {
+            $summaryHtml .= '
+            <tr><td>From Bank</td><td>'       . ($invoice->transferBank->name ?? '-') . '</td></tr>
+            <tr><td>Customer Bank</td><td>'   . ($invoice->transfer_to_bank ?? '-') . '</td></tr>
+            <tr><td>Account Title</td><td>'   . ($invoice->account_title ?? '-') . '</td></tr>
+            <tr><td>Account No</td><td>'      . ($invoice->account_no ?? '-') . '</td></tr>
+            <tr><td>Transfer Date</td><td>'   . ($invoice->transfer_date ? Carbon::parse($invoice->transfer_date)->format('d.m.Y') : '-') . '</td></tr>
+            <tr><td>Transaction Ref</td><td>' . ($invoice->transaction_id ?? '-') . '</td></tr>
+            <tr><td>Transfer Amount</td><td>' . number_format($invoice->transfer_amount ?? 0, 2) . '</td></tr>';
+        }
+        if (str_contains($invoice->payment_method, 'material')) {
+            $totalPureWeight = $invoice->items->sum('purity_weight');
+            $summaryHtml .= '
+            <tr><td>Material Given By</td><td>'    . ($invoice->material_given_by ?? '-') . '</td></tr>
+            <tr><td>Material Received By</td><td>' . ($invoice->material_received_by ?? '-') . '</td></tr>
+            <tr><td>Total Pure Weight</td><td>'    . number_format($totalPureWeight, 3) . ' gms</td></tr>
+            <tr><td>Making Charges</td><td>'       . number_format($totalMakingAed, 2) . ' AED</td></tr>';
+        }
+ 
+        $summaryHtml .= '</table>
+                </td>
+                <td width="10%"></td>
+                <td width="45%" valign="top">
+                    <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
+                        <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary (' . $invoice->currency . ')</b></td></tr>
+                        <tr><td width="60%">Material Value</td>      <td width="40%" align="right">' . number_format($totalMatAed, 2) . '</td></tr>
+                        <tr><td>Making Charges (MC)</td>              <td align="right">' . number_format($totalMakingAed, 2) . '</td></tr>
+                        <tr><td>Total VAT (on MC)</td>                <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>
+                        <tr style="font-weight:bold;background-color:#ddeeee;">
+                            <td>Currency Payable (MC + VAT)</td>
+                            <td align="right">' . number_format($totalCurrPay, 2) . '</td>
+                        </tr>
+                        <tr style="font-weight:bold;background-color:#eeeeee;">
+                            <td>Invoice Total</td>
+                            <td align="right">' . number_format($invoice->net_amount, 2) . '</td>
+                        </tr>';
+ 
+        if ($invoice->currency === 'USD') {
+            $summaryHtml .= '
+                        <tr><td>Exchange Rate</td><td align="right">' . number_format($invoice->exchange_rate, 4) . '</td></tr>
+                        <tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
+        } else {
+            $summaryHtml .= '<tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
+        }
+ 
+        $summaryHtml .= '</table></td></tr></table>';
+ 
+        $pdf->Ln(2);
+        $pdf->writeHTML($summaryHtml, true, false, false, false);
+ 
+        // ── Space check before footer — identical to detailed ─────────────────
+        $remainingSpace = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
+        if ($remainingSpace < 70) {
+            $pdf->AddPage();
+        }
+ 
+        // ── Amount in words — identical to detailed ───────────────────────────
+        $pdf->Ln(2);
         $pdf->SetFont('helvetica', 'B', 9);
         $wordsAED = $pdf->convertCurrencyToWords($aedAmount, 'AED');
-        $pdf->MultiCell(0, 5, 'Amount in Words: ' . $wordsAED, 0, 'L');
-        $pdf->Ln(2);
- 
-        // ── Payment details (minimal) ─────────────────────────────────────────
-        if ($invoice->payment_method === 'cheque' && $invoice->cheque_no) {
-            $pdf->SetFont('helvetica', '', 8);
-            $pdf->Cell(0, 4, 'Cheque No: ' . $invoice->cheque_no
-                . '   Date: ' . ($invoice->cheque_date ? Carbon::parse($invoice->cheque_date)->format('d-M-Y') : '-'),
-                0, 1, 'L');
-            $pdf->Ln(1);
+        if ($invoice->currency === 'USD') {
+            $wordsUSD = $pdf->convertCurrencyToWords($invoice->net_amount, 'USD');
+            $pdf->Cell(0, 5, 'Amount in Words (USD): ' . $wordsUSD, 0, 1, 'L');
+            $pdf->Cell(0, 5, 'Amount in Words (AED): ' . $wordsAED, 0, 1, 'L');
+        } else {
+            $pdf->Cell(0, 5, 'Amount in Words (AED): ' . $wordsAED, 0, 1, 'L');
         }
  
-        if ($invoice->payment_method === 'bank_transfer' && $invoice->transaction_id) {
-            $pdf->SetFont('helvetica', '', 8);
-            $pdf->Cell(0, 4, 'Transfer Ref: ' . $invoice->transaction_id
-                . '   Date: ' . ($invoice->transfer_date ? Carbon::parse($invoice->transfer_date)->format('d-M-Y') : '-'),
-                0, 1, 'L');
-            $pdf->Ln(1);
-        }
- 
+        // ── Remarks ───────────────────────────────────────────────────────────
         if ($invoice->remarks) {
+            $pdf->Ln(1);
             $pdf->SetFont('helvetica', '', 8);
             $pdf->MultiCell(0, 4, 'Note: ' . $invoice->remarks, 0, 'L');
-            $pdf->Ln(1);
         }
  
-        // ── Divider + Terms ───────────────────────────────────────────────────
-        $pdf->Line(12, $pdf->GetY(), 198, $pdf->GetY());
+        // ── HR + Terms — identical to detailed ───────────────────────────────
         $pdf->Ln(2);
-        $pdf->SetFont('helvetica', '', 7);
-        $pdf->MultiCell(0, 3.5,
-            'GOODS ONCE SOLD CANNOT BE RETURNED OR EXCHANGED. ' .
-            'Thank you for shopping at Musfira Jewelry. ' .
-            'For any queries please contact us at the above address.',
-            0, 'C');
+        $pdf->Line(10, $pdf->GetY(), 200, $pdf->GetY());
+        $pdf->Ln(2);
+        $pdf->SetFont('helvetica', '', 9);
+        $termsHtml = '
+            <div style="line-height:8px;text-align:justify;color:#333;">
+                <b>TERMS & CONDITIONS:</b> Goods sold on credit, if not paid when due, or in case of law suit arising there from,
+                the purchaser agrees to pay the seller all expense of recovery, collection, etc., including attorney fees,
+                legal expense and/or recovery-agent charges. <b>GOODS ONCE SOLD CANNOT BE RETURNED OR EXCHANGED.</b>
+                Any dispute arising out of or in connection with this sale shall be subject to the exclusive jurisdiction of Dubai Courts.
+            </div>';
+        $pdf->writeHTML($termsHtml, true, false, false, false);
  
-        // ── Signatures ────────────────────────────────────────────────────────
-        $pdf->Ln(16);
+        // ── Signature lines — identical to detailed ───────────────────────────
+        $pdf->Ln(26);
         $y = $pdf->GetY();
         $pdf->Line(20, $y, 80, $y);
         $pdf->Line(130, $y, 190, $y);
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetXY(20,  $y + 1); $pdf->Cell(60, 5, "Customer's Signature", 0, 0, 'C');
-        $pdf->SetXY(130, $y + 1); $pdf->Cell(60, 5, 'Authorized Signature',  0, 0, 'C');
+        $pdf->SetXY(20, $y);
+        $pdf->Cell(50, 5, "Customer's Signature", 0, 0, 'C');
+        $pdf->SetXY(130, $y);
+        $pdf->Cell(50, 5, "Authorized Signature", 0, 0, 'C');
  
         return $pdf->Output($invoice->invoice_no . '_receipt.pdf', 'I');
     }
