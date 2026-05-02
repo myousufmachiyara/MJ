@@ -44,7 +44,7 @@
                 <td><strong>{{ $invoice->invoice_no }}</strong></td>
                 <td>
                   <span class="badge bg-{{ $invoice->is_taxable ? 'success' : 'secondary' }}">
-                    {{ $invoice->is_taxable ? 'Taxable' : 'Non-Taxable' }}
+                    {{ $invoice->is_taxable ? 'Tax' : 'Non-Tax' }}
                   </span>
                 </td>
                 <td>{{ $invoice->customer->name ?? '-' }}</td>
@@ -53,29 +53,55 @@
                 <td class="text-end">{{ number_format($invoice->net_amount, 2) }}</td>
                 <td class="text-end">{{ number_format($invoice->net_amount_aed, 2) }}</td>
                 <td>
-                  <span class="badge bg-info">{{ ucwords(str_replace(['+','_'], [' + ', ' '], $invoice->payment_method)) }}</span>
+                  <span class="badge bg-info text-dark" style="font-size:.75rem">
+                    {{ ucwords(str_replace(['+','_'], [' + ', ' '], $invoice->payment_method)) }}
+                  </span>
                 </td>
                 <td>
                   <div class="btn-group btn-group-sm">
-                    <a href="{{ route('sale_invoices.edit', $invoice->id) }}" class="text-primary" title="Edit">
+
+                    {{-- Edit --}}
+                    <a href="{{ route('sale_invoices.edit', $invoice->id) }}"
+                       class="btn btn-outline-warning" title="Edit">
                       <i class="fas fa-edit"></i>
                     </a>
-                    <a href="{{ route('sale_invoices.print', $invoice->id) }}" class="text-success" target="_blank" title="Print">
-                      <i class="fas fa-print"></i>
+
+                    {{-- Detailed print (B2B) --}}
+                    <a href="{{ route('sale_invoices.print', $invoice->id) }}"
+                       class="btn btn-outline-primary" target="_blank"
+                       title="Detailed Invoice (B2B)">
+                      <i class="fas fa-file-invoice"></i>
                     </a>
+
+                    {{-- Simple print (Walk-in / Retail) --}}
+                    <a href="{{ route('sale_invoices.print_simple', $invoice->id) }}"
+                       class="btn btn-outline-success" target="_blank"
+                       title="Simple Receipt (Walk-in Customer)">
+                      <i class="fas fa-receipt"></i>
+                    </a>
+
+                    {{-- Delete --}}
                     <form method="POST" action="{{ route('sale_invoices.destroy', $invoice->id) }}"
                           onsubmit="return confirm('Delete Invoice #{{ $invoice->invoice_no }}? This cannot be undone.')">
                       @csrf @method('DELETE')
-                      <button type="submit" class="text-danger" title="Delete">
+                      <button type="submit" class="btn btn-outline-danger" title="Delete">
                         <i class="fas fa-trash"></i>
                       </button>
                     </form>
+
                   </div>
                 </td>
               </tr>
               @endforeach
             </tbody>
           </table>
+        </div>
+
+        {{-- Legend for print buttons --}}
+        <div class="mt-2 text-muted" style="font-size:.8rem;">
+          <i class="fas fa-file-invoice text-primary me-1"></i> Detailed Invoice (B2B / Wholesale)
+          &nbsp;&nbsp;
+          <i class="fas fa-receipt text-success me-1"></i> Simple Receipt (Walk-in / Retail)
         </div>
 
       </div>

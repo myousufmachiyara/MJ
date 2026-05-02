@@ -1206,4 +1206,177 @@ class SaleInvoiceController extends Controller
 
         return $voucher;
     }
+
+    // =========================================================================
+    // PRINT SIMPLE — Walk-in / Retail customer receipt
+    //
+    // Shows only:  Item Name | Gross Weight | Amount
+    // No purity, no parts detail, no rates — clean retail-style receipt.
+    // =========================================================================
+ 
+    public function printSimple($id)
+    {
+        $invoice = SaleInvoice::with([
+            'customer',
+            'items',
+            'bank',
+            'transferBank',
+        ])->findOrFail($id);
+ 
+        $pdf = new myPDF();
+        $pdf->setPrintHeader(false);
+        $pdf->setPrintFooter(false);
+        $pdf->SetCreator('Musfira Jewelry');
+        $pdf->SetTitle($invoice->invoice_no . ' — Receipt');
+        $pdf->SetMargins(12, 12, 12);
+        $pdf->setCellPadding(2);
+        $pdf->AddPage();
+ 
+        // ── Header ────────────────────────────────────────────────────────────
+        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="70">' : '';
+ 
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="3">
+            <tr>
+                <td width="35%">' . $logoHtml . '</td>
+                <td width="65%" style="text-align:center;">
+                    <strong style="font-size:13px;">MUSFIRA JEWELRY L.L.C</strong><br>
+                    <span style="font-size:8px;">
+                        Suite #M04, Mezzanine floor, Al Buteen 2 Building,<br>
+                        Gold Souq. Gate no.1, Deira, Dubai<br>
+                        TRN No: 104902647700003
+                    </span>
+                </td>
+            </tr>
+        </table>', true, false, false, false);
+ 
+        $pdf->Ln(1);
+        $pdf->Line(12, $pdf->GetY(), 198, $pdf->GetY());
+        $pdf->Ln(2);
+ 
+        // Receipt / Invoice label
+        $pdf->SetFont('helvetica', 'B', 13);
+        $pdf->Cell(0, 7, 'SALE RECEIPT', 0, 1, 'C');
+        $pdf->Ln(1);
+ 
+        // ── Invoice meta ──────────────────────────────────────────────────────
+        $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
+ 
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="3" style="font-size:9px;">
+            <tr>
+                <td width="50%">
+                    <b>Customer:</b> ' . ($invoice->customer->name ?? 'Walk-in Customer') . '<br>
+                    <b>Contact:</b> '  . ($invoice->customer->contact_no ?? '-') . '
+                </td>
+                <td width="50%" style="text-align:right;">
+                    <b>Invoice No:</b> ' . $invoice->invoice_no . '<br>
+                    <b>Date:</b> ' . Carbon::parse($invoice->invoice_date)->format('d-M-Y') . '<br>
+                    <b>Payment:</b> ' . ucwords(str_replace(['+','_'], [' + ',' '], $invoice->payment_method)) . '
+                </td>
+            </tr>
+        </table>', true, false, false, false);
+ 
+        $pdf->Ln(1);
+        $pdf->Line(12, $pdf->GetY(), 198, $pdf->GetY());
+        $pdf->Ln(2);
+ 
+        // ── Items table — simple columns only ─────────────────────────────────
+        $html = '
+        <table border="1" cellpadding="5" width="100%" style="font-size:10px;">
+            <thead>
+                <tr style="background-color:#f0f0f0;font-weight:bold;text-align:center;">
+                    <th width="6%">#</th>
+                    <th width="40%" style="text-align:left;">Item Description</th>
+                    <th width="18%">Gross Weight (g)</th>
+                    <th width="18%">Material</th>
+                    <th width="18%">Amount (AED)</th>
+                </tr>
+            </thead>
+            <tbody>';
+ 
+        $totalGrossWeight = 0;
+ 
+        foreach ($invoice->items as $i => $item) {
+            $itemName = $item->item_name ?: ($item->product->name ?? '-');
+            if ($item->item_description) {
+                $itemName .= "\n" . $item->item_description;
+            }
+ 
+            $html .= '
+            <tr style="text-align:center;">
+                <td>' . ($i + 1) . '</td>
+                <td style="text-align:left;">' . nl2br(htmlspecialchars($itemName)) . '</td>
+                <td>' . number_format($item->gross_weight, 3) . '</td>
+                <td>' . ucfirst($item->material_type) . '</td>
+                <td style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
+            </tr>';
+ 
+            $totalGrossWeight += $item->gross_weight;
+        }
+ 
+        // Totals row
+        $html .= '
+            <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
+                <td colspan="2" style="text-align:right;">TOTAL</td>
+                <td>' . number_format($totalGrossWeight, 3) . ' g</td>
+                <td></td>
+                <td style="font-size:11px;">' . number_format($invoice->net_amount, 2) . '</td>
+            </tr>
+        </tbody></table>';
+ 
+        $pdf->writeHTML($html, true, false, false, false);
+        $pdf->Ln(3);
+ 
+        // ── Amount in words ───────────────────────────────────────────────────
+        $pdf->SetFont('helvetica', 'B', 9);
+        $wordsAED = $pdf->convertCurrencyToWords($aedAmount, 'AED');
+        $pdf->MultiCell(0, 5, 'Amount in Words: ' . $wordsAED, 0, 'L');
+        $pdf->Ln(2);
+ 
+        // ── Payment details (minimal) ─────────────────────────────────────────
+        if ($invoice->payment_method === 'cheque' && $invoice->cheque_no) {
+            $pdf->SetFont('helvetica', '', 8);
+            $pdf->Cell(0, 4, 'Cheque No: ' . $invoice->cheque_no
+                . '   Date: ' . ($invoice->cheque_date ? Carbon::parse($invoice->cheque_date)->format('d-M-Y') : '-'),
+                0, 1, 'L');
+            $pdf->Ln(1);
+        }
+ 
+        if ($invoice->payment_method === 'bank_transfer' && $invoice->transaction_id) {
+            $pdf->SetFont('helvetica', '', 8);
+            $pdf->Cell(0, 4, 'Transfer Ref: ' . $invoice->transaction_id
+                . '   Date: ' . ($invoice->transfer_date ? Carbon::parse($invoice->transfer_date)->format('d-M-Y') : '-'),
+                0, 1, 'L');
+            $pdf->Ln(1);
+        }
+ 
+        if ($invoice->remarks) {
+            $pdf->SetFont('helvetica', '', 8);
+            $pdf->MultiCell(0, 4, 'Note: ' . $invoice->remarks, 0, 'L');
+            $pdf->Ln(1);
+        }
+ 
+        // ── Divider + Terms ───────────────────────────────────────────────────
+        $pdf->Line(12, $pdf->GetY(), 198, $pdf->GetY());
+        $pdf->Ln(2);
+        $pdf->SetFont('helvetica', '', 7);
+        $pdf->MultiCell(0, 3.5,
+            'GOODS ONCE SOLD CANNOT BE RETURNED OR EXCHANGED. ' .
+            'Thank you for shopping at Musfira Jewelry. ' .
+            'For any queries please contact us at the above address.',
+            0, 'C');
+ 
+        // ── Signatures ────────────────────────────────────────────────────────
+        $pdf->Ln(16);
+        $y = $pdf->GetY();
+        $pdf->Line(20, $y, 80, $y);
+        $pdf->Line(130, $y, 190, $y);
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetXY(20,  $y + 1); $pdf->Cell(60, 5, "Customer's Signature", 0, 0, 'C');
+        $pdf->SetXY(130, $y + 1); $pdf->Cell(60, 5, 'Authorized Signature',  0, 0, 'C');
+ 
+        return $pdf->Output($invoice->invoice_no . '_receipt.pdf', 'I');
+    }
 }

@@ -49,7 +49,8 @@ Route::middleware(['auth'])->group(function () {
 
     // ── Sale Helpers ──────────────────────────────────────────────────────────
     Route::get('/sale-invoices/scan-barcode', [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
-
+    Route::get('sale_invoices/{id}/print-simple',[SaleInvoiceController::class, 'printSimple'])->middleware('check.permission:sale_invoices.print')->name('sale_invoices.print_simple');
+    
     // ── Purities ──────────────────────────────────────────────────────────────
     Route::post  ('purities',      [PurityController::class, 'store'])  ->middleware('check.permission:attributes.create')->name('purities.store');
     Route::put   ('purities/{id}', [PurityController::class, 'update']) ->middleware('check.permission:attributes.edit')  ->name('purities.update');
