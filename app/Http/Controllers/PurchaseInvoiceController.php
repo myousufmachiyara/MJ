@@ -51,16 +51,14 @@ class PurchaseInvoiceController extends Controller
     public function downloadTemplate()
     {
         $filename = 'purchase_import_template.csv';
- 
+
         $rows = [
-            // Header row
             [
                 'Item Name', 'Description', 'Purity', 'Gross Wt',
                 'Making Rate', 'Material', 'VAT %',
                 'Part Name', 'Part Desc', 'Part Qty', 'Part Rate',
                 'Stone Qty', 'Stone Rate', 'Cert. Charges',
             ],
-            // Sample data rows
             ['18K Gold Bracelet', 'Handmade Chain Design', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '', ''],
             ['', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50', '75.00'],
             ['22K Wedding Band', 'Plain Polished', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '', ''],
@@ -68,7 +66,7 @@ class PurchaseInvoiceController extends Controller
             ['', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0', '200.00'],
             ['', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10', '0'],
         ];
- 
+
         // StreamedResponse: Laravel sends headers first, THEN the callback writes body.
         // This eliminates the "headers already sent" error completely.
         return response()->streamDownload(function () use ($rows) {
@@ -95,14 +93,10 @@ class PurchaseInvoiceController extends Controller
         try {
             DB::beginTransaction();
 
-            $isTaxable   = $request->boolean('is_taxable');
-            $prefix      = $isTaxable ? 'PUR-TAX-' : 'PUR-';
-            $lastInvoice = PurchaseInvoice::withTrashed()
-                ->where('invoice_no', 'LIKE', $prefix . '%')
-                ->orderBy('id', 'desc')
-                ->first();
-            $nextNumber = $lastInvoice ? ((int) str_replace($prefix, '', $lastInvoice->invoice_no)) + 1 : 1;
-            $invoiceNo  = $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+            // FIX: use generateInvoiceNo() which uses REGEXP to prevent
+            // PUR- and PUR-TAX- series bleeding into each other via LIKE.
+            $isTaxable = $request->boolean('is_taxable');
+            $invoiceNo = $this->generateInvoiceNo($isTaxable);
 
             $invoice = PurchaseInvoice::create([
                 'invoice_no'           => $invoiceNo,
@@ -399,8 +393,8 @@ class PurchaseInvoiceController extends Controller
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', '', 9);
 
-        $goldRateUsdOz  = $invoice->gold_rate_usd        ?? 0;
-        $goldRateAedOz  = $invoice->gold_rate_aed_ounce  ?? 0;
+        $goldRateUsdOz      = $invoice->gold_rate_usd       ?? 0;
+        $goldRateAedOz      = $invoice->gold_rate_aed_ounce ?? 0;
         $diamondRateDisplay = $invoice->currency === 'USD' ? $invoice->diamond_rate_usd : $invoice->diamond_rate_aed;
 
         $vendorHtml = '
@@ -660,6 +654,46 @@ class PurchaseInvoiceController extends Controller
     // PRIVATE HELPERS
     // =========================================================================
 
+    /**
+     * Generate the next sequential purchase invoice number.
+     *
+     * FIX: Uses REGEXP with a digit anchor instead of LIKE so that
+     *   'PUR-%'     NEVER matches 'PUR-TAX-00004' rows.
+     *   'PUR-TAX-%' NEVER matches 'PUR-00004' rows.
+     *
+     * The old LIKE 'PUR-%' query matched both series because
+     * 'PUR-TAX-00004' starts with 'PUR-'. Then:
+     *   str_replace('PUR-', '', 'PUR-TAX-00004') = 'TAX-00004'
+     *   (int)'TAX-00004' = 0  →  next = 1  →  DUPLICATE KEY error.
+     *
+     * REGEXP '^PUR-[0-9]+$' anchors to digits-only after prefix,
+     * so TAX rows are never matched when querying the PUR- series.
+     *
+     * lockForUpdate() prevents race conditions when two requests
+     * run simultaneously inside the same transaction.
+     *
+     * MUST be called inside an active DB::beginTransaction() block.
+     */
+    private function generateInvoiceNo(bool $isTaxable): string
+    {
+        $prefix = $isTaxable ? 'PUR-TAX-' : 'PUR-';
+
+        $last = PurchaseInvoice::withTrashed()
+            ->whereRaw(
+                'invoice_no REGEXP ?',
+                ['^' . preg_quote($prefix, '/') . '[0-9]+$']
+            )
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->first();
+
+        $next = $last
+            ? ((int) str_replace($prefix, '', $last->invoice_no)) + 1
+            : 1;
+
+        return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
+    }
+
     private function createItems(
         PurchaseInvoice $invoice,
         array $items,
@@ -867,25 +901,6 @@ class PurchaseInvoiceController extends Controller
         ]);
     }
 
-    /**
-     * Create accounting voucher + double-entry lines for a purchase invoice.
-     *
-     * DEBIT entries (all methods):
-     *   510001  Gold Material + Gold Parts
-     *   510002  Diamond Material + Diamond Parts
-     *   510003  Making Charges
-     *   105001  Input VAT Recoverable
-     *
-     * CREDIT entries:
-     *   $materialCredit = gold_material + diamond_material
-     *   $currencyCredit = $totalDebit - $materialCredit   ← derived to avoid rounding gaps
-     *
-     *   credit       → vendor AP for both portions
-     *   cash         → vendor AP (material) + 101001 Cash (currency)
-     *   cheque       → vendor AP (material) + bank account (currency)
-     *   bank_transfer→ vendor AP (material) + transfer bank (currency)
-     *   material+MC  → DR vendor AP + CR 104001 (gold out); CR vendor AP (currency owed)
-     */
     protected function createPurchaseAccountingEntries(PurchaseInvoice $invoice, array $totals): Voucher
     {
         $acct = function (string $code) use ($invoice): int {
@@ -916,7 +931,6 @@ class PurchaseInvoiceController extends Controller
 
         $entries = [];
 
-        // ── DEBIT entries ─────────────────────────────────────────────────────
         $goldDebit    = round($totals['gold_material']    + $totals['gold_parts'],    2);
         $diamondDebit = round($totals['diamond_material'] + $totals['diamond_parts'], 2);
 
@@ -968,18 +982,12 @@ class PurchaseInvoiceController extends Controller
             );
         }
 
-        // ── Credit split ──────────────────────────────────────────────────────
-        // $materialCredit → always goes to Vendor AP (vendor supplied the raw material)
-        // $currencyCredit → derived as remainder to guarantee credits = debits exactly,
-        //                   eliminating any floating-point rounding gap.
         $materialCredit = round($totals['gold_material'] + $totals['diamond_material'], 2);
-        $currencyCredit = round($totalDebit - $materialCredit, 2); // ← key fix for imbalance
+        $currencyCredit = round($totalDebit - $materialCredit, 2);
 
-        // ── CREDIT entries ────────────────────────────────────────────────────
         switch ($invoice->payment_method) {
 
             case 'credit':
-                // Both portions owed to vendor; two entries for narration clarity.
                 if ($materialCredit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
@@ -1001,7 +1009,6 @@ class PurchaseInvoiceController extends Controller
                 break;
 
             case 'cash':
-                // Material → vendor AP; currency → cash paid immediately.
                 if ($materialCredit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
@@ -1028,7 +1035,6 @@ class PurchaseInvoiceController extends Controller
                         'Bank account required for cheque payment (Inv# ' . $invoice->invoice_no . ').'
                     );
                 }
-                // Material → vendor AP; currency → bank (cheque).
                 if ($materialCredit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
@@ -1055,7 +1061,6 @@ class PurchaseInvoiceController extends Controller
                         'Transfer-from bank required for bank transfer (Inv# ' . $invoice->invoice_no . ').'
                     );
                 }
-                // Material → vendor AP; currency → transfer bank.
                 if ($materialCredit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
@@ -1078,14 +1083,6 @@ class PurchaseInvoiceController extends Controller
                 break;
 
             case 'material+making cost':
-                // You hand over your own gold inventory to the vendor as part payment.
-                //
-                // Material portion (gold inventory goes out):
-                //   DR  Vendor AP   — vendor's claim for material is settled
-                //   CR  104001      — gold inventory leaves your books
-                //
-                // Currency portion (MC + parts + VAT still owed in cash):
-                //   CR  Vendor AP   — remaining liability to vendor
                 if ($materialCredit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
@@ -1098,7 +1095,7 @@ class PurchaseInvoiceController extends Controller
                     ];
                     $entries[] = [
                         'voucher_id' => $voucher->id,
-                        'account_id' => $acct('104001'), // Gold Inventory
+                        'account_id' => $acct('104001'),
                         'debit'      => 0,
                         'credit'     => $materialCredit,
                         'narration'  => 'Gold inventory issued to vendor as material payment'
@@ -1125,7 +1122,6 @@ class PurchaseInvoiceController extends Controller
             AccountingEntry::create($entry);
         }
 
-        // ── Balance check ─────────────────────────────────────────────────────
         $sumDebits  = round(collect($entries)->sum('debit'),  2);
         $sumCredits = round(collect($entries)->sum('credit'), 2);
 
@@ -1352,31 +1348,5 @@ class PurchaseInvoiceController extends Controller
         $pdf->Cell(50, 3, 'For MUSFIRA JEWELRY L L C', 0, 0, 'C');
         $pdf->Line(155, $y, 195, $y); $pdf->SetXY(155, $y + 1);
         $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
-    }
-
-    private function generateInvoiceNo(bool $isTaxable): string
-    {
-        $prefix = $isTaxable ? 'PUR-TAX-' : 'PUR-';
- 
-        // lockForUpdate() issues SELECT ... FOR UPDATE in MySQL.
-        // Any concurrent request hitting this line will WAIT until
-        // the current transaction commits or rolls back, guaranteeing
-        // each request sees the truly latest invoice_no.
-        $last = PurchaseInvoice::withTrashed()
-            ->where('invoice_no', 'LIKE', $prefix . '%')
-            ->orderByDesc('id')
-            ->lockForUpdate()          // ← the key addition
-            ->first();
- 
-        if ($last) {
-            // Strip the prefix to get the numeric part.
-            // Works for both 'PUR-00003' and 'PUR-TAX-00003'.
-            $numeric = (int) str_replace($prefix, '', $last->invoice_no);
-            $next    = $numeric + 1;
-        } else {
-            $next = 1;
-        }
- 
-        return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
     }
 }
