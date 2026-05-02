@@ -329,7 +329,7 @@ class PurchaseInvoiceController extends Controller
     // PRINT
     // =========================================================================
 
-    public function print($id)
+public function print($id)
     {
         $invoice = PurchaseInvoice::with([
             'vendor',
@@ -342,12 +342,12 @@ class PurchaseInvoiceController extends Controller
             'transferBank',
             'vouchers.entries.account',
         ])->findOrFail($id);
-
+ 
         $totalMaterialAed = $invoice->items->sum('material_value');
         $totalMakingAed   = $invoice->items->sum('making_value');
         $totalVatAed      = $invoice->items->sum('vat_amount');
         $totalTaxableAed  = $invoice->items->sum('taxable_amount');
-
+ 
         $totalDiamondVal = $invoice->items->sum(function ($item) {
             return $item->parts->sum(fn($p) => $p->qty * $p->rate);
         });
@@ -360,9 +360,9 @@ class PurchaseInvoiceController extends Controller
         $totalPartsAed = $invoice->items->sum(function ($item) {
             return $item->parts->sum('total');
         });
-
+ 
         $totalCurrencyPayable = $totalMakingAed + $totalPartsAed + $totalVatAed;
-
+ 
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
@@ -370,9 +370,9 @@ class PurchaseInvoiceController extends Controller
         $pdf->SetTitle($invoice->invoice_no);
         $pdf->SetMargins(10, 10, 10);
         $pdf->setCellPadding(1.2);
-
+ 
         $pdf->AddPage();
-
+ 
         $logoPath = public_path('assets/img/mj-logo.jpeg');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="85">' : '';
         $pdf->writeHTML('
@@ -386,17 +386,17 @@ class PurchaseInvoiceController extends Controller
                     </td>
                 </tr>
             </table><hr>', true, false, false, false);
-
+ 
         $title = $invoice->is_taxable ? 'TAX INVOICE (PURCHASE)' : 'PURCHASE INVOICE';
         $pdf->SetFont('helvetica', 'B', 11);
         $pdf->Cell(0, 6, $title, 0, 1, 'C');
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', '', 9);
-
+ 
         $goldRateUsdOz      = $invoice->gold_rate_usd       ?? 0;
         $goldRateAedOz      = $invoice->gold_rate_aed_ounce ?? 0;
         $diamondRateDisplay = $invoice->currency === 'USD' ? $invoice->diamond_rate_usd : $invoice->diamond_rate_aed;
-
+ 
         $vendorHtml = '
         <table cellpadding="3" width="100%">
             <tr>
@@ -420,7 +420,7 @@ class PurchaseInvoiceController extends Controller
             </tr>
         </table>';
         $pdf->writeHTML($vendorHtml, true, false, false, false);
-
+ 
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
@@ -446,11 +446,11 @@ class PurchaseInvoiceController extends Controller
                 </tr>
             </thead>
             <tbody>';
-
+ 
         foreach ($invoice->items as $index => $item) {
             $hasParts     = $item->parts && $item->parts->count() > 0;
             $productTotal = $item->item_total;
-
+ 
             $html .= '
                 <tr style="text-align:center;background-color:#ffffff;">
                     <td width="3%">' . ($index + 1) . '</td>
@@ -469,12 +469,12 @@ class PurchaseInvoiceController extends Controller
                     <td width="5%">' . number_format($item->vat_percent, 0) . '%</td>
                     <td width="7%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
                 </tr>';
-
+ 
             if ($hasParts) {
                 $html .= '<tr style="background-color:#f9f9f9;font-style:italic;font-size:7px;">
                             <td></td><td colspan="14"><b>Parts Detail:</b></td>
                           </tr>';
-
+ 
                 foreach ($item->parts as $part) {
                     $displayPartName = $part->item_name ?: ($part->product->name ?? 'Part');
                     $html .= '
@@ -495,7 +495,7 @@ class PurchaseInvoiceController extends Controller
                         <td width="7%" style="font-weight:bold;">' . number_format($part->total, 2) . '</td>
                     </tr>';
                 }
-
+ 
                 $html .= '
                     <tr style="background-color:#eeeeee;font-weight:bold;font-size:8px;">
                         <td colspan="13" align="right">Product Grand Total (Material + MC + Parts + VAT):</td>
@@ -503,7 +503,7 @@ class PurchaseInvoiceController extends Controller
                     </tr>';
             }
         }
-
+ 
         $html .= '
                 <tr style="font-weight:bold;background-color:#f5f5f5;">
                     <td colspan="13" align="right">Net Invoice Amount</td>
@@ -511,11 +511,11 @@ class PurchaseInvoiceController extends Controller
                 </tr>
             </tbody>
         </table>';
-
+ 
         $pdf->writeHTML($html, true, false, false, false);
-
+ 
         $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
-
+ 
         $summaryHtml = '
         <table width="100%" cellpadding="0" border="0" style="margin-top:10px;">
             <tr>
@@ -523,7 +523,7 @@ class PurchaseInvoiceController extends Controller
                     <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
                         <tr style="background-color:#f5f5f5;"><td><b>Payment Details</b></td><td><b>Value</b></td></tr>
                         <tr><td>Method</td><td>' . ucfirst($invoice->payment_method) . '</td></tr>';
-
+ 
         if ($invoice->payment_method === 'credit') {
             $summaryHtml .= '<tr><td>Payment Term</td><td>' . ($invoice->payment_term ?? '-') . '</td></tr>';
         }
@@ -551,7 +551,7 @@ class PurchaseInvoiceController extends Controller
             <tr><td>Total Pure Weight</td><td>'    . number_format($totalPureWeight, 3) . ' gms</td></tr>
             <tr><td>Making Charges</td><td>'       . number_format($totalMakingAed, 2) . ' AED</td></tr>';
         }
-
+ 
         $summaryHtml .= '</table>
                 </td>
                 <td width="10%"></td>
@@ -572,7 +572,7 @@ class PurchaseInvoiceController extends Controller
                             <td>Invoice Total</td>
                             <td align="right">' . number_format($invoice->net_amount, 2) . '</td>
                         </tr>';
-
+ 
         if ($invoice->currency === 'USD') {
             $summaryHtml .= '
                         <tr><td>Exchange Rate</td><td align="right">' . number_format($invoice->exchange_rate, 4) . '</td></tr>
@@ -580,17 +580,17 @@ class PurchaseInvoiceController extends Controller
         } else {
             $summaryHtml .= '<tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
         }
-
+ 
         $summaryHtml .= '</table></td></tr></table>';
-
+ 
         $pdf->Ln(2);
         $pdf->writeHTML($summaryHtml, true, false, false, false);
-
+ 
         $remainingSpace = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
         if ($remainingSpace < 70) {
             $pdf->AddPage();
         }
-
+ 
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', 'B', 9);
         $wordsAED = $pdf->convertCurrencyToWords($aedAmount, 'AED');
@@ -601,7 +601,7 @@ class PurchaseInvoiceController extends Controller
         } else {
             $pdf->Cell(0, 5, 'Amount in Words (AED): ' . $wordsAED, 0, 1, 'L');
         }
-
+ 
         $pdf->Ln(2);
         $pdf->Line(10, $pdf->GetY(), 200, $pdf->GetY());
         $pdf->Ln(2);
@@ -614,7 +614,7 @@ class PurchaseInvoiceController extends Controller
                 Any dispute arising out of or in connection with this sale shall be subject to the exclusive jurisdiction of Dubai Courts.
             </div>';
         $pdf->writeHTML($termsHtml, true, false, false, false);
-
+ 
         $pdf->Ln(26);
         $y = $pdf->GetY();
         $pdf->Line(20, $y, 80, $y);
@@ -623,20 +623,162 @@ class PurchaseInvoiceController extends Controller
         $pdf->Cell(50, 5, "Receiver's Signature", 0, 0, 'C');
         $pdf->SetXY(130, $y);
         $pdf->Cell(50, 5, "Authorized Signature", 0, 0, 'C');
-
+ 
         if (str_contains(strtolower($invoice->payment_method), 'material')) {
             $pdf->AddPage();
             $this->renderMetalFixingPage($pdf, $invoice, $totalMaterialAed, 'PARTY COPY');
             $pdf->AddPage();
             $this->renderMetalFixingPage($pdf, $invoice, $totalMaterialAed, 'ACCOUNTS COPY');
         }
-
+ 
+        // ── FIX: pass $totalMaterialAed so cash/cheque/bank_transfer pages ───
+        // show the full amount paid, not just MC+parts+VAT.
+        // renderCurrencyPaymentPage() uses it only when payment is NOT material.
         $pdf->AddPage();
-        $this->renderCurrencyPaymentPage($pdf, $invoice, $totalMakingAed, $totalPartsAed, $totalVatAed, 'PARTY COPY');
+        $this->renderCurrencyPaymentPage($pdf, $invoice, $totalMakingAed, $totalPartsAed, $totalVatAed, $totalMaterialAed, 'PARTY COPY');
         $pdf->AddPage();
-        $this->renderCurrencyPaymentPage($pdf, $invoice, $totalMakingAed, $totalPartsAed, $totalVatAed, 'ACCOUNTS COPY');
-
+        $this->renderCurrencyPaymentPage($pdf, $invoice, $totalMakingAed, $totalPartsAed, $totalVatAed, $totalMaterialAed, 'ACCOUNTS COPY');
+ 
         return $pdf->Output($invoice->invoice_no . '.pdf', 'I');
+    }
+ 
+ 
+    // =========================================================================
+    // renderCurrencyPaymentPage — replace your existing method with this one
+    //
+    // New parameter: float $totalMaterial (default 0 for backwards compat)
+    //
+    // Logic:
+    //   material+making cost → payable = making + parts + VAT only
+    //                          (material was settled via gold handover)
+    //   cash / cheque / bank_transfer → payable = material + making + parts + VAT
+    //                          (vendor is paid everything in currency)
+    //   credit → same as cash for the payment page display
+    // =========================================================================
+ 
+    private function renderCurrencyPaymentPage(
+        $pdf,
+        $invoice,
+        float $totalMaking,
+        float $totalParts,
+        float $totalVat,
+        float $totalMaterial = 0,
+        string $copyType = 'PARTY COPY'
+    ): void {
+        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
+ 
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="2"><tr>
+            <td width="30%">' . $logoHtml . '</td>
+            <td width="70%" style="text-align:right;font-size:9px;">
+                <strong style="font-size:12px;">MUSFIRA JEWELRY L.L.C</strong><br>
+                M04 Al Buteen 2 Building, Old Baldiya Street, Gold Souq Gate 1 Dubai UAE.<br>
+                TRN: 104902647700003
+            </td>
+        </tr></table><hr>', true, false, false, false);
+ 
+        $pdf->SetFont('helvetica', 'B', 12);
+        $pdf->Cell(120, 8, 'CURRENCY PAYMENT', 0, 0, 'R');
+        $pdf->SetFont('helvetica', '', 9);
+        $pdf->Cell(70, 8, strtoupper($copyType), 0, 1, 'R');
+        $pdf->Ln(2);
+ 
+        $ex         = (float) ($invoice->exchange_rate ?? 1);
+        $makingAED  = $invoice->currency === 'USD' ? round($totalMaking  * $ex, 2) : $totalMaking;
+        $partsAED   = $invoice->currency === 'USD' ? round($totalParts   * $ex, 2) : $totalParts;
+        $vatAED     = $invoice->currency === 'USD' ? round($totalVat     * $ex, 2) : $totalVat;
+        $materialAED= $invoice->currency === 'USD' ? round($totalMaterial * $ex, 2) : $totalMaterial;
+ 
+        // For material+making cost: vendor already received material as gold,
+        // so currency payable is MC + parts + VAT only.
+        // For all other methods (cash, cheque, bank_transfer, credit):
+        // vendor is paid fully in currency — include material value too.
+        $isMaterial = str_contains($invoice->payment_method, 'material');
+        $payable    = $isMaterial
+            ? $makingAED + $partsAED + $vatAED
+            : $materialAED + $makingAED + $partsAED + $vatAED;
+ 
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="0"><tr>
+            <td width="60%">
+                <b>To:</b><br>' . ($invoice->vendor->name ?? '-') . '<br>' . ($invoice->vendor->address ?? '-') . '<br>
+                Contact: ' . ($invoice->vendor->contact_no ?? '-') . '<br>TRN: ' . ($invoice->vendor->trn ?? '-') . '
+            </td>
+            <td width="40%">
+                <table border="1" cellpadding="3" width="100%">
+                    <tr><td><b>REF DOC. NO#</b></td><td><b>' . $invoice->invoice_no . '</b></td></tr>
+                    <tr><td><b>DATE</b></td><td><b>' . Carbon::parse($invoice->invoice_date)->format('d/m/Y') . '</b></td></tr>
+                </table>
+            </td>
+        </tr></table>', true, false, false, false);
+ 
+        $pdf->Ln(2);
+        $pdf->SetFont('helvetica', '', 8);
+ 
+        // Build description line based on what is included
+        if ($isMaterial) {
+            $descLine = 'Making: ' . number_format($makingAED, 2)
+                      . ' | Parts: ' . number_format($partsAED, 2)
+                      . ' | VAT: ' . number_format($vatAED, 2);
+            $descTitle = 'Labour, Making Charges &amp; Parts';
+        } else {
+            $descLine = 'Material: ' . number_format($materialAED, 2)
+                      . ' | Making: ' . number_format($makingAED, 2)
+                      . ' | Parts: ' . number_format($partsAED, 2)
+                      . ' | VAT: ' . number_format($vatAED, 2);
+            $descTitle = 'Material, Making Charges &amp; Parts';
+        }
+ 
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="5" border="1" style="border-collapse:collapse;">
+            <tr style="background-color:#f2f2f2;font-weight:bold;text-align:center;">
+                <th width="10%">No.</th>
+                <th width="50%">Account Description</th>
+                <th width="20%">Amount (AED)</th>
+                <th width="20%">Total (AED)</th>
+            </tr>
+            <tr style="text-align:center;">
+                <td>1</td>
+                <td align="left">
+                    <b>' . $descTitle . '</b><br>
+                    ' . $descLine . '<br>
+                    Against Purchase Invoice # ' . $invoice->invoice_no . '
+                </td>
+                <td>' . number_format($payable, 2) . '</td>
+                <td>' . number_format($payable, 2) . '</td>
+            </tr>
+            <tr style="font-weight:bold;background-color:#f9f9f9;">
+                <td colspan="2" align="right">Total Payment Amount</td>
+                <td align="center">' . number_format($payable, 2) . '</td>
+                <td align="center">' . number_format($payable, 2) . '</td>
+            </tr>
+        </table>', true, false, false, false);
+ 
+        $words = $pdf->convertCurrencyToWords($payable, 'AED');
+        $pdf->Ln(2);
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="4" style="border:1px solid #000;">
+            <tr>
+                <td width="30%" style="border:1px solid #000;background-color:#f2f2f2;">Account Update:</td>
+                <td width="70%">' . strtoupper($words) . '</td>
+            </tr>
+            <tr>
+                <td style="border-right:0.5px solid #000;"><b>AED ' . number_format($payable, 2) . ' DEBITED</b></td>
+                <td>Being payment for ' . ($isMaterial ? 'service charges, parts and tax.' : 'material, service charges, parts and tax.') . '</td>
+            </tr>
+        </table>', true, false, false, false);
+ 
+        $pdf->Ln(30);
+        $y = $pdf->GetY();
+        $pdf->SetFont('helvetica', '', 7);
+        $pdf->Line(10, $y, 55, $y);   $pdf->SetXY(10, $y + 1); $pdf->Cell(45, 5, "RECEIVER'S SIGNATURE", 0, 0, 'C');
+        $pdf->Line(65, $y, 95, $y);   $pdf->SetXY(65, $y + 1); $pdf->Cell(30, 5, 'Prepared By', 0, 0, 'C');
+        $pdf->Line(110, $y, 140, $y); $pdf->SetXY(110, $y + 1); $pdf->Cell(30, 5, 'Checked By', 0, 0, 'C');
+        $pdf->SetXY(150, $y - 9); $pdf->SetFont('helvetica', 'B', 7);
+        $pdf->Cell(50, 3, 'For MUSFIRA JEWELRY L L C', 0, 0, 'C');
+        $pdf->Line(155, $y, 195, $y); $pdf->SetXY(155, $y + 1);
+        $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
     }
 
     // =========================================================================
@@ -1108,8 +1250,7 @@ class PurchaseInvoiceController extends Controller
                         'account_id' => $invoice->vendor_id,
                         'debit'      => 0,
                         'credit'     => $currencyCredit,
-                        'narration'  => 'Currency payable — MC + parts + VAT outstanding to vendor'
-                                        . ' — Inv# ' . $invoice->invoice_no,
+                        'narration'  => 'Currency payable — MC + parts + VAT outstanding to vendor'. ' — Inv# ' . $invoice->invoice_no,
                     ];
                 }
                 break;
@@ -1254,99 +1395,4 @@ class PurchaseInvoiceController extends Controller
         $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
     }
 
-    private function renderCurrencyPaymentPage($pdf, $invoice, float $totalMaking, float $totalParts, float $totalVat, string $copyType = 'PARTY COPY'): void
-    {
-        $logoPath = public_path('assets/img/mj-logo.jpeg');
-        $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
-
-        $pdf->writeHTML('
-        <table width="100%" cellpadding="2"><tr>
-            <td width="30%">' . $logoHtml . '</td>
-            <td width="70%" style="text-align:right;font-size:9px;">
-                <strong style="font-size:12px;">MUSFIRA JEWELRY L.L.C</strong><br>
-                M04 Al Buteen 2 Building, Old Baldiya Street, Gold Souq Gate 1 Dubai UAE.<br>
-                TRN: 104902647700003
-            </td>
-        </tr></table><hr>', true, false, false, false);
-
-        $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->Cell(120, 8, 'CURRENCY PAYMENT', 0, 0, 'R');
-        $pdf->SetFont('helvetica', '', 9);
-        $pdf->Cell(70, 8, strtoupper($copyType), 0, 1, 'R');
-        $pdf->Ln(2);
-
-        $ex        = (float) ($invoice->exchange_rate ?? 1);
-        $makingAED = $invoice->currency === 'USD' ? round($totalMaking * $ex, 2) : $totalMaking;
-        $partsAED  = $invoice->currency === 'USD' ? round($totalParts  * $ex, 2) : $totalParts;
-        $vatAED    = $invoice->currency === 'USD' ? round($totalVat    * $ex, 2) : $totalVat;
-        $payable   = $makingAED + $partsAED + $vatAED;
-
-        $pdf->writeHTML('
-        <table width="100%" cellpadding="0"><tr>
-            <td width="60%">
-                <b>To:</b><br>' . ($invoice->vendor->name ?? '-') . '<br>' . ($invoice->vendor->address ?? '-') . '<br>
-                Contact: ' . ($invoice->vendor->contact_no ?? '-') . '<br>TRN: ' . ($invoice->vendor->trn ?? '-') . '
-            </td>
-            <td width="40%">
-                <table border="1" cellpadding="3" width="100%">
-                    <tr><td><b>REF DOC. NO#</b></td><td><b>' . $invoice->invoice_no . '</b></td></tr>
-                    <tr><td><b>DATE</b></td><td><b>' . Carbon::parse($invoice->invoice_date)->format('d/m/Y') . '</b></td></tr>
-                </table>
-            </td>
-        </tr></table>', true, false, false, false);
-
-        $pdf->Ln(2);
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->writeHTML('
-        <table width="100%" cellpadding="5" border="1" style="border-collapse:collapse;">
-            <tr style="background-color:#f2f2f2;font-weight:bold;text-align:center;">
-                <th width="10%">No.</th>
-                <th width="50%">Account Description</th>
-                <th width="20%">Amount (AED)</th>
-                <th width="20%">Total (AED)</th>
-            </tr>
-            <tr style="text-align:center;">
-                <td>1</td>
-                <td align="left">
-                    <b>Labour, Making Charges &amp; Parts</b><br>
-                    Making: ' . number_format($makingAED, 2) .
-                    ' | Parts: ' . number_format($partsAED, 2) .
-                    ' | VAT: ' . number_format($vatAED, 2) . '<br>
-                    Against Purchase Invoice # ' . $invoice->invoice_no . '
-                </td>
-                <td>' . number_format($payable, 2) . '</td>
-                <td>' . number_format($payable, 2) . '</td>
-            </tr>
-            <tr style="font-weight:bold;background-color:#f9f9f9;">
-                <td colspan="2" align="right">Total Payment Amount</td>
-                <td align="center">' . number_format($payable, 2) . '</td>
-                <td align="center">' . number_format($payable, 2) . '</td>
-            </tr>
-        </table>', true, false, false, false);
-
-        $words = $pdf->convertCurrencyToWords($payable, 'AED');
-        $pdf->Ln(2);
-        $pdf->writeHTML('
-        <table width="100%" cellpadding="4" style="border:1px solid #000;">
-            <tr>
-                <td width="30%" style="border:1px solid #000;background-color:#f2f2f2;">Account Update:</td>
-                <td width="70%">' . strtoupper($words) . '</td>
-            </tr>
-            <tr>
-                <td style="border-right:0.5px solid #000;"><b>AED ' . number_format($payable, 2) . ' DEBITED</b></td>
-                <td>Being payment for service charges, parts and tax.</td>
-            </tr>
-        </table>', true, false, false, false);
-
-        $pdf->Ln(30);
-        $y = $pdf->GetY();
-        $pdf->SetFont('helvetica', '', 7);
-        $pdf->Line(10, $y, 55, $y);   $pdf->SetXY(10, $y + 1); $pdf->Cell(45, 5, "RECEIVER'S SIGNATURE", 0, 0, 'C');
-        $pdf->Line(65, $y, 95, $y);   $pdf->SetXY(65, $y + 1); $pdf->Cell(30, 5, 'Prepared By', 0, 0, 'C');
-        $pdf->Line(110, $y, 140, $y); $pdf->SetXY(110, $y + 1); $pdf->Cell(30, 5, 'Checked By', 0, 0, 'C');
-        $pdf->SetXY(150, $y - 9); $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->Cell(50, 3, 'For MUSFIRA JEWELRY L L C', 0, 0, 'C');
-        $pdf->Line(155, $y, 195, $y); $pdf->SetXY(155, $y + 1);
-        $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
-    }
 }
