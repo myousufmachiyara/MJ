@@ -1228,11 +1228,11 @@ class SaleInvoiceController extends Controller
         $pdf->setPrintFooter(false);
         $pdf->SetCreator('Musfira Jewelry');
         $pdf->SetTitle($invoice->invoice_no . ' — Receipt');
-        $pdf->SetMargins(10, 10, 10);   // same as detailed
-        $pdf->setCellPadding(1.2);       // same as detailed
+        $pdf->SetMargins(10, 10, 10);
+        $pdf->setCellPadding(1.2);
         $pdf->AddPage();
  
-        // ── Header (logo left, company right) — identical to detailed ─────────
+        // ── Header — logo left, company right (identical to detailed) ─────────
         $logoPath = public_path('assets/img/mj-logo.jpeg');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="85">' : '';
  
@@ -1248,15 +1248,16 @@ class SaleInvoiceController extends Controller
                 </tr>
             </table><hr>', true, false, false, false);
  
-        // ── Title — identical to detailed ─────────────────────────────────────
+        // ── Title ─────────────────────────────────────────────────────────────
         $pdf->SetFont('helvetica', 'B', 11);
         $pdf->Cell(0, 6, 'SALE RECEIPT', 0, 1, 'C');
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', '', 9);
  
-        // ── Customer block left + Invoice meta table right — same as detailed ─
         $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
  
+        // ── Customer block left + Invoice meta table right ────────────────────
+        // Remarks used as walk-in customer reference/ID (replaces TRN)
         $customerHtml = '
         <table cellpadding="3" width="100%">
             <tr>
@@ -1265,7 +1266,7 @@ class SaleInvoiceController extends Controller
                     ' . ($invoice->customer->name ?? 'Walk-in Customer') . '<br>
                     ' . ($invoice->customer->address ?? '') . '<br>
                     Contact: ' . ($invoice->customer->contact_no ?? '-') . '<br>
-                    TRN: ' . ($invoice->customer->trn ?? '-') . '<br>
+                    <b>Ref:</b> ' . ($invoice->remarks ?? '-') . '<br>
                 </td>
                 <td width="50%">
                     <table border="1" cellpadding="3" width="100%">
@@ -1291,7 +1292,7 @@ class SaleInvoiceController extends Controller
         </table>';
         $pdf->writeHTML($customerHtml, true, false, false, false);
  
-        // ── Items table — simple: Item | Gross Wt | Material | Amount ─────────
+        // ── Items table ───────────────────────────────────────────────────────
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
@@ -1322,7 +1323,6 @@ class SaleInvoiceController extends Controller
             $totalGrossWeight += $item->gross_weight;
         }
  
-        // Totals row — matches the net amount row style in detailed print
         $html .= '
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
                     <td colspan="3" style="text-align:right;">Net Invoice Amount</td>
@@ -1335,13 +1335,10 @@ class SaleInvoiceController extends Controller
  
         $pdf->writeHTML($html, true, false, false, false);
  
-        // ── Summary block — same two-column layout as detailed ─────────────────
-        $totalMakingAed = $invoice->items->sum('making_value');
-        $totalMatAed    = $invoice->items->sum('material_value');
-        $totalVatAed    = $invoice->items->sum('vat_amount');
-        $totalPartsAed  = $invoice->items->sum('parts_total');
-        $totalCurrPay   = $totalMakingAed + $totalPartsAed + $totalVatAed;
- 
+        // ── Summary block ─────────────────────────────────────────────────────
+        // Left:  payment method details
+        // Right: SIMPLIFIED — Invoice Total and Total (AED) only
+        //        No material/making/VAT breakdown for walk-in customers
         $summaryHtml = '
         <table width="100%" cellpadding="0" border="0" style="margin-top:10px;">
             <tr>
@@ -1371,6 +1368,7 @@ class SaleInvoiceController extends Controller
         }
         if (str_contains($invoice->payment_method, 'material')) {
             $totalPureWeight = $invoice->items->sum('purity_weight');
+            $totalMakingAed  = $invoice->items->sum('making_value');
             $summaryHtml .= '
             <tr><td>Material Given By</td><td>'    . ($invoice->material_given_by ?? '-') . '</td></tr>
             <tr><td>Material Received By</td><td>' . ($invoice->material_received_by ?? '-') . '</td></tr>
@@ -1378,30 +1376,35 @@ class SaleInvoiceController extends Controller
             <tr><td>Making Charges</td><td>'       . number_format($totalMakingAed, 2) . ' AED</td></tr>';
         }
  
+        // Right side: only Invoice Total + Total AED (no material/making/VAT rows)
         $summaryHtml .= '</table>
                 </td>
                 <td width="10%"></td>
                 <td width="45%" valign="top">
                     <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
-                        <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary (' . $invoice->currency . ')</b></td></tr>
-                        <tr><td width="60%">Material Value</td>      <td width="40%" align="right">' . number_format($totalMatAed, 2) . '</td></tr>
-                        <tr><td>Making Charges (MC)</td>              <td align="right">' . number_format($totalMakingAed, 2) . '</td></tr>
-                        <tr><td>Total VAT (on MC)</td>                <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>
-                        <tr style="font-weight:bold;background-color:#ddeeee;">
-                            <td>Currency Payable (MC + VAT)</td>
-                            <td align="right">' . number_format($totalCurrPay, 2) . '</td>
+                        <tr style="background-color:#f5f5f5;">
+                            <td colspan="2" align="center"><b>Summary (' . $invoice->currency . ')</b></td>
                         </tr>
                         <tr style="font-weight:bold;background-color:#eeeeee;">
-                            <td>Invoice Total</td>
-                            <td align="right">' . number_format($invoice->net_amount, 2) . '</td>
+                            <td width="60%">Invoice Total</td>
+                            <td width="40%" align="right">' . number_format($invoice->net_amount, 2) . '</td>
                         </tr>';
  
         if ($invoice->currency === 'USD') {
             $summaryHtml .= '
-                        <tr><td>Exchange Rate</td><td align="right">' . number_format($invoice->exchange_rate, 4) . '</td></tr>
-                        <tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
+                        <tr><td>Exchange Rate</td>
+                            <td align="right">' . number_format($invoice->exchange_rate, 4) . '</td>
+                        </tr>
+                        <tr style="font-weight:bold;background-color:#eeeeee;">
+                            <td>Total (AED)</td>
+                            <td align="right">' . number_format($aedAmount, 2) . '</td>
+                        </tr>';
         } else {
-            $summaryHtml .= '<tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
+            $summaryHtml .= '
+                        <tr style="font-weight:bold;">
+                            <td>Total (AED)</td>
+                            <td align="right">' . number_format($aedAmount, 2) . '</td>
+                        </tr>';
         }
  
         $summaryHtml .= '</table></td></tr></table>';
@@ -1409,13 +1412,13 @@ class SaleInvoiceController extends Controller
         $pdf->Ln(2);
         $pdf->writeHTML($summaryHtml, true, false, false, false);
  
-        // ── Space check before footer — identical to detailed ─────────────────
+        // ── Space check ───────────────────────────────────────────────────────
         $remainingSpace = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
         if ($remainingSpace < 70) {
             $pdf->AddPage();
         }
  
-        // ── Amount in words — identical to detailed ───────────────────────────
+        // ── Amount in words ───────────────────────────────────────────────────
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', 'B', 9);
         $wordsAED = $pdf->convertCurrencyToWords($aedAmount, 'AED');
@@ -1427,14 +1430,7 @@ class SaleInvoiceController extends Controller
             $pdf->Cell(0, 5, 'Amount in Words (AED): ' . $wordsAED, 0, 1, 'L');
         }
  
-        // ── Remarks ───────────────────────────────────────────────────────────
-        if ($invoice->remarks) {
-            $pdf->Ln(1);
-            $pdf->SetFont('helvetica', '', 8);
-            $pdf->MultiCell(0, 4, 'Note: ' . $invoice->remarks, 0, 'L');
-        }
- 
-        // ── HR + Terms — identical to detailed ───────────────────────────────
+        // ── HR + Terms ────────────────────────────────────────────────────────
         $pdf->Ln(2);
         $pdf->Line(10, $pdf->GetY(), 200, $pdf->GetY());
         $pdf->Ln(2);
@@ -1448,7 +1444,7 @@ class SaleInvoiceController extends Controller
             </div>';
         $pdf->writeHTML($termsHtml, true, false, false, false);
  
-        // ── Signature lines — identical to detailed ───────────────────────────
+        // ── Signatures ────────────────────────────────────────────────────────
         $pdf->Ln(26);
         $y = $pdf->GetY();
         $pdf->Line(20, $y, 80, $y);
