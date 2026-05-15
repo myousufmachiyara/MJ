@@ -629,6 +629,13 @@ public function print($id)
             $this->renderMetalFixingPage($pdf, $invoice, $totalMaterialAed, 'PARTY COPY');
             $pdf->AddPage();
             $this->renderMetalFixingPage($pdf, $invoice, $totalMaterialAed, 'ACCOUNTS COPY');
+
+
+            // ── NEW: Material Receiving Document ──
+            $pdf->AddPage();
+            $this->renderMaterialReceivingPage($pdf, $invoice, $totalMaterialAed, 'PARTY COPY');
+            $pdf->AddPage();
+            $this->renderMaterialReceivingPage($pdf, $invoice, $totalMaterialAed, 'ACCOUNTS COPY');
         }
  
         // ── FIX: pass $totalMaterialAed so cash/cheque/bank_transfer pages ───
@@ -1395,4 +1402,186 @@ public function print($id)
         $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
     }
 
+    private function renderMaterialReceivingPage(
+            $pdf,
+            $invoice,
+            float $totalMaterialVal,
+            string $copyType = 'PARTY COPY'
+        ): void {
+        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
+
+        // ── Header ──
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="2"><tr>
+            <td width="30%">' . $logoHtml . '</td>
+            <td width="70%" style="text-align:right;font-size:9px;">
+                <strong style="font-size:12px;">MUSFIRA JEWELRY L.L.C</strong><br>
+                M04 Al Buteen 2 Building, Old Baldiya Street, Gold Souq Gate 1 Dubai UAE.<br>
+                TRN: 104902647700003
+            </td>
+        </tr></table><hr>', true, false, false, false);
+
+        $pdf->SetFont('helvetica', 'B', 12);
+        $pdf->Cell(120, 8, 'MATERIAL RECEIVING DOCUMENT', 0, 0, 'R');
+        $pdf->SetFont('helvetica', '', 9);
+        $pdf->Cell(70, 8, strtoupper($copyType), 0, 1, 'R');
+        $pdf->Ln(2);
+
+        // ── Vendor + Invoice Meta ──
+        $goldRateUsdOz  = $invoice->gold_rate_usd       ?? 0;
+        $goldRateAedOz  = $invoice->gold_rate_aed_ounce ?? 0;
+        $goldRateAedGm  = $invoice->gold_rate_aed       ?? 0;
+
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="0"><tr>
+            <td width="55%">
+                <b>From (Material Given By):</b><br>
+                <b>' . ($invoice->material_given_by ?? 'MUSFIRA JEWELRY L.L.C') . '</b><br><br>
+                <b>To (Vendor / Received By):</b><br>
+                ' . ($invoice->vendor->name    ?? '-') . '<br>
+                ' . ($invoice->vendor->address ?? '-') . '<br>
+                Contact: ' . ($invoice->vendor->contact_no ?? '-') . '<br>
+                TRN: '     . ($invoice->vendor->trn        ?? '-') . '
+            </td>
+            <td width="45%">
+                <table border="1" cellpadding="3" width="100%">
+                    <tr><td width="55%"><b>REF Invoice #</b></td><td><b>' . $invoice->invoice_no . '</b></td></tr>
+                    <tr><td><b>Date</b></td><td>' . Carbon::parse($invoice->invoice_date)->format('d/m/Y') . '</td></tr>
+                    <tr><td><b>Gold Rate (USD/oz)</b></td><td>' . number_format($goldRateUsdOz, 2)  . '</td></tr>
+                    <tr><td><b>Gold Rate (AED/oz)</b></td><td>' . number_format($goldRateAedOz, 2)  . '</td></tr>
+                    <tr><td><b>Gold Rate (AED/gm)</b></td><td>' . number_format($goldRateAedGm, 4)  . '</td></tr>
+                </table>
+            </td>
+        </tr></table>', true, false, false, false);
+
+        $pdf->Ln(3);
+
+        // ── Items Table ──
+        $html = '
+        <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
+            <thead>
+                <tr style="background-color:#f5f5f5;font-weight:bold;text-align:center;">
+                    <th width="5%">#</th>
+                    <th width="20%">Item Name</th>
+                    <th width="15%">Description</th>
+                    <th width="10%">Net Wt (g)</th>
+                    <th width="10%">Gross Wt (g)</th>
+                    <th width="8%">Purity</th>
+                    <th width="12%">Purity Wt (g)</th>
+                    <th width="10%">995 Wt (g)</th>
+                    <th width="10%">Material Val (AED)</th>
+                </tr>
+            </thead>
+            <tbody>';
+
+        $totalNetWt    = 0;
+        $totalGrossWt  = 0;
+        $totalPurityWt = 0;
+        $total995      = 0;
+
+        foreach ($invoice->items as $index => $item) {
+            $totalNetWt    += $item->net_weight;
+            $totalGrossWt  += $item->gross_weight;
+            $totalPurityWt += $item->purity_weight;
+            $total995      += $item->col_995;
+
+            $html .= '
+                <tr style="text-align:center;">
+                    <td>' . ($index + 1) . '</td>
+                    <td style="text-align:left;">' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
+                    <td style="text-align:left;">' . ($item->item_description ?? '-') . '</td>
+                    <td>' . number_format($item->net_weight,    3) . '</td>
+                    <td>' . number_format($item->gross_weight,  3) . '</td>
+                    <td>' . number_format($item->purity * 100,  2) . '%</td>
+                    <td>' . number_format($item->purity_weight, 3) . '</td>
+                    <td>' . number_format($item->col_995 ?? 0,  3) . '</td>
+                    <td>' . number_format($item->material_value, 2) . '</td>
+                </tr>';
+        }
+
+        // Totals row
+        $html .= '
+                <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
+                    <td colspan="3" align="right"><b>TOTALS</b></td>
+                    <td>' . number_format($totalNetWt,    3) . '</td>
+                    <td>' . number_format($totalGrossWt,  3) . '</td>
+                    <td>—</td>
+                    <td>' . number_format($totalPurityWt, 3) . '</td>
+                    <td>' . number_format($total995,      3) . '</td>
+                    <td>' . number_format($totalMaterialVal, 2) . '</td>
+                </tr>
+            </tbody>
+        </table>';
+
+        $pdf->writeHTML($html, true, false, false, false);
+        $pdf->Ln(3);
+
+        // ── Summary Box ──
+        if ($invoice->currency === 'USD') {
+            $rate        = (float) ($invoice->gold_rate_usd ?? 0);
+            $rateUnit    = 'USD/oz';
+            $materialAED = round($totalMaterialVal * (float) ($invoice->exchange_rate ?? 1), 2);
+        } else {
+            $rate        = (float) ($invoice->gold_rate_aed ?? 0);
+            $rateUnit    = 'AED/gm';
+            $materialAED = (float) $totalMaterialVal;
+        }
+
+        $words = $pdf->convertCurrencyToWords($materialAED, 'AED');
+
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="4" style="border:1px solid #000;font-size:9px;">
+            <tr style="background-color:#f5f5f5;">
+                <td colspan="2"><b>MATERIAL RECEIVED SUMMARY</b></td>
+            </tr>
+            <tr>
+                <td width="40%">Total Pure Weight Received:</td>
+                <td width="60%"><b>' . number_format($totalPurityWt, 3) . ' gms</b></td>
+            </tr>
+            <tr>
+                <td>Gold Rate Applied:</td>
+                <td><b>' . number_format($rate, 4) . ' ' . $rateUnit . '</b></td>
+            </tr>
+            <tr>
+                <td>Equivalent Material Value:</td>
+                <td><b>AED ' . number_format($materialAED, 2) . '</b></td>
+            </tr>
+            <tr>
+                <td>Amount in Words:</td>
+                <td>' . strtoupper($words) . '</td>
+            </tr>
+            <tr style="background-color:#ddeeee;font-weight:bold;">
+                <td>Material Received By (Vendor):</td>
+                <td>' . ($invoice->material_received_by ?? $invoice->vendor->name ?? '-') . '</td>
+            </tr>
+        </table>', true, false, false, false);
+
+        $pdf->Ln(3);
+
+        // ── Remarks / Against Invoice note ──
+        $pdf->SetFont('helvetica', '', 8);
+        $pdf->writeHTML(
+            'Material given by <b>' . ($invoice->material_given_by ?? 'MUSFIRA JEWELRY L.L.C') . '</b>'
+            . ' to <b>' . ($invoice->vendor->name ?? '-') . '</b>'
+            . ' against Purchase Invoice # <b>' . $invoice->invoice_no . '</b>'
+            . ' dated ' . Carbon::parse($invoice->invoice_date)->format('d/m/Y') . '.'
+            . ' Total pure gold weight of <b>' . number_format($totalPurityWt, 3) . ' gms</b>'
+            . ' @ ' . number_format($rate, 4) . ' ' . $rateUnit
+            . ' = AED ' . number_format($materialAED, 2) . '.',
+            true, false, false, false
+        );
+
+        // ── Signature Lines ──
+        $pdf->Ln(25);
+        $y = $pdf->GetY();
+        $pdf->SetFont('helvetica', '', 7);
+
+        $pdf->Line(10,  $y, 65,  $y); $pdf->SetXY(10,  $y + 1); $pdf->Cell(55, 5, 'MATERIAL GIVEN BY (SIGNATURE)', 0, 0, 'C');
+        $pdf->Line(80,  $y, 135, $y); $pdf->SetXY(80,  $y + 1); $pdf->Cell(55, 5, 'MATERIAL RECEIVED BY (VENDOR)', 0, 0, 'C');
+        $pdf->SetXY(150, $y - 9);     $pdf->SetFont('helvetica', 'B', 7);
+        $pdf->Cell(50, 3, 'For MUSFIRA JEWELRY L L C', 0, 0, 'C');
+        $pdf->Line(150, $y, 195, $y); $pdf->SetXY(150, $y + 1);
+        $pdf->SetFont('helvetica', '', 7); $pdf->Cell(45, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
+    }
 }
