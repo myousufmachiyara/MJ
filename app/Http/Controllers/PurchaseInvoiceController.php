@@ -1402,12 +1402,7 @@ public function print($id)
         $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
     }
 
-    private function renderMaterialReceivingPage(
-        $pdf,
-        $invoice,
-        float $totalMaterialVal,
-        string $copyType = 'PARTY COPY'
-    ): void {
+    private function renderMaterialReceivingPage($pdf,$invoice,float $totalMaterialVal,string $copyType = 'PARTY COPY'): void {
         $logoPath = public_path('assets/img/mj-logo.jpeg');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
 
@@ -1471,7 +1466,17 @@ public function print($id)
         $totalPurityWt  = $invoice->items->sum('purity_weight');
         $materialWeight = (float) ($invoice->material_weight ?? $totalPurityWt);
 
-        // ── Main Table (matches screenshot layout) ──
+        // ── Main Table ──
+        $totalPurityWt  = $invoice->items->sum('purity_weight');
+        $materialWeight = (float) ($invoice->material_weight ?? $totalPurityWt);
+        $materialPurity = (float) ($invoice->material_purity ?? 0);
+
+        // Build description from purity — e.g. 0.9999 → "99.99% PURE GOLD"
+        // or fall back to a generic label
+        $purityLabel = $materialPurity > 0
+            ? number_format($materialPurity * 100, 2) . '% PURE GOLD FIXED'
+            : 'PURE GOLD FIXED';
+
         $html = '
         <table border="1" cellpadding="5" width="100%" style="font-size:9px;border-collapse:collapse;">
             <thead>
@@ -1485,11 +1490,11 @@ public function print($id)
             </thead>
             <tbody>
                 <tr>
-                    <td align="left">1</td>
-                    <td align="left"><b>PURE GOLD FIXED</b></td>
-                    <td align="right">' . number_format($materialWeight, 4) . '</td>
-                    <td align="right">' . number_format($rate, 2) . '</td>
-                    <td align="right">' . number_format($materialAED, 2) . '</td>
+                    <td width="8%"  align="left">1</td>
+                    <td width="42%" align="left"><b>' . $purityLabel . '</b></td>
+                    <td width="17%" align="right">' . number_format($materialWeight, 4) . '</td>
+                    <td width="17%" align="right">' . number_format($rate, 2) . '</td>
+                    <td width="16%" align="right">' . number_format($materialAED, 2) . '</td>
                 </tr>
                 <tr style="height:30px;">
                     <td></td><td></td><td></td><td></td><td></td>
