@@ -1423,7 +1423,7 @@ public function print($id)
         </tr></table><hr>', true, false, false, false);
 
         $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->Cell(120, 8, 'MATERIAL RECEIVING DOCUMENT', 0, 0, 'R');
+        $pdf->Cell(120, 8, 'METAL RECEIVING', 0, 0, 'R');
         $pdf->SetFont('helvetica', '', 9);
         $pdf->Cell(70, 8, strtoupper($copyType), 0, 1, 'R');
         $pdf->Ln(2);
@@ -1455,66 +1455,6 @@ public function print($id)
             </td>
         </tr></table>', true, false, false, false);
 
-        $pdf->Ln(3);
-
-        // ── Items Table ──
-        $html = '
-        <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
-            <thead>
-                <tr style="background-color:#f5f5f5;font-weight:bold;text-align:center;">
-                    <th width="5%">#</th>
-                    <th width="20%">Item Name</th>
-                    <th width="15%">Description</th>
-                    <th width="10%">Net Wt (g)</th>
-                    <th width="10%">Gross Wt (g)</th>
-                    <th width="8%">Purity</th>
-                    <th width="12%">Purity Wt (g)</th>
-                    <th width="10%">995 Wt (g)</th>
-                    <th width="10%">Material Val (AED)</th>
-                </tr>
-            </thead>
-            <tbody>';
-
-        $totalNetWt    = 0;
-        $totalGrossWt  = 0;
-        $totalPurityWt = 0;
-        $total995      = 0;
-
-        foreach ($invoice->items as $index => $item) {
-            $totalNetWt    += $item->net_weight;
-            $totalGrossWt  += $item->gross_weight;
-            $totalPurityWt += $item->purity_weight;
-            $total995      += $item->col_995;
-
-            $html .= '
-                <tr style="text-align:center;">
-                    <td>' . ($index + 1) . '</td>
-                    <td style="text-align:left;">' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
-                    <td style="text-align:left;">' . ($item->item_description ?? '-') . '</td>
-                    <td>' . number_format($item->net_weight,    3) . '</td>
-                    <td>' . number_format($item->gross_weight,  3) . '</td>
-                    <td>' . number_format($item->purity * 100,  2) . '%</td>
-                    <td>' . number_format($item->purity_weight, 3) . '</td>
-                    <td>' . number_format($item->col_995 ?? 0,  3) . '</td>
-                    <td>' . number_format($item->material_value, 2) . '</td>
-                </tr>';
-        }
-
-        // Totals row
-        $html .= '
-                <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
-                    <td colspan="3" align="right"><b>TOTALS</b></td>
-                    <td>' . number_format($totalNetWt,    3) . '</td>
-                    <td>' . number_format($totalGrossWt,  3) . '</td>
-                    <td>—</td>
-                    <td>' . number_format($totalPurityWt, 3) . '</td>
-                    <td>' . number_format($total995,      3) . '</td>
-                    <td>' . number_format($totalMaterialVal, 2) . '</td>
-                </tr>
-            </tbody>
-        </table>';
-
-        $pdf->writeHTML($html, true, false, false, false);
         $pdf->Ln(3);
 
         // ── Summary Box ──
