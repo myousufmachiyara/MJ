@@ -1423,7 +1423,7 @@ public function print($id)
         </tr></table><hr>', true, false, false, false);
 
         $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->Cell(120, 8, 'METAL RECEIVING DOCUMENT', 0, 0, 'R');
+        $pdf->Cell(120, 8, 'METAL RECEIVING', 0, 0, 'R');
         $pdf->SetFont('helvetica', '', 9);
         $pdf->Cell(70, 8, strtoupper($copyType), 0, 1, 'R');
         $pdf->Ln(2);
@@ -1468,57 +1468,64 @@ public function print($id)
             $materialAED = (float) $totalMaterialVal;
         }
 
-        $totalPurityWt   = $invoice->items->sum('purity_weight');
-        $materialWeight  = (float) ($invoice->material_weight  ?? $totalPurityWt);
-        $materialPurity  = (float) ($invoice->material_purity  ?? 0);
+        $totalPurityWt  = $invoice->items->sum('purity_weight');
+        $materialWeight = (float) ($invoice->material_weight ?? $totalPurityWt);
 
-        $words = $pdf->convertCurrencyToWords($materialAED, 'AED');
+        // ── Main Table (matches screenshot layout) ──
+        $html = '
+        <table border="1" cellpadding="5" width="100%" style="font-size:9px;border-collapse:collapse;">
+            <thead>
+                <tr style="background-color:#f0f0f0;font-weight:bold;">
+                    <th width="8%"  align="left">SNo</th>
+                    <th width="42%" align="left">Description</th>
+                    <th width="17%" align="right">Pure Weight</th>
+                    <th width="17%" align="right">Gram Rate</th>
+                    <th width="16%" align="right">Metal Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td align="left">1</td>
+                    <td align="left"><b>PURE GOLD FIXED</b></td>
+                    <td align="right">' . number_format($materialWeight, 4) . '</td>
+                    <td align="right">' . number_format($rate, 2) . '</td>
+                    <td align="right">' . number_format($materialAED, 2) . '</td>
+                </tr>
+                <tr style="height:30px;">
+                    <td></td><td></td><td></td><td></td><td></td>
+                </tr>
+                <tr style="background-color:#e0e0e0;font-weight:bold;">
+                    <td colspan="2" align="left">Total</td>
+                    <td align="right">' . number_format($materialWeight, 4) . '</td>
+                    <td align="right"></td>
+                    <td align="right">' . number_format($materialAED, 2) . '</td>
+                </tr>
+            </tbody>
+        </table>';
 
-        // ── "WE HAVE RECEIVED" block — mirrors Metal Sale Fixing layout ──
-        $pdf->writeHTML('<b>WE HAVE RECEIVED</b>', true, false, false, false);
+        $pdf->writeHTML($html, true, false, false, false);
+        $pdf->Ln(8);
 
-        $pdf->writeHTML('
-        <table width="100%" style="border:1px solid #000;"><tr><td style="padding:6px;">
-            RAW GOLD MATERIAL &nbsp;&nbsp;
-            <b>' . number_format($materialWeight, 3) . ' (GMS)</b>
-            &nbsp; @ &nbsp;
-            <b>' . number_format($rate, 4) . ' / ' . $rateUnit . '</b><br>
-            EQUIVALENT MATERIAL VALUE ..... <b>AED ' . number_format($materialAED, 2) . '</b>
-        </td></tr></table>', true, false, false, false);
-
-        $pdf->Ln(2);
-
-        // ── Acknowledgement box ──
-        $pdf->writeHTML('
-        <table width="100%" cellpadding="4" style="border:1px solid #000;">
-            <tr>
-                <td width="30%" style="border:1px solid #000;background-color:#f0f0f0;">
-                    Material received and account updated with:
-                </td>
-                <td width="70%" rowspan="2" valign="middle">' . strtoupper($words) . '</td>
-            </tr>
-            <tr>
-                <td style="border-right:0.5px solid #000;">
-                    <b>DEBITED AED ' . number_format($materialAED, 2) . '</b>
-                </td>
-            </tr>
-        </table>', true, false, false, false);
-
-        $pdf->Ln(2);
-        $pdf->SetFont('helvetica', '', 8);
+        // ── Account Entry Note (matches screenshot text block) ──
+        $pdf->SetFont('helvetica', '', 9);
         $pdf->writeHTML(
-            'Being raw gold material of <b>' . number_format($materialWeight, 3) . ' gms</b>'
-            . ' @ ' . number_format($rate, 4) . ' ' . $rateUnit
-            . ' received from <b>' . ($invoice->material_given_by ?? 'MUSFIRA JEWELRY L.L.C') . '</b>'
-            . ' against Purchase Invoice # <b>' . $invoice->invoice_no . '</b>'
-            . ' dated ' . Carbon::parse($invoice->invoice_date)->format('d/m/Y') . '.'
-            . ' Equivalent value AED ' . number_format($materialAED, 2)
-            . ' debited to vendor account as material receipt.',
+            'We have made the following entries in your account with us',
             true, false, false, false
         );
 
+        $pdf->SetFont('helvetica', 'B', 9);
+        $pdf->writeHTML(
+            'METAL FIXED AED ' . number_format($materialAED, 2) . ' CREDITED',
+            true, false, false, false
+        );
+        $pdf->writeHTML(
+            'Gold Grams: ' . number_format($materialWeight, 3) . ' DEBITED',
+            true, false, false, false
+        );
+
+        $pdf->Ln(20);
+
         // ── Signature Lines ──
-        $pdf->Ln(25);
         $y = $pdf->GetY();
         $pdf->SetFont('helvetica', '', 7);
 
