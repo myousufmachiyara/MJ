@@ -1403,11 +1403,11 @@ public function print($id)
     }
 
     private function renderMaterialReceivingPage(
-            $pdf,
-            $invoice,
-            float $totalMaterialVal,
-            string $copyType = 'PARTY COPY'
-        ): void {
+        $pdf,
+        $invoice,
+        float $totalMaterialVal,
+        string $copyType = 'PARTY COPY'
+    ): void {
         $logoPath = public_path('assets/img/mj-logo.jpeg');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
 
@@ -1423,15 +1423,15 @@ public function print($id)
         </tr></table><hr>', true, false, false, false);
 
         $pdf->SetFont('helvetica', 'B', 12);
-        $pdf->Cell(120, 8, 'METAL RECEIVING', 0, 0, 'R');
+        $pdf->Cell(120, 8, 'METAL RECEIVING DOCUMENT', 0, 0, 'R');
         $pdf->SetFont('helvetica', '', 9);
         $pdf->Cell(70, 8, strtoupper($copyType), 0, 1, 'R');
         $pdf->Ln(2);
 
         // ── Vendor + Invoice Meta ──
-        $goldRateUsdOz  = $invoice->gold_rate_usd       ?? 0;
-        $goldRateAedOz  = $invoice->gold_rate_aed_ounce ?? 0;
-        $goldRateAedGm  = $invoice->gold_rate_aed       ?? 0;
+        $goldRateUsdOz = $invoice->gold_rate_usd       ?? 0;
+        $goldRateAedOz = $invoice->gold_rate_aed_ounce ?? 0;
+        $goldRateAedGm = $invoice->gold_rate_aed       ?? 0;
 
         $pdf->writeHTML('
         <table width="100%" cellpadding="0"><tr>
@@ -1448,67 +1448,72 @@ public function print($id)
                 <table border="1" cellpadding="3" width="100%">
                     <tr><td width="55%"><b>REF Invoice #</b></td><td><b>' . $invoice->invoice_no . '</b></td></tr>
                     <tr><td><b>Date</b></td><td>' . Carbon::parse($invoice->invoice_date)->format('d/m/Y') . '</td></tr>
-                    <tr><td><b>Gold Rate (USD/oz)</b></td><td>' . number_format($goldRateUsdOz, 2)  . '</td></tr>
-                    <tr><td><b>Gold Rate (AED/oz)</b></td><td>' . number_format($goldRateAedOz, 2)  . '</td></tr>
-                    <tr><td><b>Gold Rate (AED/gm)</b></td><td>' . number_format($goldRateAedGm, 4)  . '</td></tr>
+                    <tr><td><b>Gold Rate (USD/oz)</b></td><td>' . number_format($goldRateUsdOz, 2) . '</td></tr>
+                    <tr><td><b>Gold Rate (AED/oz)</b></td><td>' . number_format($goldRateAedOz, 2) . '</td></tr>
+                    <tr><td><b>Gold Rate (AED/gm)</b></td><td>' . number_format($goldRateAedGm, 4) . '</td></tr>
                 </table>
             </td>
         </tr></table>', true, false, false, false);
 
-        $pdf->Ln(3);
+        $pdf->Ln(5);
 
-        // ── Summary Box ──
+        // ── Rate & AED value ──
         if ($invoice->currency === 'USD') {
             $rate        = (float) ($invoice->gold_rate_usd ?? 0);
-            $rateUnit    = 'USD/oz';
+            $rateUnit    = 'GOZ';
             $materialAED = round($totalMaterialVal * (float) ($invoice->exchange_rate ?? 1), 2);
         } else {
             $rate        = (float) ($invoice->gold_rate_aed ?? 0);
-            $rateUnit    = 'AED/gm';
+            $rateUnit    = 'GMS';
             $materialAED = (float) $totalMaterialVal;
         }
 
+        $totalPurityWt   = $invoice->items->sum('purity_weight');
+        $materialWeight  = (float) ($invoice->material_weight  ?? $totalPurityWt);
+        $materialPurity  = (float) ($invoice->material_purity  ?? 0);
+
         $words = $pdf->convertCurrencyToWords($materialAED, 'AED');
 
+        // ── "WE HAVE RECEIVED" block — mirrors Metal Sale Fixing layout ──
+        $pdf->writeHTML('<b>WE HAVE RECEIVED</b>', true, false, false, false);
+
         $pdf->writeHTML('
-        <table width="100%" cellpadding="4" style="border:1px solid #000;font-size:9px;">
-            <tr style="background-color:#f5f5f5;">
-                <td colspan="2"><b>MATERIAL RECEIVED SUMMARY</b></td>
+        <table width="100%" style="border:1px solid #000;"><tr><td style="padding:6px;">
+            RAW GOLD MATERIAL &nbsp;&nbsp;
+            <b>' . number_format($materialWeight, 3) . ' (GMS)</b>
+            &nbsp; @ &nbsp;
+            <b>' . number_format($rate, 4) . ' / ' . $rateUnit . '</b><br>
+            EQUIVALENT MATERIAL VALUE ..... <b>AED ' . number_format($materialAED, 2) . '</b>
+        </td></tr></table>', true, false, false, false);
+
+        $pdf->Ln(2);
+
+        // ── Acknowledgement box ──
+        $pdf->writeHTML('
+        <table width="100%" cellpadding="4" style="border:1px solid #000;">
+            <tr>
+                <td width="30%" style="border:1px solid #000;background-color:#f0f0f0;">
+                    Material received and account updated with:
+                </td>
+                <td width="70%" rowspan="2" valign="middle">' . strtoupper($words) . '</td>
             </tr>
             <tr>
-                <td width="40%">Total Pure Weight Received:</td>
-                <td width="60%"><b>' . number_format($totalPurityWt, 3) . ' gms</b></td>
-            </tr>
-            <tr>
-                <td>Gold Rate Applied:</td>
-                <td><b>' . number_format($rate, 4) . ' ' . $rateUnit . '</b></td>
-            </tr>
-            <tr>
-                <td>Equivalent Material Value:</td>
-                <td><b>AED ' . number_format($materialAED, 2) . '</b></td>
-            </tr>
-            <tr>
-                <td>Amount in Words:</td>
-                <td>' . strtoupper($words) . '</td>
-            </tr>
-            <tr style="background-color:#ddeeee;font-weight:bold;">
-                <td>Material Received By (Vendor):</td>
-                <td>' . ($invoice->material_received_by ?? $invoice->vendor->name ?? '-') . '</td>
+                <td style="border-right:0.5px solid #000;">
+                    <b>DEBITED AED ' . number_format($materialAED, 2) . '</b>
+                </td>
             </tr>
         </table>', true, false, false, false);
 
-        $pdf->Ln(3);
-
-        // ── Remarks / Against Invoice note ──
+        $pdf->Ln(2);
         $pdf->SetFont('helvetica', '', 8);
         $pdf->writeHTML(
-            'Material given by <b>' . ($invoice->material_given_by ?? 'MUSFIRA JEWELRY L.L.C') . '</b>'
-            . ' to <b>' . ($invoice->vendor->name ?? '-') . '</b>'
+            'Being raw gold material of <b>' . number_format($materialWeight, 3) . ' gms</b>'
+            . ' @ ' . number_format($rate, 4) . ' ' . $rateUnit
+            . ' received from <b>' . ($invoice->material_given_by ?? 'MUSFIRA JEWELRY L.L.C') . '</b>'
             . ' against Purchase Invoice # <b>' . $invoice->invoice_no . '</b>'
             . ' dated ' . Carbon::parse($invoice->invoice_date)->format('d/m/Y') . '.'
-            . ' Total pure gold weight of <b>' . number_format($totalPurityWt, 3) . ' gms</b>'
-            . ' @ ' . number_format($rate, 4) . ' ' . $rateUnit
-            . ' = AED ' . number_format($materialAED, 2) . '.',
+            . ' Equivalent value AED ' . number_format($materialAED, 2)
+            . ' debited to vendor account as material receipt.',
             true, false, false, false
         );
 
@@ -1517,11 +1522,21 @@ public function print($id)
         $y = $pdf->GetY();
         $pdf->SetFont('helvetica', '', 7);
 
-        $pdf->Line(10,  $y, 65,  $y); $pdf->SetXY(10,  $y + 1); $pdf->Cell(55, 5, 'MATERIAL GIVEN BY (SIGNATURE)', 0, 0, 'C');
-        $pdf->Line(80,  $y, 135, $y); $pdf->SetXY(80,  $y + 1); $pdf->Cell(55, 5, 'MATERIAL RECEIVED BY (VENDOR)', 0, 0, 'C');
-        $pdf->SetXY(150, $y - 9);     $pdf->SetFont('helvetica', 'B', 7);
+        $pdf->Line(10,  $y, 65,  $y);
+        $pdf->SetXY(10,  $y + 1);
+        $pdf->Cell(55, 5, 'MATERIAL GIVEN BY (SIGNATURE)', 0, 0, 'C');
+
+        $pdf->Line(80,  $y, 135, $y);
+        $pdf->SetXY(80,  $y + 1);
+        $pdf->Cell(55, 5, 'MATERIAL RECEIVED BY (VENDOR)', 0, 0, 'C');
+
+        $pdf->SetXY(150, $y - 9);
+        $pdf->SetFont('helvetica', 'B', 7);
         $pdf->Cell(50, 3, 'For MUSFIRA JEWELRY L L C', 0, 0, 'C');
-        $pdf->Line(150, $y, 195, $y); $pdf->SetXY(150, $y + 1);
-        $pdf->SetFont('helvetica', '', 7); $pdf->Cell(45, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
+
+        $pdf->Line(150, $y, 195, $y);
+        $pdf->SetXY(150, $y + 1);
+        $pdf->SetFont('helvetica', '', 7);
+        $pdf->Cell(45, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
     }
 }
