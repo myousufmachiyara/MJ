@@ -37,7 +37,6 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/users/{id}/toggle-active',   [UserController::class, 'toggleActive'])->name('users.toggleActive');
 
     // ── Product Helpers ───────────────────────────────────────────────────────
-    // REMOVED: /product/{product}/productions — ProductionController not in this app
     Route::get('/products/details',                [ProductController::class,         'details'])->name('products.receiving');
     Route::get('/product/{product}/variations',    [ProductController::class,         'getVariations'])->name('product.variations');
     Route::get('/get-subcategories/{category_id}', [ProductCategoryController::class, 'getSubcategories'])->name('products.getSubcategories');
@@ -46,11 +45,15 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/product/{product}/invoices',          [PurchaseInvoiceController::class, 'getProductInvoices']);
     Route::get('/purchase-invoices/download-template', [PurchaseInvoiceController::class, 'downloadTemplate'])->name('purchase.download_template');
     Route::get('/purchase-invoices/{id}/barcodes',     [PurchaseInvoiceController::class, 'printBarcodes'])->name('purchase_invoices.barcodes');
+    Route::get('/purchase-return/{invoiceId}/items',   [PurchaseReturnController::class,  'getInvoiceItems'])->name('purchase_return.invoice_items');
 
     // ── Sale Helpers ──────────────────────────────────────────────────────────
-    Route::get('/sale-invoices/scan-barcode', [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
-    Route::get('sale_invoices/{id}/print-simple',[SaleInvoiceController::class, 'printSimple'])->middleware('check.permission:sale_invoices.print')->name('sale_invoices.print_simple');
-    
+    Route::get('/sale-invoices/scan-barcode',      [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
+    Route::get('/sale-invoices/{id}/print-simple', [SaleInvoiceController::class, 'printSimple'])->middleware('check.permission:sale_invoices.print')->name('sale_invoices.print_simple');
+
+    // ── Sale Return Helper (AJAX — must be before the modules loop) ───────────
+    Route::get('/sale-return/{invoiceId}/items', [SaleReturnController::class, 'getInvoiceItems'])->name('sale_return.invoice_items');
+
     // ── Purities ──────────────────────────────────────────────────────────────
     Route::post  ('purities',      [PurityController::class, 'store'])  ->middleware('check.permission:attributes.create')->name('purities.store');
     Route::put   ('purities/{id}', [PurityController::class, 'update']) ->middleware('check.permission:attributes.edit')  ->name('purities.update');
@@ -71,6 +74,7 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // ── All other modules ─────────────────────────────────────────────────────
+    // sale_return is included here — do NOT also register it with Route::resource() above
     $modules = [
         'roles'                 => ['controller' => RoleController::class,               'permission' => 'user_roles'],
         'permissions'           => ['controller' => PermissionController::class,         'permission' => 'role_permissions'],
@@ -108,14 +112,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('purchase',  [PurchaseReportController::class,  'purchaseReports']) ->name('purchase');
         Route::get('sale',      [SalesReportController::class,     'saleReports'])     ->name('sale');
         Route::get('accounts',  [AccountsReportController::class,  'accounts'])        ->name('accounts');
-
-        // Sale profit PDF — must be defined BEFORE the generic 'sale' GET above won't conflict (different path)
         Route::get('sale/{id}/print-profit', [SalesReportController::class, 'printProfit'])->name('print-profit');
     });
 
     // ── Consignments ──────────────────────────────────────────────────────────
-    // NOTE: Static routes MUST come before parameterised ones in Laravel.
-    //   'consignments/scan-barcode' and 'consignments/create' must be above 'consignments/{id}'
     Route::get ('consignments/scan-barcode', [ConsignmentController::class, 'scanBarcode'])->name('consignments.scan_barcode');
     Route::get ('consignments/create',       [ConsignmentController::class, 'create'])     ->name('consignments.create');
     Route::get ('consignments',              [ConsignmentController::class, 'index'])      ->name('consignments.index');

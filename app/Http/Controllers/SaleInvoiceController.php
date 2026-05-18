@@ -505,8 +505,8 @@ class SaleInvoiceController extends Controller
             <thead>
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
                     <th width="3%"  rowspan="2">#</th>
-                    <th width="10%" rowspan="2">Item Name</th>
-                    <th width="10%" rowspan="2">Description</th>
+                    <th width="12%" rowspan="2">Item Name</th>
+                    <th width="13%" rowspan="2">Description</th>
                     <th width="6%"  rowspan="2">Gross Wt</th>
                     <th width="6%"  rowspan="2">Purity</th>
                     <th width="6%"  rowspan="2">Purity Wt</th>
@@ -532,8 +532,8 @@ class SaleInvoiceController extends Controller
             $html .= '
                 <tr style="text-align:center;background-color:#ffffff;">
                     <td width="3%">' . ($index + 1) . '</td>
-                    <td width="10%">' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
-                    <td width="10%">' . ($item->item_description ?? '-') . '</td>
+                    <td width="12%">' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
+                    <td width="13%">' . ($item->item_description ?? '-') . '</td>
                     <td width="6%">' . number_format($item->gross_weight, 3) . '</td>
                     <td width="6%">' . number_format($item->purity, 3) . '</td>
                     <td width="6%">' . number_format($item->purity_weight, 3) . '</td>
