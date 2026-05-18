@@ -506,7 +506,7 @@ class SaleInvoiceController extends Controller
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
                     <th width="3%"  rowspan="2">#</th>
                     <th width="12%" rowspan="2">Item Name</th>
-                    <th width="13%" rowspan="2">Description</th>
+                    <th width="14%" rowspan="2">Description</th>
                     <th width="6%"  rowspan="2">Gross Wt</th>
                     <th width="6%"  rowspan="2">Purity</th>
                     <th width="6%"  rowspan="2">Purity Wt</th>
@@ -533,7 +533,7 @@ class SaleInvoiceController extends Controller
                 <tr style="text-align:center;background-color:#ffffff;">
                     <td width="3%">' . ($index + 1) . '</td>
                     <td width="12%">' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
-                    <td width="13%">' . ($item->item_description ?? '-') . '</td>
+                    <td width="14%">' . ($item->item_description ?? '-') . '</td>
                     <td width="6%">' . number_format($item->gross_weight, 3) . '</td>
                     <td width="6%">' . number_format($item->purity, 3) . '</td>
                     <td width="6%">' . number_format($item->purity_weight, 3) . '</td>
@@ -557,25 +557,20 @@ class SaleInvoiceController extends Controller
                     $html .= '
                     <tr style="font-size:7px;background-color:#fcfcfc;text-align:center;">
                         <td width="3%"></td>
-                        <td width="10%" style="text-align:left;">' . $displayPartName . '</td>
-                        <td width="10%" style="text-align:left;">' . htmlspecialchars($part->part_description ?? '') . '</td>
-                        <td width="6%">' . number_format($part->qty, 3) . ' Ct</td>
-                        <td width="6%">Rate:' . number_format($part->rate, 2) . '</td>
-                        <td width="6%">St.' . number_format($part->stone_qty ?? 0, 2) . '</td>
-                        <td width="6%">SR:' . number_format($part->stone_rate ?? 0, 2) . '</td>
-                        <td width="6%" colspan="2"></td>
-                        <td width="7%"></td>
-                        <td width="8%"></td>
-                        <td width="6%"></td>
-                        <td width="5%"></td>
-                        <td width="7%" style="font-weight:bold;">' . number_format($part->total, 2) . '</td>
+                        <td width="12%" style="text-align:left;">' . $displayPartName . '</td>
+                        <td width="14%" style="text-align:left;">' . htmlspecialchars($part->part_description ?? '') . '</td>
+                        <td colspan="2">' . number_format($part->qty, 3) . ' Ct</td>
+                        <td colspan="2">Rate:' . number_format($part->rate, 2) . '</td>
+                        <td colspan="2">St.' . number_format($part->stone_qty ?? 0, 2) . '</td>
+                        <td colspan="2">SR:' . number_format($part->stone_rate ?? 0, 2) . '</td>
+                        <td colspan="3" style="font-weight:bold;" align="right">' . number_format($part->total, 2) . '</td>
                     </tr>';
                 }
 
                 $html .= '
                     <tr style="background-color:#eeeeee;font-weight:bold;font-size:8px;">
-                        <td colspan="13" align="right">Product Grand Total (Material + MC + Parts + VAT):</td>
-                        <td align="right">' . number_format($productTotal, 2) . '</td>
+                        <td colspan="12" align="right">Product Grand Total (Material + MC + Parts + VAT):</td>
+                        <td colspan="2" align="right">' . number_format($productTotal, 2) . '</td>
                     </tr>';
             }
         }

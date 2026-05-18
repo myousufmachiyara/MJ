@@ -758,12 +758,12 @@ class SaleReturnController extends Controller
 
         $entries = [];
 
-        $goldMaterialDr  = round($totals['gold_material'],    2);
-        $diaMaterialDr   = round($totals['diamond_material'], 2);
-        $makingDr        = round($totals['making'],           2);
-        $goldPartsDr     = round($totals['gold_parts']    ?? 0, 2);
-        $diaPartsDr      = round($totals['diamond_parts'] ?? 0, 2);
-        $vatDr           = round($totals['vat'],              2);
+        $goldMaterialDr = round($totals['gold_material'],    2);
+        $diaMaterialDr  = round($totals['diamond_material'], 2);
+        $makingDr       = round($totals['making'],           2);
+        $goldPartsDr    = round($totals['gold_parts']    ?? 0, 2);
+        $diaPartsDr     = round($totals['diamond_parts'] ?? 0, 2);
+        $vatDr          = round($totals['vat'],              2);
 
         $totalReturn = round(
             $goldMaterialDr + $diaMaterialDr + $makingDr + $goldPartsDr + $diaPartsDr + $vatDr,
@@ -777,11 +777,16 @@ class SaleReturnController extends Controller
         }
 
         // ── STEP 1: DR each revenue account (reverse the original sale CRs) ──
+        // Matching exact codes from seeder:
+        //   401001 = Gold Sales Revenue
+        //   401002 = Diamond Sales Revenue
+        //   402001 = Making Charges Income
+        //   208001 = Output VAT Payable (liability — DR reduces the liability)
 
         if ($goldMaterialDr > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('410001'),
+                'account_id' => $acct('401001'),   // Gold Sales Revenue
                 'debit'      => $goldMaterialDr,
                 'credit'     => 0,
                 'narration'  => 'Gold revenue reversed — Return #' . $saleReturn->return_no,
@@ -791,7 +796,7 @@ class SaleReturnController extends Controller
         if ($diaMaterialDr > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('410002'),
+                'account_id' => $acct('401002'),   // Diamond Sales Revenue
                 'debit'      => $diaMaterialDr,
                 'credit'     => 0,
                 'narration'  => 'Diamond revenue reversed — Return #' . $saleReturn->return_no,
@@ -801,44 +806,47 @@ class SaleReturnController extends Controller
         if ($makingDr > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('410003'),
+                'account_id' => $acct('402001'),   // Making Charges Income
                 'debit'      => $makingDr,
                 'credit'     => 0,
                 'narration'  => 'Making revenue reversed — Return #' . $saleReturn->return_no,
             ];
         }
 
+        // Gold parts → Gold Sales Revenue account
         if ($goldPartsDr > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('410001'),
+                'account_id' => $acct('401001'),   // Gold Sales Revenue
                 'debit'      => $goldPartsDr,
                 'credit'     => 0,
                 'narration'  => 'Gold parts revenue reversed — Return #' . $saleReturn->return_no,
             ];
         }
 
+        // Diamond parts → Diamond Sales Revenue account
         if ($diaPartsDr > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('410002'),
+                'account_id' => $acct('401002'),   // Diamond Sales Revenue
                 'debit'      => $diaPartsDr,
                 'credit'     => 0,
                 'narration'  => 'Diamond parts revenue reversed — Return #' . $saleReturn->return_no,
             ];
         }
 
+        // VAT → Output VAT Payable (DR reduces the liability)
         if ($vatDr > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('205001'),
+                'account_id' => $acct('208001'),   // Output VAT Payable
                 'debit'      => $vatDr,
                 'credit'     => 0,
                 'narration'  => 'Output VAT reversed — Return #' . $saleReturn->return_no,
             ];
         }
 
-        // ── STEP 2: ONE CR entry ──
+        // ── STEP 2: ONE CR entry — how we pay the customer back ──
 
         switch ($saleReturn->refund_method) {
 
@@ -855,7 +863,7 @@ class SaleReturnController extends Controller
             case 'cash':
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $acct('101001'),
+                    'account_id' => $acct('101001'),   // Cash in Hand
                     'debit'      => 0,
                     'credit'     => $totalReturn,
                     'narration'  => 'Cash refunded to customer — Return #' . $saleReturn->return_no,
@@ -898,7 +906,7 @@ class SaleReturnController extends Controller
                 // Customer returns gold — CR Gold Inventory (we give back gold)
                 $entries[] = [
                     'voucher_id' => $voucher->id,
-                    'account_id' => $acct('104001'),
+                    'account_id' => $acct('104001'),   // Gold Inventory
                     'debit'      => 0,
                     'credit'     => $totalReturn,
                     'narration'  => 'Gold inventory given back to customer — Return #' . $saleReturn->return_no,
@@ -935,6 +943,8 @@ class SaleReturnController extends Controller
             'dia_parts_dr'     => $diaPartsDr,
             'vat_dr'           => $vatDr,
             'total_return'     => $totalReturn,
+            'sum_debits'       => $sumDebits,
+            'sum_credits'      => $sumCredits,
         ]);
 
         return $voucher;
