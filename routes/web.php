@@ -134,4 +134,5 @@ Route::middleware(['auth'])->group(function () {
     Route::get   ('consignments/{id}/print',                                  [ConsignmentController::class, 'print'])       ->name('consignments.print');
     Route::get   ('consignments/{id}/barcodes',                               [ConsignmentController::class, 'printBarcodes'])->name('consignments.print_barcodes');
     Route::post  ('consignments/{consignmentId}/return-item/{itemId}',        [ConsignmentController::class, 'returnItem'])  ->name('consignments.return-item');
+    Route::post ('consignments/{consignmentId}/return-all',    [ConsignmentController::class, 'returnAll']) ->name('consignments.return-all');
 });

@@ -214,23 +214,6 @@ class ConsignmentController extends Controller
     }
 
     // =========================================================================
-    // MARK ITEM AS RETURNED
-    // =========================================================================
-
-    public function returnItem($consignmentId, $itemId)
-    {
-        $item = ConsignmentItem::where('consignment_id', $consignmentId)
-            ->where('id', $itemId)
-            ->where('item_status', 'in_stock')
-            ->firstOrFail();
-
-        $item->update(['item_status' => 'returned']);
-        $item->consignment->recalcStatus();
-
-        return back()->with('success', 'Item marked as returned.');
-    }
-
-    // =========================================================================
     // SCAN BARCODE FOR FORM
     // =========================================================================
 
@@ -542,14 +525,14 @@ class ConsignmentController extends Controller
 
         $pdf->writeHTML('
         <table width="100%" cellpadding="3">
-          <tr>
+        <tr>
             <td width="40%">' . $logoHtml . '</td>
             <td width="60%" style="text-align:right;font-size:10px;">
-              <strong>MUSFIRA JEWELRY L.L.C</strong><br>
-              Suite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai<br>
-              TRN No: 104902647700003
+            <strong>MUSFIRA JEWELRY L.L.C</strong><br>
+            Suite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai<br>
+            TRN No: 104902647700003
             </td>
-          </tr>
+        </tr>
         </table><hr>', true, false, false, false);
 
         $docTitle = $consignment->direction === 'inbound'
@@ -565,44 +548,54 @@ class ConsignmentController extends Controller
 
         $pdf->writeHTML('
         <table cellpadding="3" width="100%">
-          <tr>
+        <tr>
             <td width="50%" valign="top">
-              <strong>' . $direction . ':</strong><br>
-              ' . e($consignment->partner->name ?? '-') . '<br>
-              ' . e($consignment->partner->address ?? '') . '<br>
-              Tel: ' . e($consignment->partner->contact_no ?? '-') . '
+            <strong>' . $direction . ':</strong><br>
+            ' . e($consignment->partner->name ?? '-') . '<br>
+            ' . e($consignment->partner->address ?? '') . '<br>
+            Tel: ' . e($consignment->partner->contact_no ?? '-') . '
             </td>
             <td width="50%">
-              <table border="1" cellpadding="3" width="100%" style="font-size:9px;">
+            <table border="1" cellpadding="3" width="100%" style="font-size:9px;">
                 <tr><td width="45%"><strong>Consignment No</strong></td><td>' . $consignment->consignment_no . '</td></tr>
                 <tr><td><strong>Start Date</strong></td><td>' . $consignment->start_date->format('d.m.Y') . '</td></tr>
                 <tr><td><strong>End Date</strong></td><td>' . ($consignment->end_date ? $consignment->end_date->format('d.m.Y') : 'Open-ended') . '</td></tr>
                 <tr><td><strong>Duration</strong></td><td>' . ($consignment->duration_label ?: '-') . '</td></tr>
                 <tr><td><strong>Status</strong></td><td>' . ucwords(str_replace('_', ' ', $consignment->status)) . '</td></tr>
-              </table>
+            </table>
             </td>
-          </tr>
+        </tr>
         </table>', true, false, false, false);
         $pdf->Ln(3);
 
+        // =========================================================================
+        // Column layout — total must equal 100%
+        //
+        //  #        Item Name   Description  Purity  GrossWt  PurityWt  995   MkRate  MkVal  Material  MatVal  AgreedVal  Status
+        //  3%       13%         13%          5%      6%       6%        5%    6%      7%     6%        8%      9%         7%
+        //  = 3+13+13+5+6+6+5+6+7+6+8+9+7 = 100%
+        //
+        //  Making colspan=2 covers MkRate(6%) + MkVal(7%) = 13%
+        // =========================================================================
+
         $html = '
-        <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
+        <table border="1" cellpadding="2" width="100%" style="">
             <thead>
-                <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
+                <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
                     <th width="3%"  rowspan="2">#</th>
-                    <th width="12%" rowspan="2">Item Name</th>
-                    <th width="10%" rowspan="2">Description</th>
+                    <th width="11%" rowspan="2">Item Name</th>
+                    <th width="14%" rowspan="2">Description</th>
                     <th width="6%"  rowspan="2">Purity</th>
                     <th width="6%"  rowspan="2">Gross Wt</th>
                     <th width="6%"  rowspan="2">Purity Wt</th>
                     <th width="6%"  rowspan="2">995</th>
-                    <th width="13%" colspan="2">Making</th>
-                    <th width="7%"  rowspan="2">Material</th>
-                    <th width="8%"  rowspan="2">Material Val</th>
-                    <th width="7%"  rowspan="2">Agreed Val</th>
-                    <th width="5%"  rowspan="2">Status</th>
+                    <th width="13%" colspan="2" style="text-align:center;">Making</th>
+                    <th width="8%"  rowspan="2">Material</th>
+                    <th width="9%"  rowspan="2">Material Val</th>
+                    <th width="8%"  rowspan="2">Agreed Val</th>
+                    <th width="8%"  rowspan="2">Status</th>
                 </tr>
-                <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
+                <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
                     <th width="6%">Rate</th>
                     <th width="7%">Value</th>
                 </tr>
@@ -621,36 +614,42 @@ class ConsignmentController extends Controller
 
             $html .= '
             <tr style="text-align:center;background-color:' . $bg . ';">
-                <td>' . ($index + 1) . '</td>
-                <td style="text-align:left;">' . htmlspecialchars($item->item_name ?? '-') . '</td>
-                <td style="text-align:left;">' . htmlspecialchars($item->item_description ?? '-') . '</td>
-                <td>' . number_format($item->purity, 3) . '</td>
-                <td>' . number_format($item->gross_weight, 3) . '</td>
-                <td>' . number_format($item->purity_weight, 3) . '</td>
-                <td>' . number_format($item->col_995, 3) . '</td>
-                <td>' . number_format($item->making_rate, 2) . '</td>
-                <td>' . number_format($item->making_value, 2) . '</td>
-                <td>' . ucfirst($item->material_type) . '</td>
-                <td>' . number_format($item->material_value, 2) . '</td>
-                <td style="font-weight:bold;">' . number_format($item->agreed_value, 2) . '</td>
-                <td>' . ucfirst($item->item_status) . '</td>
+                <td width="3%"  style="text-align:center;">'                             . ($index + 1) . '</td>
+                <td width="11%" style="text-align:left;">'   . htmlspecialchars($item->item_name        ?? '-') . '</td>
+                <td width="14%" style="text-align:left;">'   . htmlspecialchars($item->item_description ?? '-') . '</td>
+                <td width="6%"  style="text-align:center;">' . number_format($item->purity,        3) . '</td>
+                <td width="6%"  style="text-align:center;">' . number_format($item->gross_weight,  3) . '</td>
+                <td width="6%"  style="text-align:center;">' . number_format($item->purity_weight, 3) . '</td>
+                <td width="6%"  style="text-align:center;">' . number_format($item->col_995,       3) . '</td>
+                <td width="6%"  style="text-align:right;">'  . number_format($item->making_rate,   2) . '</td>
+                <td width="7%"  style="text-align:right;">'  . number_format($item->making_value,  2) . '</td>
+                <td width="8%"  style="text-align:center;">' . ucfirst($item->material_type)           . '</td>
+                <td width="9%"  style="text-align:right;">'  . number_format($item->material_value, 2) . '</td>
+                <td width="8%"  style="text-align:right;font-weight:bold;">' . number_format($item->agreed_value, 2) . '</td>
+                <td width="8%"  style="text-align:center;">' . ucfirst($item->item_status)             . '</td>
             </tr>';
 
             if ($hasParts) {
-                $html .= '<tr style="background-color:#f9f9f9;font-style:italic;font-size:7px;">
-                            <td></td><td colspan="12"><b>Parts Detail:</b></td>
-                          </tr>';
+                $html .= '
+                <tr style="background-color:#f5f5f5">
+                    <td></td>
+                    <td colspan="12" style="text-align:left;font-style:italic;padding-left:4px;">
+                        <b>Parts:</b>
+                    </td>
+                </tr>';
+
                 foreach ($item->parts as $part) {
                     $html .= '
-                    <tr style="font-size:7px;background-color:#fcfcfc;text-align:center;">
+                    <tr style="background-color:#fafafa;text-align:center;">
                         <td></td>
-                        <td style="text-align:left;">' . htmlspecialchars($part->item_name ?? 'Part') . '</td>
-                        <td style="text-align:left;">' . htmlspecialchars($part->part_description ?? '') . '</td>
-                        <td colspan="2">' . number_format($part->qty, 3) . ' Ct @ ' . number_format($part->rate, 2) . '</td>
-                        <td>St.' . number_format($part->stone_qty ?? 0, 2) . '</td>
-                        <td>SR:' . number_format($part->stone_rate ?? 0, 2) . '</td>
-                        <td colspan="5"></td>
-                        <td style="font-weight:bold;">' . number_format($part->total, 2) . '</td>
+                        <td colspan="1" style="text-align:left;">'  . htmlspecialchars($part->item_name        ?? 'Part') . '</td>
+                        <td colspan="2" style="text-align:left;">'  . htmlspecialchars($part->part_description ?? '')     . '</td>
+                        <td colspan="2" style="text-align:center;">'
+                            . number_format($part->qty, 3) . ' Ct @ ' . number_format($part->rate, 2)
+                        . '</td>
+                        <td colspan="2" style="text-align:center;">St.' . number_format($part->stone_qty  ?? 0, 2) . '</td>
+                        <td colspan="2" style="text-align:center;">SR:' . number_format($part->stone_rate ?? 0, 2) . '</td>
+                        <td colspan="2" style="text-align:right;font-weight:bold;">' . number_format($part->total, 2) . '</td>
                     </tr>';
                 }
             }
@@ -662,15 +661,20 @@ class ConsignmentController extends Controller
         }
 
         $html .= '
-            <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
-                <td colspan="4">TOTAL</td>
-                <td>' . number_format($totGross, 3) . '</td>
-                <td colspan="5"></td>
-                <td>' . number_format($totMaterial, 2) . '</td>
-                <td>' . number_format($totAgreed, 2) . '</td>
+            <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
+                <td colspan="4" style="text-align:right;">TOTAL</td>
+                <td style="text-align:center;">' . number_format($totGross,    3) . '</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td style="text-align:right;">'  . number_format($totMaking,   2) . '</td>
+                <td></td>
+                <td style="text-align:right;">'  . number_format($totMaterial, 2) . '</td>
+                <td style="text-align:right;">'  . number_format($totAgreed,   2) . '</td>
                 <td></td>
             </tr>
-            </tbody></table>';
+            </tbody>
+        </table>';
 
         $pdf->writeHTML($html, true, false, false, false);
 
@@ -845,5 +849,69 @@ class ConsignmentController extends Controller
 
             $itemPosition++;
         }
+    }
+
+    // =========================================================================
+// SHOW
+// =========================================================================
+
+public function show($id)
+{
+    $consignment = Consignment::with([
+        'partner',
+        'items.parts',
+        'items.settledBySaleInvoice',
+    ])->findOrFail($id);
+
+    return view('consignments.show', compact('consignment'));
+}
+
+    // =========================================================================
+    // MARK SINGLE ITEM AS RETURNED — updated to stamp settled_date
+    // =========================================================================
+
+    public function returnItem($consignmentId, $itemId)
+    {
+        $item = ConsignmentItem::where('consignment_id', $consignmentId)
+            ->where('id', $itemId)
+            ->where('item_status', 'in_stock')
+            ->firstOrFail();
+
+        $item->update([
+            'item_status'  => 'returned',
+            'settled_date' => now()->toDateString(),
+        ]);
+
+        $item->consignment->recalcStatus();
+
+        return back()->with('success', 'Item marked as returned.');
+    }
+
+    // =========================================================================
+    // MARK ALL PENDING ITEMS AS RETURNED
+    // =========================================================================
+
+    public function returnAll($consignmentId)
+    {
+        $consignment = Consignment::findOrFail($consignmentId);
+
+        $pendingItems = $consignment->items()
+            ->where('item_status', 'in_stock')
+            ->get();
+
+        if ($pendingItems->isEmpty()) {
+            return back()->with('error', 'No pending items to return.');
+        }
+
+        foreach ($pendingItems as $item) {
+            $item->update([
+                'item_status'  => 'returned',
+                'settled_date' => now()->toDateString(),
+            ]);
+        }
+
+        $consignment->recalcStatus();
+
+        return back()->with('success', $pendingItems->count() . ' item(s) marked as returned.');
     }
 }
