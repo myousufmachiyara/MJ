@@ -1,56 +1,50 @@
-{{-- ============================================================
-     resources/views/consignments/create.blade.php
-     AND
-     resources/views/consignments/edit.blade.php
-     Use @include or two separate files — the core form is identical.
-     For edit: pass $consignment, $itemsJson; direction field is hidden/readonly.
-     ============================================================ --}}
 @extends('layouts.app')
-@section('title', isset($consignment) ? 'Edit Consignment' : 'New Consignment')
+@section('title', isset($consignment) ? 'Edit — ' . $consignment->consignment_no : 'New Consignment')
 
 @section('content')
+@php
+    $isEdit    = isset($consignment);
+    $itemsJson = $itemsJson ?? '[]';
+@endphp
 
-@php $isEdit = isset($consignment); @endphp
-
-<div class="card">
-  <div class="card-body p-0">
-
-    <div class="border-bottom px-3 py-2 d-flex justify-content-between align-items-center">
-      <h5 class="mb-0">
+<div class="row"><div class="col">
+  <section class="card">
+    <header class="card-header d-flex justify-content-between align-items-center">
+      <h2 class="card-title">
         <i class="fas fa-handshake me-2 text-primary"></i>
         {{ $isEdit ? 'Edit — ' . $consignment->consignment_no : 'New Consignment' }}
-      </h5>
+      </h2>
       <a href="{{ $isEdit ? route('consignments.show', $consignment->id) : route('consignments.index') }}"
          class="btn btn-sm btn-outline-secondary">
-        <i class="fas fa-arrow-left me-1"></i>Back
+        <i class="fas fa-arrow-left me-1"></i> Back
       </a>
-    </div>
+    </header>
 
     @if($errors->any())
-      <div class="alert alert-danger mx-3 mt-3 mb-0">
+      <div class="alert alert-danger mx-3 mt-3">
         <ul class="mb-0">@foreach($errors->all() as $e)<li>{{ $e }}</li>@endforeach</ul>
       </div>
     @endif
     @if(session('error'))
-      <div class="alert alert-danger mx-3 mt-3 mb-0">{{ session('error') }}</div>
+      <div class="alert alert-danger mx-3 mt-3">{{ session('error') }}</div>
     @endif
 
     <form method="POST"
-          action="{{ $isEdit ? route('consignments.update', $consignment->id) : route('consignments.store') }}">
+          action="{{ $isEdit ? route('consignments.update', $consignment->id) : route('consignments.store') }}"
+          id="consignment-form">
       @csrf
       @if($isEdit) @method('PUT') @endif
 
-      <div class="p-3">
+      <div class="card-body">
 
-        {{-- ── Header fields ─────────────────────────────────────────── --}}
-        <div class="row g-3 mb-3">
+        {{-- ===================== HEADER ===================== --}}
+        <div class="row mb-4">
 
-          {{-- Direction (create only) --}}
           @if(!$isEdit)
           <div class="col-md-3">
             <label class="fw-bold">Direction <span class="text-danger">*</span></label>
-            <select name="direction" id="direction" class="form-select" required>
-              <option value="">-- Select --</option>
+            <select name="direction" id="direction" class="form-control border-primary" required>
+              <option value="">-- Select Direction --</option>
               <option value="inbound"  {{ old('direction') === 'inbound'  ? 'selected' : '' }}>
                 ↓ Inbound — we receive goods from partner
               </option>
@@ -58,7 +52,7 @@
                 ↑ Outbound — we send goods to partner
               </option>
             </select>
-            <small class="text-muted">Inbound = barcodes generated. Outbound = no barcodes.</small>
+            <small class="text-muted">Inbound = CSG barcodes generated. Outbound = no barcodes.</small>
           </div>
           @else
           <input type="hidden" name="direction" value="{{ $consignment->direction }}">
@@ -66,18 +60,17 @@
             <label class="fw-bold">Direction</label>
             <div class="form-control bg-light">
               @if($consignment->direction === 'inbound')
-                <span class="badge bg-success"><i class="fas fa-arrow-down me-1"></i>Inbound</span>
+                <span class="badge bg-success fs-6"><i class="fas fa-arrow-down me-1"></i>Inbound</span>
               @else
-                <span class="badge bg-primary"><i class="fas fa-arrow-up me-1"></i>Outbound</span>
+                <span class="badge bg-primary fs-6"><i class="fas fa-arrow-up me-1"></i>Outbound</span>
               @endif
             </div>
           </div>
           @endif
 
-          {{-- Partner --}}
-          <div class="col-md-4">
+          <div class="col-md-3">
             <label class="fw-bold">Partner (Customer / Vendor) <span class="text-danger">*</span></label>
-            <select name="partner_id" class="form-select select2-js" required>
+            <select name="partner_id" class="form-control select2-js" required>
               <option value="">-- Select Partner --</option>
               @foreach($partners as $p)
                 <option value="{{ $p->id }}"
@@ -88,309 +81,861 @@
             </select>
           </div>
 
-          {{-- Duration label --}}
           <div class="col-md-2">
-            <label class="fw-bold">Duration Label</label>
-            <input type="text" name="duration_label" class="form-control"
-                   placeholder="e.g. 3 months"
-                   value="{{ old('duration_label', $isEdit ? $consignment->duration_label : '') }}">
-          </div>
-
-          {{-- Start date --}}
-          <div class="col-md-1-5 col-md-2">
             <label class="fw-bold">Start Date <span class="text-danger">*</span></label>
             <input type="date" name="start_date" class="form-control" required
                    value="{{ old('start_date', $isEdit ? $consignment->start_date->format('Y-m-d') : now()->format('Y-m-d')) }}">
           </div>
 
-          {{-- End date --}}
           <div class="col-md-2">
-            <label class="fw-bold">End Date</label>
+            <label>End Date</label>
             <input type="date" name="end_date" class="form-control"
                    value="{{ old('end_date', $isEdit && $consignment->end_date ? $consignment->end_date->format('Y-m-d') : '') }}">
             <small class="text-muted">Leave blank for open-ended.</small>
           </div>
 
-          {{-- Rates (used for material value calc) --}}
           <div class="col-md-2">
-            <label class="fw-bold">Gold Rate (AED/g)</label>
-            <input type="number" step="0.0001" name="gold_rate_aed" id="goldRateAed"
-                   class="form-control" value="{{ old('gold_rate_aed', 0) }}" min="0">
-          </div>
-          <div class="col-md-2">
-            <label class="fw-bold">Diamond Rate (AED/g)</label>
-            <input type="number" step="0.0001" name="diamond_rate_aed" id="diaRateAed"
-                   class="form-control" value="{{ old('diamond_rate_aed', 0) }}" min="0">
+            <label>Duration Label</label>
+            <input type="text" name="duration_label" class="form-control" placeholder="e.g. 3 months"
+                   value="{{ old('duration_label', $isEdit ? $consignment->duration_label : '') }}">
           </div>
 
-          {{-- Remarks --}}
-          <div class="col-12">
-            <label class="fw-bold">Remarks</label>
+          <div class="col-12 col-md-2 mt-2">
+            <label>Gold Rate (AED / <b>Gram</b>)</label>
+            <input type="number" step="any" name="gold_rate_aed" id="gold_rate_aed"
+                   class="form-control" value="{{ old('gold_rate_aed', 0) }}">
+            <small class="text-danger fw-bold">Used for material value calc</small>
+          </div>
+
+          <div class="col-12 col-md-2 mt-2">
+            <label>Diamond Rate (AED / <b>Gram</b>)</label>
+            <input type="number" step="any" name="diamond_rate_aed" id="diamond_rate_aed"
+                   class="form-control" value="{{ old('diamond_rate_aed', 0) }}">
+          </div>
+
+          <div class="col-md-4 mt-2">
+            <label>Remarks</label>
             <textarea name="remarks" class="form-control" rows="2"
             >{{ old('remarks', $isEdit ? $consignment->remarks : '') }}</textarea>
           </div>
 
         </div>
 
-        {{-- ── Items ─────────────────────────────────────────────────── --}}
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <h6 class="fw-bold mb-0"><i class="fas fa-list me-1"></i>Items</h6>
-          <button type="button" class="btn btn-sm btn-primary" id="addItemBtn">
-            <i class="fas fa-plus me-1"></i>Add Item
-          </button>
+        {{-- ===================== BARCODE SCANNER ===================== --}}
+        <div class="card mb-3 border-primary shadow-sm">
+          <div class="card-body py-2" style="background:rgba(13,110,253,.07)">
+            <div class="row align-items-center g-2">
+              <div class="col-auto d-flex align-items-center">
+                <i class="fas fa-barcode fa-2x text-primary me-2"></i>
+                <strong class="text-primary">Barcode Scanner</strong>
+              </div>
+              <div class="col-md-5">
+                <div class="input-group">
+                  <input type="text" id="barcode_scan_input" class="form-control"
+                         placeholder="Scan MJ-/MJT- barcode or press Enter…"
+                         autocomplete="off">
+                  <button type="button" class="btn btn-primary fw-bold" id="barcode_scan_btn">
+                    <i class="fas fa-search"></i> Search
+                  </button>
+                </div>
+                <small class="text-muted">
+                  Finds purchased items (MJ-/MJT-) and auto-fills a row.
+                  For external supplier items, use <strong>Add Item</strong> manually.
+                </small>
+              </div>
+              <div class="col-md-5">
+                <div id="barcode_scan_result" class="alert mb-0 py-2 px-3 d-none"
+                     role="alert" style="font-size:.9rem;"></div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="table-responsive">
-          <table class="table table-sm table-bordered" id="itemsTable">
-            <thead class="table-light">
-              <tr>
-                <th>#</th>
-                <th style="min-width:150px">Item Name</th>
-                <th style="min-width:100px">Description</th>
-                <th>Type</th>
-                <th style="min-width:80px">Purity</th>
-                <th style="min-width:90px">Gross Wt</th>
-                <th style="min-width:90px">Making Rate</th>
-                <th>VAT %</th>
-                <th style="min-width:110px">Agreed Value</th>
-                <th style="min-width:80px">Purity Wt</th>
-                <th style="min-width:100px">Making Val</th>
-                <th style="min-width:100px">Material Val</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="itemsBody">
-              {{-- JS-rendered rows --}}
-            </tbody>
-            <tfoot>
-              <tr class="table-secondary fw-bold">
-                <td colspan="8" class="text-end">TOTAL</td>
-                <td id="footAgreed" class="text-end text-primary">0.00</td>
-                <td id="footPurity" class="text-end">0.000</td>
-                <td id="footMaking" class="text-end">0.00</td>
-                <td id="footMaterial" class="text-end">0.00</td>
-                <td></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+        {{-- ===================== ITEMS TABLE ===================== --}}
+        <section class="card">
+          <header class="card-header d-flex justify-content-between align-items-center">
+            <h2 class="card-title">Consignment Items</h2>
+            <div class="d-flex gap-2">
+              <input type="file" id="excel_import" class="d-none" accept=".xlsx,.xls,.csv">
+              <button type="button" class="btn btn-success btn-sm"
+                      onclick="document.getElementById('excel_import').click()">
+                <i class="fas fa-file-excel me-1"></i> Import Excel
+              </button>
+              <a href="{{ route('consignments.download_template') }}" class="btn btn-danger btn-sm">
+                <i class="fas fa-download me-1"></i> Template
+              </a>
+              <button type="button" class="btn btn-primary btn-sm" onclick="addNewRow()">
+                <i class="fas fa-plus me-1"></i> Add Item
+              </button>
+            </div>
+          </header>
 
-        <div class="d-flex justify-content-end mt-3">
-          <button type="submit" class="btn btn-success px-4">
-            <i class="fas fa-save me-1"></i>
-            {{ $isEdit ? 'Update Consignment' : 'Save Consignment' }}
-          </button>
-        </div>
+          <div class="table-responsive">
+            <table class="table table-bordered">
+              <thead>
+                <tr>
+                  <th width="10%" rowspan="2">Item Name</th>
+                  <th width="10%" rowspan="2">Description</th>
+                  <th width="6%"  rowspan="2">Purity</th>
+                  <th rowspan="2">Gross Wt<br><small class="text-muted">(User Input)</small></th>
+                  <th rowspan="2">Purity Wt</th>
+                  <th rowspan="2">995</th>
+                  <th colspan="2" class="text-center">Making</th>
+                  <th width="6%" rowspan="2">Material</th>
+                  <th rowspan="2">Material Val</th>
+                  <th rowspan="2">VAT %</th>
+                  <th rowspan="2">Agreed Value<br><small class="text-muted">(Override)</small></th>
+                  <th width="5%" rowspan="2">Action</th>
+                </tr>
+                <tr>
+                  <th>Rate</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody id="ConsignmentTable"></tbody>
+            </table>
+          </div>
+
+          <div class="row mt-3 px-3 pb-3">
+            <div class="col-md-2">
+              <label>Total Gross Wt</label>
+              <input type="text" id="sum_gross_weight" class="form-control text-primary fw-bold" readonly>
+            </div>
+            <div class="col-md-2">
+              <label>Total Purity Wt</label>
+              <input type="text" id="sum_purity_weight" class="form-control text-success fw-bold" readonly>
+            </div>
+            <div class="col-md-2">
+              <label>Total Making Val</label>
+              <input type="text" id="sum_making_value" class="form-control" readonly>
+            </div>
+            <div class="col-md-2">
+              <label>Total Material Val</label>
+              <input type="text" id="sum_material_value" class="form-control" readonly>
+            </div>
+            <div class="col-md-2">
+              <label>Total Parts Val</label>
+              <input type="text" id="sum_parts_value" class="form-control text-warning fw-bold" readonly>
+            </div>
+            <div class="col-md-2">
+              <label>Total Agreed Value</label>
+              <input type="text" id="sum_agreed_value" class="form-control text-danger fw-bold" readonly>
+            </div>
+          </div>
+        </section>
 
       </div>
+
+      <footer class="card-footer text-end">
+        <a href="{{ $isEdit ? route('consignments.show', $consignment->id) : route('consignments.index') }}"
+           class="btn btn-secondary me-2">Cancel</a>
+        <button type="submit" class="btn btn-success" id="submit_btn">
+          <i class="fas fa-save me-1"></i>
+          {{ $isEdit ? 'Update Consignment' : 'Save Consignment' }}
+        </button>
+      </footer>
     </form>
-  </div>
-</div>
+  </section>
+</div></div>
 
-{{-- ── JavaScript ──────────────────────────────────────────────────────── --}}
 <script>
-const IS_EDIT    = {{ $isEdit ? 'true' : 'false' }};
-const PURITIES   = @json($purities->pluck('value','name'));
-const INIT_ITEMS = {!! $isEdit ? $itemsJson : '[]' !!};
+$(document).ready(function () {
+    const products         = @json($products);
+    const INIT_ITEMS       = {!! $itemsJson !!};
+    const IS_EDIT          = {{ $isEdit ? 'true' : 'false' }};
+    const BARCODE_SCAN_URL = '{{ route("consignments.scan_barcode_form") }}';
 
-let rowIdx = 0;
+    $('.select2-js').select2({ width: '100%' });
 
-function getGoldRate()   { return parseFloat(document.getElementById('goldRateAed').value) || 0; }
-function getDiaRate()    { return parseFloat(document.getElementById('diaRateAed').value)  || 0; }
-
-function calcRow(tr) {
-    const gw   = parseFloat(tr.querySelector('[data-f="gross_weight"]').value) || 0;
-    const pur  = parseFloat(tr.querySelector('[data-f="purity"]').value)       || 0;
-    const mr   = parseFloat(tr.querySelector('[data-f="making_rate"]').value)  || 0;
-    const vat  = parseFloat(tr.querySelector('[data-f="vat_percent"]').value)  || 0;
-    const mt   = tr.querySelector('[data-f="material_type"]').value;
-    const rate = mt === 'gold' ? getGoldRate() : getDiaRate();
-
-    const pw   = gw * pur;
-    const mv   = mr * gw;
-    const matv = rate * pw;
-    const vatv = mv * (vat / 100);
-    const agreed = matv + mv + vatv;
-
-    tr.querySelector('[data-f="purity_weight"]').value  = pw.toFixed(4);
-    tr.querySelector('[data-f="making_value"]').value   = mv.toFixed(2);
-    tr.querySelector('[data-f="material_value"]').value = matv.toFixed(2);
-
-    const agreedInput = tr.querySelector('[data-f="agreed_value"]');
-    // Only auto-set if user hasn't manually entered
-    if (!agreedInput.dataset.manual || agreedInput.dataset.manual === '0') {
-        agreedInput.value = agreed.toFixed(2);
+    // =========================================================================
+    // PURITY SNAP — same logic as sale invoice
+    // Snaps a decimal purity value (e.g. 0.75) to the nearest <select> option
+    // =========================================================================
+    function snapPurity(selectEl, purityVal) {
+        const pur = parseFloat(purityVal) || 0;
+        let nearestOpt = null;
+        let minDiff    = Infinity;
+        selectEl.find('option').each(function () {
+            const diff = Math.abs(parseFloat($(this).val()) - pur);
+            if (diff < minDiff) { minDiff = diff; nearestOpt = $(this).val(); }
+        });
+        if (nearestOpt !== null) selectEl.val(nearestOpt);
     }
 
-    updateFooter();
-}
+    // =========================================================================
+    // BARCODE SCANNER — mirrors sale invoice approach exactly:
+    // 1. addNewRow() with no data (blank row)
+    // 2. manually set each field on the new row
+    // 3. snap purity to nearest option
+    // 4. recalcRow() to compute all derived fields
+    // =========================================================================
 
-function updateFooter() {
-    let totAgreed = 0, totPurity = 0, totMaking = 0, totMaterial = 0;
-    document.querySelectorAll('#itemsBody tr').forEach(tr => {
-        totAgreed   += parseFloat(tr.querySelector('[data-f="agreed_value"]')?.value) || 0;
-        totPurity   += parseFloat(tr.querySelector('[data-f="purity_weight"]')?.value)|| 0;
-        totMaking   += parseFloat(tr.querySelector('[data-f="making_value"]')?.value) || 0;
-        totMaterial += parseFloat(tr.querySelector('[data-f="material_value"]')?.value)|| 0;
-    });
-    document.getElementById('footAgreed').textContent   = totAgreed.toFixed(2);
-    document.getElementById('footPurity').textContent   = totPurity.toFixed(3);
-    document.getElementById('footMaking').textContent   = totMaking.toFixed(2);
-    document.getElementById('footMaterial').textContent = totMaterial.toFixed(2);
-}
-
-function buildRow(data = {}, idx = rowIdx++, isSold = false) {
-    const tr = document.createElement('tr');
-    if (isSold) tr.classList.add('table-success');
-
-    // Helper to create hidden input (for sold/returned rows)
-    function hiddenField(fname, val) {
-        return `<input type="hidden" name="items[${idx}][${fname}]" value="${val ?? ''}">`;
+    function showScanResult(msg, type) {
+        const el = $('#barcode_scan_result');
+        el.removeClass('d-none alert-success alert-danger alert-warning')
+          .addClass('alert-' + type).html(msg);
+        clearTimeout(window._scanTimer);
+        window._scanTimer = setTimeout(() => el.addClass('d-none'), 6000);
     }
 
-    if (isSold) {
-        // Sold / returned rows: display-only, all fields hidden
-        tr.innerHTML = `
-            ${hiddenField('item_status', data.item_status)}
-            ${hiddenField('item_name', data.item_name)}
-            ${hiddenField('item_description', data.item_description)}
-            ${hiddenField('barcode_number', data.barcode_number)}
-            ${hiddenField('is_printed', data.is_printed ? 1 : 0)}
-            ${hiddenField('gross_weight', data.gross_weight)}
-            ${hiddenField('purity', data.purity)}
-            ${hiddenField('purity_weight', data.purity_weight)}
-            ${hiddenField('col_995', data.col_995)}
-            ${hiddenField('making_rate', data.making_rate)}
-            ${hiddenField('making_value', data.making_value)}
-            ${hiddenField('material_type', data.material_type)}
-            ${hiddenField('material_rate', data.material_rate)}
-            ${hiddenField('material_value', data.material_value)}
-            ${hiddenField('parts_total', data.parts_total)}
-            ${hiddenField('taxable_amount', data.taxable_amount)}
-            ${hiddenField('vat_percent', data.vat_percent)}
-            ${hiddenField('vat_amount', data.vat_amount)}
-            ${hiddenField('agreed_value', data.agreed_value)}
-            <td colspan="12">
-                <span class="badge bg-success me-2">SOLD</span>
-                <strong>${data.barcode_number || ''}</strong> — ${data.item_name || '-'}
-                &nbsp;|&nbsp; GW: ${parseFloat(data.gross_weight||0).toFixed(3)}g
-                &nbsp;|&nbsp; Agreed: AED ${parseFloat(data.agreed_value||0).toFixed(2)}
-            </td>
-            <td></td>`;
-        return tr;
+    function handleBarcodeScan() {
+        const barcode = $('#barcode_scan_input').val().trim();
+        if (!barcode) { $('#barcode_scan_input').focus(); return; }
+
+        $('#barcode_scan_btn').prop('disabled', true)
+                              .html('<i class="fas fa-spinner fa-spin"></i>');
+
+        $.ajax({
+            url:    BARCODE_SCAN_URL,
+            method: 'GET',
+            data:   { barcode },
+            success: function (data) {
+                if (!data.success) {
+                    showScanResult('<i class="fas fa-times-circle"></i> ' + data.message, 'danger');
+                    return;
+                }
+
+                // Duplicate check
+                let duplicate = false;
+                $('#ConsignmentTable tr.item-row').each(function () {
+                    if ($(this).find('input[name*="[source_barcode]"]').val() === barcode) {
+                        duplicate = true; return false;
+                    }
+                });
+                if (duplicate) {
+                    showScanResult(
+                        '<i class="fas fa-exclamation-triangle"></i> <strong>' +
+                        barcode + '</strong> is already on this consignment.', 'warning'
+                    );
+                    return;
+                }
+
+                // Remove blank starter row if untouched
+                const firstRow = $('#ConsignmentTable tr.item-row').first();
+                if ($('#ConsignmentTable tr.item-row').length === 1 &&
+                    !firstRow.find('.item-name-input').val()) {
+                    firstRow.next('.parts-row').remove();
+                    firstRow.remove();
+                }
+
+                // ── Step 1: add a blank row ───────────────────────────────────
+                addNewRow();
+                const newRow = $('#ConsignmentTable tr.item-row').last();
+
+                // ── Step 2: set fields manually (same as sale invoice) ────────
+                newRow.find('.item-name-input').val(data.item_name || '');
+                newRow.find('input[name*="[source_barcode]"]').val(barcode);
+                newRow.find('input[name*="[item_description]"]').val(data.item_description || '');
+                newRow.find('.gross-weight').val(parseFloat(data.gross_weight) || 0);
+                newRow.find('.making-rate').val(data.making_rate || 0);
+                newRow.find('.material-type').val(data.material_type || 'gold');
+                newRow.find('.vat-percent').val(data.vat_percent || 0);
+
+                // ── Step 3: snap purity to nearest dropdown option ────────────
+                snapPurity(newRow.find('.purity'), data.purity);
+
+                // ── Step 4: load parts if any ─────────────────────────────────
+                if (data.parts && data.parts.length > 0) {
+                    const partsRow  = newRow.next('.parts-row');
+                    const partsBody = partsRow.find('.parts-table tbody');
+                    const itemIndex = newRow.data('item-index');
+                    partsRow.show();
+                    data.parts.forEach((part, j) => {
+                        partsBody.append(buildPartRowHtml(itemIndex, j, part));
+                    });
+                }
+
+                // ── Step 5: recalculate — agreed_value stays 0 (auto-calc) ───
+                recalcRow(newRow);
+
+                newRow.addClass('table-warning');
+                setTimeout(() => newRow.removeClass('table-warning'), 2000);
+
+                const srcBadge = data.source === 'purchase'
+                    ? '<span class="badge bg-info ms-1">from Purchase</span>'
+                    : '<span class="badge bg-success ms-1">from Consignment</span>';
+                showScanResult(
+                    '<i class="fas fa-check-circle"></i> Added: <strong>' +
+                    (data.item_name || barcode) + '</strong>' + srcBadge, 'success'
+                );
+            },
+            error: function (xhr) {
+                const msg = xhr.responseJSON ? xhr.responseJSON.message
+                    : 'Search failed. Check barcode and try again.';
+                showScanResult('<i class="fas fa-times-circle"></i> ' + msg, 'danger');
+            },
+            complete: function () {
+                $('#barcode_scan_btn').prop('disabled', false)
+                                     .html('<i class="fas fa-search"></i> Search');
+                $('#barcode_scan_input').val('').focus();
+            }
+        });
     }
 
-    if (data.item_status === 'returned') {
-        tr.classList.add('table-warning');
-        tr.innerHTML = `
-            ${hiddenField('item_status', 'returned')}
-            ${hiddenField('item_name', data.item_name)}
-            ${hiddenField('agreed_value', data.agreed_value)}
-            ${hiddenField('gross_weight', data.gross_weight)}
-            ${hiddenField('purity', data.purity)}
-            ${hiddenField('purity_weight', data.purity_weight)}
-            ${hiddenField('making_rate', data.making_rate)}
-            ${hiddenField('making_value', data.making_value)}
-            ${hiddenField('material_type', data.material_type)}
-            ${hiddenField('material_value', data.material_value)}
-            ${hiddenField('vat_percent', data.vat_percent)}
-            ${hiddenField('vat_amount', data.vat_amount)}
-            ${hiddenField('parts_total', data.parts_total)}
-            ${hiddenField('taxable_amount', data.taxable_amount)}
-            <td colspan="12">
-                <span class="badge bg-secondary me-2">RETURNED</span>
-                ${data.item_name || '-'}
-            </td>
-            <td></td>`;
-        return tr;
-    }
+    $('#barcode_scan_input').on('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); handleBarcodeScan(); }
+    });
+    $('#barcode_scan_btn').on('click', handleBarcodeScan);
 
-    // Active in_stock row
-    tr.innerHTML = `
-        <td class="text-center row-num"></td>
-        <td><input type="text" name="items[${idx}][item_name]" class="form-control form-control-sm" value="${data.item_name||''}" data-f="item_name"></td>
-        <td><input type="text" name="items[${idx}][item_description]" class="form-control form-control-sm" value="${data.item_description||''}" data-f="item_description"></td>
-        <td>
-          <select name="items[${idx}][material_type]" class="form-select form-select-sm" data-f="material_type">
-            <option value="gold"    ${(data.material_type||'gold')==='gold'    ? 'selected':''}>Gold</option>
-            <option value="diamond" ${(data.material_type||'')==='diamond' ? 'selected':''}>Diamond</option>
-          </select>
-        </td>
-        <td><input type="number" step="0.001" min="0" max="1" name="items[${idx}][purity]" class="form-control form-control-sm" value="${data.purity||''}" data-f="purity" placeholder="0.916"></td>
-        <td><input type="number" step="0.001" min="0" name="items[${idx}][gross_weight]" class="form-control form-control-sm" value="${data.gross_weight||''}" data-f="gross_weight"></td>
-        <td><input type="number" step="0.01"  min="0" name="items[${idx}][making_rate]" class="form-control form-control-sm" value="${data.making_rate||''}" data-f="making_rate"></td>
-        <td><input type="number" step="0.01"  min="0" max="100" name="items[${idx}][vat_percent]" class="form-control form-control-sm" value="${data.vat_percent||0}" data-f="vat_percent"></td>
-        <td><input type="number" step="0.01"  min="0" name="items[${idx}][agreed_value]" class="form-control form-control-sm fw-bold" value="${data.agreed_value||''}" data-f="agreed_value" data-manual="0"></td>
-        <td><input type="number" step="0.0001" name="items[${idx}][purity_weight]" class="form-control form-control-sm bg-light" value="${data.purity_weight||''}" data-f="purity_weight" readonly></td>
-        <td><input type="number" step="0.01" name="items[${idx}][making_value]" class="form-control form-control-sm bg-light" value="${data.making_value||''}" data-f="making_value" readonly></td>
-        <td><input type="number" step="0.01" name="items[${idx}][material_value]" class="form-control form-control-sm bg-light" value="${data.material_value||''}" data-f="material_value" readonly></td>
-        <td class="text-center">
-          <button type="button" class="btn btn-sm btn-outline-danger remove-item"><i class="fas fa-times"></i></button>
-        </td>`;
+    // =========================================================================
+    // EXCEL IMPORT
+    // =========================================================================
 
-    // Hidden supplemental fields
-    ['col_995','parts_total','taxable_amount','vat_amount','barcode_number','is_printed','item_status'].forEach(f => {
-        const inp = document.createElement('input');
-        inp.type  = 'hidden';
-        inp.name  = `items[${idx}][${f}]`;
-        inp.value = data[f] ?? (f === 'item_status' ? 'in_stock' : (f === 'is_printed' ? 0 : ''));
-        inp.dataset.f = f;
-        tr.appendChild(inp);
+    $('#excel_import').on('change', function (e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+            const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+
+            if (!jsonData.length) { alert('No data found in the file.'); return; }
+
+            const firstRow = $('#ConsignmentTable tr.item-row').first();
+            if ($('#ConsignmentTable tr.item-row').length === 1 &&
+                !firstRow.find('.item-name-input').val()) {
+                firstRow.next('.parts-row').remove();
+                firstRow.remove();
+            }
+
+            let currentItemRow = null;
+
+            jsonData.forEach(function (row) {
+                if (row['Item Name'] && String(row['Item Name']).trim() !== '') {
+                    addNewRow();
+                    currentItemRow = $('#ConsignmentTable tr.item-row').last();
+
+                    currentItemRow.find('.item-name-input').val(row['Item Name']);
+                    currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
+                    snapPurity(currentItemRow.find('.purity'), row['Purity'] || 0);
+                    currentItemRow.find('.gross-weight').val(parseFloat(row['Gross Wt']) || 0);
+                    currentItemRow.find('.making-rate').val(row['Making Rate'] || 0);
+                    currentItemRow.find('.material-type').val(String(row['Material'] || 'gold').toLowerCase());
+                    currentItemRow.find('.vat-percent').val(row['VAT %'] || 0);
+
+                    // Non-zero Agreed Value = manual override
+                    const agreedVal = parseFloat(row['Agreed Value'] || 0);
+                    currentItemRow.find('.agreed-value').val(agreedVal);
+                    if (agreedVal > 0) currentItemRow.find('.agreed-value').data('manual', true);
+
+                    recalcRow(currentItemRow);
+                }
+
+                if (row['Part Name'] && String(row['Part Name']).trim() !== '' && currentItemRow) {
+                    const partsRow  = currentItemRow.next('.parts-row');
+                    const partsBody = partsRow.find('.parts-table tbody');
+                    const itemIndex = currentItemRow.data('item-index');
+                    const partIndex = partsBody.find('tr').length;
+                    partsRow.show();
+                    partsBody.append(buildPartRowHtml(itemIndex, partIndex, {
+                        item_name:        row['Part Name'],
+                        part_description: row['Part Desc']  || '',
+                        qty:              row['Part Qty']   || 0,
+                        rate:             row['Part Rate']  || 0,
+                        stone_qty:        row['Stone Qty']  || 0,
+                        stone_rate:       row['Stone Rate'] || 0,
+                        total:            0,
+                    }));
+                    partsBody.find('tr').last().find('.part-qty').trigger('input');
+                }
+            });
+
+            calculateTotals();
+            alert('Items imported successfully!');
+            $('#excel_import').val('');
+        };
+        reader.readAsArrayBuffer(file);
     });
 
-    // Events
-    tr.querySelectorAll('[data-f="gross_weight"],[data-f="purity"],[data-f="making_rate"],[data-f="vat_percent"],[data-f="material_type"]')
-      .forEach(el => el.addEventListener('input', () => calcRow(tr)));
+    // =========================================================================
+    // PARTS TOGGLE
+    // =========================================================================
 
-    tr.querySelector('[data-f="agreed_value"]').addEventListener('input', function() {
-        this.dataset.manual = '1'; // user is overriding
-        updateFooter();
+    $(document).on('click', '.toggle-parts', function () {
+        $(this).closest('tr').next('.parts-row').fadeToggle(200);
     });
 
-    tr.querySelector('.remove-item').addEventListener('click', () => {
-        tr.remove();
-        reNumber();
-        updateFooter();
+    // =========================================================================
+    // PRODUCT SELECTOR TOGGLE
+    // =========================================================================
+
+    $(document).on('click', '.toggle-product, .revert-to-name', function () {
+        const isReverting = $(this).hasClass('revert-to-name');
+        const wrapper     = $(this).closest('.product-wrapper');
+        const isPart      = wrapper.closest('tr').hasClass('part-item-row');
+        const itemIdx     = isPart
+            ? wrapper.closest('.parts-row').prev('.item-row').data('item-index')
+            : wrapper.closest('.item-row').data('item-index');
+        const namePath = isPart
+            ? `items[${itemIdx}][parts][${wrapper.closest('.part-item-row').data('part-index')}]`
+            : `items[${itemIdx}]`;
+
+        if (isReverting) {
+            wrapper.html(`
+                <input type="text" name="${namePath}[item_name]"
+                       class="form-control item-name-input" placeholder="Item Name">
+                <button type="button" class="btn btn-link p-0 toggle-product">Select Product</button>
+            `);
+        } else {
+            wrapper.html(`
+                <select name="${namePath}[product_id]"
+                        class="form-control select2-js product-select mb-1">
+                    <option value="">Select Product</option>
+                    ${products.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                </select>
+                <select name="${namePath}[variation_id]"
+                        class="form-control select2-js variation-select">
+                    <option value="">Select Variation</option>
+                </select>
+                <button type="button" class="btn btn-link p-0 revert-to-name mt-1">Write Name</button>
+            `).find('.select2-js').select2({ width: '100%' });
+        }
     });
 
-    return tr;
-}
-
-function reNumber() {
-    document.querySelectorAll('#itemsBody tr .row-num').forEach((el, i) => {
-        el.textContent = i + 1;
-    });
-}
-
-// ── Init ──────────────────────────────────────────────────────────────────────
-document.getElementById('addItemBtn').addEventListener('click', () => {
-    const tr = buildRow({});
-    document.getElementById('itemsBody').appendChild(tr);
-    reNumber();
-    calcRow(tr);
-});
-
-// Rate change recalculates all editable rows
-['goldRateAed','diaRateAed'].forEach(id => {
-    document.getElementById(id)?.addEventListener('input', () => {
-        document.querySelectorAll('#itemsBody tr').forEach(tr => {
-            if (tr.querySelector('[data-f="gross_weight"]:not([readonly])')) calcRow(tr);
+    $(document).on('change', '.product-select', function () {
+        const productId       = $(this).val();
+        const variationSelect = $(this).closest('tr').find('.variation-select');
+        variationSelect.html('<option value="">Loading...</option>').prop('disabled', true);
+        if (!productId) {
+            variationSelect.html('<option value="">Select Variation</option>').prop('disabled', false);
+            return;
+        }
+        fetch(`/product/${productId}/variations`).then(r => r.json()).then(data => {
+            variationSelect.prop('disabled', false);
+            let opts = '<option value="">No variation</option>';
+            if (data.success && data.variation.length) {
+                opts = '<option value="">Select Variation</option>';
+                data.variation.forEach(v => { opts += `<option value="${v.id}">${v.sku}</option>`; });
+            }
+            variationSelect.html(opts);
         });
     });
-});
 
-// Select2
-$(document).ready(() => {
-    $('.select2-js').select2({ width: '100%' });
-});
+    // =========================================================================
+    // ROW INDEX MANAGEMENT
+    // =========================================================================
 
-// Load existing items on edit
-INIT_ITEMS.forEach(item => {
-    const isSold = item.item_status === 'sold';
-    const tr = buildRow(item, rowIdx++, isSold);
-    document.getElementById('itemsBody').appendChild(tr);
+    function updateRowIndexes() {
+        $('#ConsignmentTable tr.item-row').each(function (i) {
+            const itemRow = $(this);
+            itemRow.attr('data-item-index', i);
+            itemRow.find('input, select').each(function () {
+                const name = $(this).attr('name');
+                if (name) $(this).attr('name', name.replace(/items\[\d+\]/, `items[${i}]`));
+            });
+            itemRow.next('.parts-row').find('.part-item-row').each(function (j) {
+                $(this).attr('data-part-index', j);
+                $(this).find('input, select').each(function () {
+                    const name = $(this).attr('name');
+                    if (name) $(this).attr('name',
+                        name.replace(/items\[\d+\]/, `items[${i}]`)
+                            .replace(/parts\[\d+\]/, `parts[${j}]`)
+                    );
+                });
+            });
+        });
+    }
+
+    // =========================================================================
+    // ADD NEW ITEM ROW — always creates blank row; caller sets fields after
+    // =========================================================================
+
+    window.addNewRow = function (data) {
+        // data param is ONLY used by INIT_ITEMS load on edit page.
+        // Barcode scan and Excel import call addNewRow() with no args,
+        // then set fields manually — same pattern as sale invoice.
+        data = data || null;
+        const nextIndex = $('#ConsignmentTable tr.item-row').length;
+
+        const purityOptions = `@foreach($purities as $p)
+            <option value="{{ $p->value }}">{{ $p->label }}</option>
+        @endforeach`;
+
+        const rowHtml = `
+        <tr class="item-row" data-item-index="${nextIndex}">
+            <td>
+                <div class="product-wrapper">
+                    <input type="text" name="items[${nextIndex}][item_name]"
+                           class="form-control item-name-input" placeholder="Item Name"
+                           value="">
+                    <button type="button" class="btn btn-link p-0 toggle-product">Select Product</button>
+                </div>
+                <input type="hidden" name="items[${nextIndex}][source_barcode]" value="">
+            </td>
+            <td><input type="text" name="items[${nextIndex}][item_description]"
+                       class="form-control" value=""></td>
+            <td>
+                <select name="items[${nextIndex}][purity]" class="form-control purity">
+                    ${purityOptions}
+                </select>
+            </td>
+            <td><input type="number" name="items[${nextIndex}][gross_weight]" step="any"
+                       value="0" class="form-control gross-weight"></td>
+            <td><input type="number" name="items[${nextIndex}][purity_weight]" step="any"
+                       value="0" class="form-control purity-weight" readonly></td>
+            <td><input type="number" name="items[${nextIndex}][col_995]" step="any"
+                       value="0" class="form-control col-995" readonly></td>
+            <td><input type="number" name="items[${nextIndex}][making_rate]" step="any"
+                       value="0" class="form-control making-rate"></td>
+            <td><input type="number" name="items[${nextIndex}][making_value]" step="any"
+                       value="0" class="form-control making-value bg-light" readonly></td>
+            <td>
+                <select name="items[${nextIndex}][material_type]" class="form-control material-type">
+                    <option value="gold">Gold</option>
+                    <option value="diamond">Diamond</option>
+                </select>
+            </td>
+            <td><input type="number" name="items[${nextIndex}][material_value]" step="any"
+                       value="0" class="form-control material-value bg-light" readonly></td>
+            <td><input type="number" name="items[${nextIndex}][vat_percent]" step="any"
+                       value="0" class="form-control vat-percent"></td>
+            <td><input type="number" name="items[${nextIndex}][agreed_value]" step="any"
+                       value="0" class="form-control agreed-value fw-bold text-danger"></td>
+            <td>
+                <button type="button" class="btn btn-danger btn-sm remove-row-btn" title="Remove">
+                    <i class="fas fa-times"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-primary toggle-parts" title="Parts">
+                    <i class="fas fa-wrench"></i>
+                </button>
+            </td>
+        </tr>
+        <tr class="parts-row" style="display:none;background:#efefef">
+            <td colspan="13">
+                <div class="parts-wrapper">
+                    <table class="table table-sm table-bordered parts-table">
+                        <thead>
+                            <tr>
+                                <th>Part Name</th><th>Description</th>
+                                <th>Diamond Ct.</th><th>Rate</th>
+                                <th>Stone Ct.</th><th>Stone Rate</th>
+                                <th>Total</th><th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <button type="button" class="btn btn-sm btn-outline-primary add-part">+ Add Part</button>
+                </div>
+            </td>
+        </tr>`;
+
+        $('#ConsignmentTable').append(rowHtml);
+        const newItemRow = $('#ConsignmentTable tr.item-row').last();
+        updateRowIndexes();
+
+        // ── If called with data (edit page load only) ─────────────────────────
+        if (data) {
+            newItemRow.find('.item-name-input').val(data.item_name || '');
+            newItemRow.find('input[name*="[item_description]"]').val(data.item_description || '');
+            newItemRow.find('input[name*="[source_barcode]"]').val(data.source_barcode || '');
+            newItemRow.find('.gross-weight').val(parseFloat(data.gross_weight) || 0);
+            newItemRow.find('.making-rate').val(data.making_rate || 0);
+            newItemRow.find('.material-type').val(data.material_type || 'gold');
+            newItemRow.find('.vat-percent').val(data.vat_percent || 0);
+
+            // Snap purity to nearest option
+            snapPurity(newItemRow.find('.purity'), data.purity);
+
+            // Agreed value: non-zero = already computed/overridden, flag as manual
+            const agreedVal = parseFloat(data.agreed_value || 0);
+            newItemRow.find('.agreed-value').val(agreedVal);
+            if (agreedVal > 0) newItemRow.find('.agreed-value').data('manual', true);
+
+            // Load parts
+            if (data.parts && data.parts.length > 0) {
+                const partsRow  = newItemRow.next('.parts-row');
+                const partsBody = partsRow.find('.parts-table tbody');
+                partsRow.show();
+                data.parts.forEach((part, j) => {
+                    partsBody.append(buildPartRowHtml(nextIndex, j, part));
+                });
+            }
+
+            recalcRow(newItemRow);
+        }
+    };
+
+    // =========================================================================
+    // REMOVE ITEM ROW
+    // =========================================================================
+
+    $(document).on('click', '.remove-row-btn', function () {
+        const row = $(this).closest('tr');
+        if ($('#ConsignmentTable tr.item-row').length > 1) {
+            row.next('.parts-row').remove();
+            row.remove();
+            updateRowIndexes();
+            calculateTotals();
+        }
+    });
+
+    // =========================================================================
+    // BUILD PART ROW HTML
+    // =========================================================================
+
+    function buildPartRowHtml(itemIndex, partIndex, data) {
+        data = data || {};
+        return `
+        <tr class="part-item-row" data-part-index="${partIndex}">
+            <td>
+                <div class="product-wrapper">
+                    <input type="text"
+                           name="items[${itemIndex}][parts][${partIndex}][item_name]"
+                           class="form-control item-name-input" placeholder="Part Name"
+                           value="${escVal(data.item_name)}">
+                    <button type="button" class="btn btn-link p-0 toggle-product">Select Product</button>
+                </div>
+            </td>
+            <td><input type="text"
+                       name="items[${itemIndex}][parts][${partIndex}][part_description]"
+                       class="form-control" value="${escVal(data.part_description)}"></td>
+            <td>
+                <div class="input-group">
+                    <input type="number"
+                           name="items[${itemIndex}][parts][${partIndex}][qty]"
+                           step="any" value="${data.qty || 0}" class="form-control part-qty">
+                    <span class="input-group-text">Ct.</span>
+                </div>
+            </td>
+            <td><input type="number"
+                       name="items[${itemIndex}][parts][${partIndex}][rate]"
+                       step="any" value="${data.rate || 0}" class="form-control part-rate"></td>
+            <td><input type="number"
+                       name="items[${itemIndex}][parts][${partIndex}][stone_qty]"
+                       step="any" value="${data.stone_qty || 0}" class="form-control part-stone-qty"></td>
+            <td><input type="number"
+                       name="items[${itemIndex}][parts][${partIndex}][stone_rate]"
+                       step="any" value="${data.stone_rate || 0}" class="form-control part-stone-rate"></td>
+            <td><input type="number"
+                       name="items[${itemIndex}][parts][${partIndex}][total]"
+                       step="any" value="${data.total || 0}" class="form-control part-total" readonly></td>
+            <td><button type="button" class="btn btn-sm btn-danger remove-part">
+                <i class="fas fa-times"></i>
+            </button></td>
+        </tr>`;
+    }
+
+    // =========================================================================
+    // ADD / REMOVE PART ROWS
+    // =========================================================================
+
+    $(document).on('click', '.add-part', function () {
+        const partsBody = $(this).closest('.parts-wrapper').find('.parts-table tbody');
+        const itemRow   = $(this).closest('.parts-row').prev('.item-row');
+        const itemIndex = itemRow.data('item-index');
+        const partIndex = partsBody.find('tr').length;
+        partsBody.append(buildPartRowHtml(itemIndex, partIndex, {}));
+    });
+
+    $(document).on('click', '.remove-part', function () {
+        const itemRow = $(this).closest('.parts-row').prev('.item-row');
+        $(this).closest('tr').remove();
+        recalcRow(itemRow);
+    });
+
+    // =========================================================================
+    // PART CALCULATION
+    // =========================================================================
+
+    $(document).on('input', '.part-qty, .part-rate, .part-stone-qty, .part-stone-rate', function () {
+        const row       = $(this).closest('tr');
+        const qty       = parseFloat(row.find('.part-qty').val())       || 0;
+        const rate      = parseFloat(row.find('.part-rate').val())       || 0;
+        const stoneQty  = parseFloat(row.find('.part-stone-qty').val()) || 0;
+        const stoneRate = parseFloat(row.find('.part-stone-rate').val())|| 0;
+        row.find('.part-total').val(((qty * rate) + (stoneQty * stoneRate)).toFixed(4));
+        recalcRow(row.closest('.parts-row').prev('.item-row'));
+    });
+
+    // =========================================================================
+    // ITEM FIELD CHANGES
+    // =========================================================================
+
+    $(document).on('input change',
+        '.gross-weight, .purity, .making-rate, .vat-percent, .material-type',
+    function () {
+        const row = $(this).closest('tr.item-row');
+        if (row.length) recalcRow(row);
+    });
+
+    $(document).on('input', '.agreed-value', function () {
+        $(this).data('manual', true);
+        calculateTotals();
+    });
+
+    $(document).on('input', '#gold_rate_aed, #diamond_rate_aed', function () {
+        $('#ConsignmentTable tr.item-row').each(function () { recalcRow($(this)); });
+    });
+
+    // =========================================================================
+    // CORE ROW CALCULATION
+    // =========================================================================
+
+    function recalcRow(row) {
+        const baseGross = parseFloat(row.find('.gross-weight').val()) || 0;
+
+        let totalDiamondCTS = 0, totalStoneCTS = 0;
+        row.next('.parts-row').find('.part-item-row').each(function () {
+            totalDiamondCTS += parseFloat($(this).find('.part-qty').val())       || 0;
+            totalStoneCTS   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
+        });
+
+        const calcGross     = baseGross + (totalDiamondCTS / 5) + (totalStoneCTS / 5);
+        const purity        = parseFloat(row.find('.purity').val())      || 0;
+        const makingRate    = parseFloat(row.find('.making-rate').val())  || 0;
+        const vatPercent    = parseFloat(row.find('.vat-percent').val())  || 0;
+        const matType       = row.find('.material-type').val();
+        const goldRate      = parseFloat($('#gold_rate_aed').val())       || 0;
+        const diaRate       = parseFloat($('#diamond_rate_aed').val())    || 0;
+        const rate          = matType === 'gold' ? goldRate : diaRate;
+        const purityWeight  = calcGross * purity;
+        const col995        = purityWeight > 0 ? purityWeight / 0.995 : 0;
+        const makingValue   = calcGross * makingRate;
+        const materialValue = rate * purityWeight;
+
+        let partsTotal = 0;
+        row.next('.parts-row').find('.part-item-row').each(function () {
+            partsTotal += parseFloat($(this).find('.part-total').val()) || 0;
+        });
+
+        const vatAmount  = makingValue * vatPercent / 100;
+        const autoAgreed = materialValue + makingValue + partsTotal + vatAmount;
+
+        row.find('.purity-weight').val(purityWeight.toFixed(4));
+        row.find('.col-995').val(col995.toFixed(4));
+        row.find('.making-value').val(makingValue.toFixed(4));
+        row.find('.material-value').val(materialValue.toFixed(4));
+
+        const agreedInput = row.find('.agreed-value');
+        if (!agreedInput.data('manual')) {
+            agreedInput.val(autoAgreed.toFixed(2));
+        }
+
+        calculateTotals();
+    }
+
+    // =========================================================================
+    // SUMMARY TOTALS
+    // =========================================================================
+
+    function calculateTotals() {
+        let sumGross = 0, sumPurity = 0, sumMaking = 0,
+            sumMaterial = 0, sumParts = 0, sumAgreed = 0;
+
+        $('#ConsignmentTable tr.item-row').each(function () {
+            const baseGross = parseFloat($(this).find('.gross-weight').val()) || 0;
+            let diaCTS = 0, stoneCTS = 0;
+            $(this).next('.parts-row').find('.part-item-row').each(function () {
+                diaCTS   += parseFloat($(this).find('.part-qty').val())       || 0;
+                stoneCTS += parseFloat($(this).find('.part-stone-qty').val()) || 0;
+            });
+            const calcGross = baseGross + (diaCTS / 5) + (stoneCTS / 5);
+
+            sumGross    += calcGross;
+            sumPurity   += parseFloat($(this).find('.purity-weight').val())  || 0;
+            sumMaking   += parseFloat($(this).find('.making-value').val())   || 0;
+            sumMaterial += parseFloat($(this).find('.material-value').val()) || 0;
+            sumAgreed   += parseFloat($(this).find('.agreed-value').val())   || 0;
+
+            $(this).next('.parts-row').find('.part-item-row').each(function () {
+                sumParts += parseFloat($(this).find('.part-total').val()) || 0;
+            });
+        });
+
+        $('#sum_gross_weight').val(sumGross.toFixed(4));
+        $('#sum_purity_weight').val(sumPurity.toFixed(4));
+        $('#sum_making_value').val(sumMaking.toFixed(2));
+        $('#sum_material_value').val(sumMaterial.toFixed(2));
+        $('#sum_parts_value').val(sumParts.toFixed(2));
+        $('#sum_agreed_value').val(sumAgreed.toFixed(2));
+    }
+
+    // =========================================================================
+    // HELPERS
+    // =========================================================================
+
+    function escVal(str) {
+        return String(str || '').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    // =========================================================================
+    // PREVENT DOUBLE SUBMIT
+    // =========================================================================
+
+    document.getElementById('consignment-form').addEventListener('submit', function () {
+        const btn = document.getElementById('submit_btn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    });
+
+    // =========================================================================
+    // LOAD EXISTING ITEMS ON EDIT
+    // =========================================================================
+
+    INIT_ITEMS.forEach(function (item) {
+        if (item.item_status === 'sold' || item.item_status === 'returned') {
+            renderImmutableRow(item);
+        } else {
+            addNewRow(item);  // passes data so addNewRow sets all fields
+        }
+    });
+
+    if (!IS_EDIT) {
+        addNewRow(); // blank starter row on create
+    }
+
+    calculateTotals();
+
+    // =========================================================================
+    // IMMUTABLE ROW (sold / returned)
+    // =========================================================================
+
+    function renderImmutableRow(item) {
+        const isReturned = item.item_status === 'returned';
+        const rowClass   = isReturned ? 'table-warning' : 'table-success';
+        const badge      = isReturned
+            ? '<span class="badge bg-secondary">Returned</span>'
+            : '<span class="badge bg-success">Sold</span>';
+        const partsTotal = (item.parts || []).reduce((s, p) => s + (parseFloat(p.total) || 0), 0);
+
+        $('#ConsignmentTable').append(`
+        <tr class="item-row ${rowClass}" data-item-index="${$('#ConsignmentTable tr.item-row').length}">
+            <td colspan="12">
+                ${badge}
+                ${item.barcode_number ? '<code class="ms-2">' + item.barcode_number + '</code>' : ''}
+                <strong class="ms-2">${escVal(item.item_name || '-')}</strong>
+                &nbsp;|&nbsp; GW: ${parseFloat(item.gross_weight || 0).toFixed(3)}g
+                &nbsp;|&nbsp; Purity: ${parseFloat(item.purity || 0).toFixed(3)}
+                &nbsp;|&nbsp; Agreed: AED ${parseFloat(item.agreed_value || 0).toFixed(2)}
+                ${partsTotal > 0 ? '&nbsp;|&nbsp; Parts: AED ' + partsTotal.toFixed(2) : ''}
+                <small class="text-muted ms-2">(Cannot edit ${item.item_status} items)</small>
+            </td>
+            <td class="text-center">—</td>
+        </tr>
+        <tr class="parts-row" style="display:none;"></tr>`);
+
+        const idx    = $('#ConsignmentTable tr.item-row').length - 1;
+        const fields = [
+            'item_status','item_name','item_description','barcode_number','is_printed',
+            'gross_weight','purity','purity_weight','col_995',
+            'making_rate','making_value','material_type','material_rate','material_value',
+            'parts_total','taxable_amount','vat_percent','vat_amount','agreed_value',
+        ];
+        fields.forEach(f => {
+            $('<input type="hidden">').attr('name', `items[${idx}][${f}]`)
+                                     .val(item[f] ?? '')
+                                     .appendTo('#consignment-form');
+        });
+        (item.parts || []).forEach((p, j) => {
+            ['item_name','part_description','qty','rate','stone_qty','stone_rate','total'].forEach(pf => {
+                $('<input type="hidden">').attr('name', `items[${idx}][parts][${j}][${pf}]`)
+                                         .val(p[pf] ?? 0)
+                                         .appendTo('#consignment-form');
+            });
+        });
+    }
 });
-reNumber();
-updateFooter();
 </script>
+
 @endsection

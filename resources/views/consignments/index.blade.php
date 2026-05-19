@@ -115,9 +115,9 @@
                       <i class="fas fa-file-pdf"></i>
                     </a>
                     @if($c->direction === 'inbound')
-                      <a href="{{ route('consignments.barcodes', $c->id) }}" class="btn btn-outline-dark" target="_blank" title="Print Barcodes">
+                    <a href="{{ route('consignments.print_barcodes', $c->id) }}" class="btn btn-outline-dark" target="_blank" title="Print Barcodes">
                         <i class="fas fa-barcode"></i>
-                      </a>
+                    </a>
                     @endif
                     <form method="POST" action="{{ route('consignments.destroy', $c->id) }}" style="display:inline"
                           onsubmit="return confirm('Delete this consignment? This cannot be undone.')">

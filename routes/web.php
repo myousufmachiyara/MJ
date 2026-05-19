@@ -116,17 +116,22 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // ── Consignments ──────────────────────────────────────────────────────────
-    Route::get ('consignments/scan-barcode', [ConsignmentController::class, 'scanBarcode'])->name('consignments.scan_barcode');
-    Route::get ('consignments/create',       [ConsignmentController::class, 'create'])     ->name('consignments.create');
-    Route::get ('consignments',              [ConsignmentController::class, 'index'])      ->name('consignments.index');
-    Route::post('consignments',              [ConsignmentController::class, 'store'])      ->name('consignments.store');
+    // AJAX / static endpoints — must come before parameterised routes
+    Route::get ('consignments/scan-barcode',      [ConsignmentController::class, 'scanBarcode'])        ->name('consignments.scan_barcode');
+    Route::get ('consignments/scan-barcode-form', [ConsignmentController::class, 'scanBarcodeForForm']) ->name('consignments.scan_barcode_form');
+    Route::get ('consignments/download-template', [ConsignmentController::class, 'downloadTemplate'])   ->name('consignments.download_template');
 
-    Route::get   ('consignments/{id}/barcodes', [ConsignmentController::class, 'printBarcodes'])->name('consignments.barcodes');
-    Route::get   ('consignments/{id}/print',    [ConsignmentController::class, 'print'])        ->name('consignments.print');
-    Route::get   ('consignments/{id}/edit',     [ConsignmentController::class, 'edit'])         ->name('consignments.edit');
-    Route::get   ('consignments/{id}',          [ConsignmentController::class, 'show'])         ->name('consignments.show');
-    Route::put   ('consignments/{id}',          [ConsignmentController::class, 'update'])       ->name('consignments.update');
-    Route::delete('consignments/{id}',          [ConsignmentController::class, 'destroy'])      ->name('consignments.destroy');
+    // Static resource routes
+    Route::get ('consignments',        [ConsignmentController::class, 'index']) ->name('consignments.index');
+    Route::get ('consignments/create', [ConsignmentController::class, 'create'])->name('consignments.create');
+    Route::post('consignments',        [ConsignmentController::class, 'store']) ->name('consignments.store');
 
-    Route::post('consignments/{consignmentId}/return-item/{itemId}', [ConsignmentController::class, 'returnItem'])->name('consignments.return-item');
+    // Parameterised routes
+    Route::get   ('consignments/{id}',                                        [ConsignmentController::class, 'show'])        ->name('consignments.show');
+    Route::get   ('consignments/{id}/edit',                                   [ConsignmentController::class, 'edit'])        ->name('consignments.edit');
+    Route::put   ('consignments/{id}',                                        [ConsignmentController::class, 'update'])      ->name('consignments.update');
+    Route::delete('consignments/{id}',                                        [ConsignmentController::class, 'destroy'])     ->name('consignments.destroy');
+    Route::get   ('consignments/{id}/print',                                  [ConsignmentController::class, 'print'])       ->name('consignments.print');
+    Route::get   ('consignments/{id}/barcodes',                               [ConsignmentController::class, 'printBarcodes'])->name('consignments.print_barcodes');
+    Route::post  ('consignments/{consignmentId}/return-item/{itemId}',        [ConsignmentController::class, 'returnItem'])  ->name('consignments.return-item');
 });

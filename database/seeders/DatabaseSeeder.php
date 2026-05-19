@@ -63,7 +63,7 @@ class DatabaseSeeder extends Seeder
             'purchase_invoices', 'purchase_return',
             'sale_invoices', 'sale_return',
             'vouchers',
-            'consignments',   // ← NEW
+            'consignments', 
         ];
 
         $managerModules = [
@@ -73,7 +73,7 @@ class DatabaseSeeder extends Seeder
             'purchase_invoices', 'purchase_return',
             'sale_invoices', 'sale_return',
             'vouchers',
-            'consignments',   // ← NEW — manager can access consignments
+            'consignments',
         ];
 
         $actions = ['index', 'create', 'edit', 'delete', 'print'];
