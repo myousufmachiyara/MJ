@@ -7,6 +7,8 @@ use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoiceItem;
 use App\Models\SaleInvoice;
 use App\Models\SaleInvoiceItem;
+use App\Models\Consignment;
+use App\Models\ConsignmentItem;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -19,20 +21,23 @@ class InventoryReportController extends Controller
             $to   = $request->to_date   ?? Carbon::now()->format('Y-m-d');
             $tab  = $request->tab       ?? 'SIH';
 
-            $unsoldItems    = collect();
-            $purchasedItems = collect();
-            $soldItems      = collect();
-            $weightSummary  = [];
+            $unsoldItems         = collect();
+            $purchasedItems      = collect();
+            $soldItems           = collect();
+            $weightSummary       = [];
+            $consignmentInventory = collect();
 
             switch ($tab) {
-                case 'SIH': $unsoldItems    = $this->buildStockInHand($to);           break;
-                case 'PI':  $purchasedItems = $this->buildPurchasedItems($from, $to); break;
-                case 'SI':  $soldItems      = $this->buildSoldItems($from, $to);       break;
-                case 'WS':  $weightSummary  = $this->buildWeightSummary($from, $to);  break;
+                case 'SIH': $unsoldItems          = $this->buildStockInHand($to);              break;
+                case 'PI':  $purchasedItems        = $this->buildPurchasedItems($from, $to);    break;
+                case 'SI':  $soldItems             = $this->buildSoldItems($from, $to);         break;
+                case 'WS':  $weightSummary         = $this->buildWeightSummary($from, $to);     break;
+                case 'CI':  $consignmentInventory  = $this->buildConsignmentInventory($from, $to); break;
             }
 
             return view('reports.inventory_reports', compact(
                 'unsoldItems', 'purchasedItems', 'soldItems', 'weightSummary',
+                'consignmentInventory',
                 'from', 'to', 'tab'
             ));
 
@@ -48,36 +53,23 @@ class InventoryReportController extends Controller
 
     // =========================================================================
     // 1. STOCK IN HAND
-    //
-    // A purchased item is "in hand" when its barcode has NOT appeared in any
-    // sale_invoice_items row. Items with no barcode are always in hand.
-    //
-    // BUG FIXED: when $soldBarcodes is an empty array, MySQL evaluates
-    //   column NOT IN ()  →  FALSE  for every non-null value
-    // meaning ALL barcoded items were excluded when nothing had been sold yet.
-    // Guard: only apply the NOT IN filter when the list is non-empty.
     // =========================================================================
 
     private function buildStockInHand(string $to): \Illuminate\Support\Collection
     {
         try {
-            // Collect every barcode that has been sold up to $to
             $soldBarcodes = SaleInvoiceItem::whereNotNull('barcode_number')
                 ->whereHas('saleInvoice', function ($q) use ($to) {
-                    $q->where('invoice_date', '<=', $to)
-                      ->whereNull('deleted_at');
+                    $q->where('invoice_date', '<=', $to)->whereNull('deleted_at');
                 })
                 ->pluck('barcode_number')
                 ->toArray();
 
             $query = PurchaseInvoiceItem::with(['purchaseInvoice.vendor'])
                 ->whereHas('purchaseInvoice', function ($q) use ($to) {
-                    $q->where('invoice_date', '<=', $to)
-                      ->whereNull('deleted_at');
+                    $q->where('invoice_date', '<=', $to)->whereNull('deleted_at');
                 });
 
-            // Only exclude sold barcodes when the list is non-empty.
-            // Skipping this when empty means every item is treated as in-hand — correct.
             if (!empty($soldBarcodes)) {
                 $query->where(function ($q) use ($soldBarcodes) {
                     $q->whereNull('barcode_number')
@@ -113,10 +105,7 @@ class InventoryReportController extends Controller
             });
 
         } catch (\Throwable $e) {
-            Log::error('InventoryReportController::buildStockInHand — ' . $e->getMessage(), [
-                'line'  => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+            Log::error('InventoryReportController::buildStockInHand — ' . $e->getMessage());
             return collect();
         }
     }
@@ -130,11 +119,9 @@ class InventoryReportController extends Controller
         try {
             return PurchaseInvoiceItem::with(['purchaseInvoice.vendor'])
                 ->whereHas('purchaseInvoice', function ($q) use ($from, $to) {
-                    $q->whereBetween('invoice_date', [$from, $to])
-                      ->whereNull('deleted_at');
+                    $q->whereBetween('invoice_date', [$from, $to])->whereNull('deleted_at');
                 })
-                ->orderBy('id')
-                ->get()
+                ->orderBy('id')->get()
                 ->map(function ($item) {
                     $inv = $item->purchaseInvoice;
                     return [
@@ -175,11 +162,9 @@ class InventoryReportController extends Controller
         try {
             return SaleInvoiceItem::with(['saleInvoice.customer'])
                 ->whereHas('saleInvoice', function ($q) use ($from, $to) {
-                    $q->whereBetween('invoice_date', [$from, $to])
-                      ->whereNull('deleted_at');
+                    $q->whereBetween('invoice_date', [$from, $to])->whereNull('deleted_at');
                 })
-                ->orderBy('id')
-                ->get()
+                ->orderBy('id')->get()
                 ->map(function ($item) {
                     $inv      = $item->saleInvoice;
                     $purGoldR = (float) ($inv->purchase_gold_rate_aed   ?? 0);
@@ -189,13 +174,6 @@ class InventoryReportController extends Controller
                     $sale     = (float) $item->item_total;
                     $profit   = $sale - $cost;
                     $margin   = $cost > 0 ? round(($profit / $cost) * 100, 2) : 0;
-
-                    $purchaseCost = 0;
-                    if ($item->barcode_number) {
-                        $pi = PurchaseInvoiceItem::where('barcode_number', $item->barcode_number)
-                            ->value('item_total');
-                        $purchaseCost = (float) ($pi ?? 0);
-                    }
 
                     return [
                         'barcode'        => $item->barcode_number ?? 'N/A',
@@ -215,7 +193,6 @@ class InventoryReportController extends Controller
                         'cost'           => $cost,
                         'profit'         => $profit,
                         'margin'         => $margin,
-                        'purchase_cost'  => $purchaseCost,
                         'currency'       => $inv->currency,
                         'gold_rate_aed'  => $inv->gold_rate_aed ?? 0,
                     ];
@@ -247,7 +224,6 @@ class InventoryReportController extends Controller
             $goldP = $purchaseItems->where('material_type', 'gold');
             $goldS = $saleItems->where('material_type', 'gold');
             $goldH = $inHandItems->where('material_type', 'Gold');
-
             $diaP  = $purchaseItems->where('material_type', 'diamond');
             $diaS  = $saleItems->where('material_type', 'diamond');
             $diaH  = $inHandItems->where('material_type', 'Diamond');
@@ -259,32 +235,26 @@ class InventoryReportController extends Controller
                 'gold_purchased_995'     => $goldP->sum('col_995'),
                 'gold_purchased_value'   => $goldP->sum('material_value'),
                 'gold_purchased_count'   => $goldP->count(),
-
                 'gold_sold_gross'        => $goldS->sum('gross_weight'),
                 'gold_sold_purity'       => $goldS->sum('purity_weight'),
                 'gold_sold_value'        => $goldS->sum('material_value'),
                 'gold_sold_count'        => $goldS->count(),
-
                 'gold_inhand_gross'      => $goldH->sum('gross_weight'),
                 'gold_inhand_purity'     => $goldH->sum('purity_weight'),
                 'gold_inhand_value'      => $goldH->sum('material_value'),
                 'gold_inhand_count'      => $goldH->count(),
-
                 'diamond_purchased_gross'  => $diaP->sum('gross_weight'),
                 'diamond_purchased_purity' => $diaP->sum('purity_weight'),
                 'diamond_purchased_value'  => $diaP->sum('material_value'),
                 'diamond_purchased_count'  => $diaP->count(),
-
                 'diamond_sold_gross'       => $diaS->sum('gross_weight'),
                 'diamond_sold_purity'      => $diaS->sum('purity_weight'),
                 'diamond_sold_value'       => $diaS->sum('material_value'),
                 'diamond_sold_count'       => $diaS->count(),
-
                 'diamond_inhand_gross'     => $diaH->sum('gross_weight'),
                 'diamond_inhand_purity'    => $diaH->sum('purity_weight'),
                 'diamond_inhand_value'     => $diaH->sum('material_value'),
                 'diamond_inhand_count'     => $diaH->count(),
-
                 'total_purchased_value'    => $purchaseItems->sum('item_total'),
                 'total_sold_value'         => $saleItems->sum('item_total'),
                 'total_inhand_value'       => $inHandItems->sum('item_total'),
@@ -293,6 +263,51 @@ class InventoryReportController extends Controller
         } catch (\Throwable $e) {
             Log::error('InventoryReportController::buildWeightSummary — ' . $e->getMessage());
             return [];
+        }
+    }
+
+    // =========================================================================
+    // 5. CONSIGNMENT INVENTORY
+    // Shows all consignment items with status breakdown
+    // =========================================================================
+
+    private function buildConsignmentInventory(string $from, string $to): \Illuminate\Support\Collection
+    {
+        try {
+            return ConsignmentItem::with(['consignment.partner', 'parts'])
+                ->whereHas('consignment', function ($q) use ($from, $to) {
+                    $q->whereBetween('start_date', [$from, $to])
+                      ->whereNull('deleted_at');
+                })
+                ->orderBy('id')
+                ->get()
+                ->map(function ($item) {
+                    $csg      = $item->consignment;
+                    $partsVal = $item->parts->sum('total');
+                    return [
+                        'consignment_no'   => $csg->consignment_no,
+                        'direction'        => ucfirst($csg->direction),
+                        'partner'          => $csg->partner->name ?? '-',
+                        'start_date'       => $csg->start_date->format('d-M-Y'),
+                        'barcode_number'   => $item->barcode_number ?? '—',
+                        'item_name'        => $item->item_name        ?? '-',
+                        'item_description' => $item->item_description ?? '-',
+                        'material_type'    => ucfirst($item->material_type),
+                        'purity'           => $item->purity,
+                        'gross_weight'     => $item->gross_weight,
+                        'purity_weight'    => $item->purity_weight,
+                        'making_value'     => $item->making_value,
+                        'material_value'   => $item->material_value,
+                        'parts_total'      => $partsVal,
+                        'agreed_value'     => $item->agreed_value,
+                        'item_status'      => $item->item_status,
+                        'settled_date'     => $item->settled_date
+                            ? \Carbon\Carbon::parse($item->settled_date)->format('d-M-Y') : '—',
+                    ];
+                });
+        } catch (\Throwable $e) {
+            Log::error('InventoryReportController::buildConsignmentInventory — ' . $e->getMessage());
+            return collect();
         }
     }
 }
