@@ -52,6 +52,20 @@
               </select>
             </div>
 
+            {{-- ── Outbound Consignment Link (optional) ── --}}
+            <div class="col-md-3 mt-2">
+                <label>Linked Consignment <small class="text-muted">(outbound, optional)</small></label>
+                <select name="consignment_id" class="form-control select2-js">
+                    <option value="">-- None --</option>
+                    @foreach($outboundConsignments as $csg)
+                        <option value="{{ $csg->id }}">
+                            {{ $csg->consignment_no }} — {{ optional($csg->partner)->name }}
+                        </option>
+                    @endforeach
+                </select>
+                <small class="text-muted">Link when settling an outbound consignment sale.</small>
+            </div>
+
             {{-- Gold Rates --}}
             <div class="col-12 col-md-2">
               <label>Gold Rate (USD / <b>Ounce</b>)</label>
@@ -282,6 +296,34 @@
               <label class="text-success fw-bold">Overall Profit %</label>
               <input type="text" id="overall_profit_pct" class="form-control fw-bold border-success text-center" readonly style="font-size:1.1rem;">
             </div>
+
+            <div class="col-md-2 mt-3">
+                <label class="fw-bold text-danger">
+                    Invoice VAT %
+                    <small class="text-muted d-block fw-normal" style="font-size:.75rem">
+                        B2C: on total &nbsp;|&nbsp; B2B: use per-item VAT
+                    </small>
+                </label>
+                <input type="number" step="0.01" min="0" max="100"
+                      name="invoice_vat_percent"
+                      id="invoice_vat_percent"
+                      class="form-control border-danger"
+                      value="0"
+                      placeholder="e.g. 5">
+            </div>
+
+            <div class="col-md-2 mt-3">
+                <label>Invoice VAT Amt (AED)</label>
+                <input type="text" id="invoice_vat_amount_display"
+                      class="form-control bg-light fw-bold text-danger" readonly>
+            </div>
+
+            <div class="col-md-2 mt-3">
+                <label class="fw-bold text-success">Grand Total (AED)</label>
+                <input type="text" id="grand_total_display"
+                      class="form-control fw-bold text-success border-success" readonly
+                      style="font-size:1.05rem;">
+            </div>
           </div>
 
           {{-- ===================== PAYMENT METHOD ===================== --}}
@@ -458,6 +500,7 @@ $(document).ready(function () {
         calculateTotals();
     });
     $('#exchange_rate').on('input', calculateTotals);
+    $('#invoice_vat_percent').on('input', calculateTotals);   // ← standalone, always bound
 
     $('.select2-js').select2({ width: '100%' });
 
@@ -919,6 +962,17 @@ $(document).ready(function () {
         const { pct, label } = calcProfitPct(sumItemTotal, totalCost);
         oi.val(label);
         colourProfitInput(oi, pct);
+
+        // ── Invoice-level VAT (B2C: % applied on full net AED amount) ─────────
+        const invoiceVatPct = parseFloat($('#invoice_vat_percent').val()) || 0;
+        const netAed = ($('#currency').val() === 'USD')
+            ? (sumItemTotal * (parseFloat($('#exchange_rate').val()) || 1))
+            : sumItemTotal;
+        const invoiceVatAmt  = Math.round(netAed * invoiceVatPct / 100 * 100) / 100;
+        const invoiceGrandTotal = Math.round((netAed + invoiceVatAmt) * 100) / 100;
+        $('#invoice_vat_amount_display').val(invoiceVatAmt.toFixed(2));
+        $('#grand_total_display').val(invoiceGrandTotal.toFixed(2));
+
 
         // Material+Making fields auto-fill
         if ($('#payment_method').val() === 'material+making cost') {

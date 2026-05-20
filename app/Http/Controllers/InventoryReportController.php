@@ -59,21 +59,30 @@ class InventoryReportController extends Controller
     {
         try {
             $soldBarcodes = SaleInvoiceItem::whereNotNull('barcode_number')
-                ->whereHas('saleInvoice', function ($q) use ($to) {
-                    $q->where('invoice_date', '<=', $to)->whereNull('deleted_at');
-                })
-                ->pluck('barcode_number')
-                ->toArray();
+            ->whereHas('saleInvoice', function ($q) use ($to) {
+                $q->where('invoice_date', '<=', $to)->whereNull('deleted_at');
+            })
+            ->pluck('barcode_number')
+            ->toArray();
+
+            // Exclude outbound consignment items (physically at partner's shop)
+            $outboundBarcodes = ConsignmentItem::where('item_status', 'in_stock')
+                ->whereHas('consignment', fn($q) => $q->where('direction', 'outbound'))
+                ->whereNotNull('source_barcode')
+                ->pluck('source_barcode')
+                ->filter()->unique()->toArray();
+
+            $excludedBarcodes = array_unique(array_merge($soldBarcodes, $outboundBarcodes));
 
             $query = PurchaseInvoiceItem::with(['purchaseInvoice.vendor'])
                 ->whereHas('purchaseInvoice', function ($q) use ($to) {
                     $q->where('invoice_date', '<=', $to)->whereNull('deleted_at');
                 });
 
-            if (!empty($soldBarcodes)) {
-                $query->where(function ($q) use ($soldBarcodes) {
+            if (!empty($excludedBarcodes)) {
+                $query->where(function ($q) use ($excludedBarcodes) {
                     $q->whereNull('barcode_number')
-                      ->orWhereNotIn('barcode_number', $soldBarcodes);
+                    ->orWhereNotIn('barcode_number', $excludedBarcodes);
                 });
             }
 

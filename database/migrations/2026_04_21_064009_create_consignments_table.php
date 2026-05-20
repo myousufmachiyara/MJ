@@ -61,6 +61,7 @@ return new class extends Migration
 
             // Barcode — generated for inbound, null for outbound
             $table->string('barcode_number', 40)->nullable();
+            $table->string('source_barcode', 40)->nullable();
             $table->boolean('is_printed')->default(false);
 
             // Weight / purity (same columns as purchase/sale items)
@@ -101,6 +102,7 @@ return new class extends Migration
             $table->foreign('settled_by_sale_invoice_id')->references('id')->on('sale_invoices')->onDelete('set null');
 
             $table->index('barcode_number');
+            $table->index('source_barcode');
             $table->index('item_status');
         });
 

@@ -410,21 +410,38 @@ class ConsignmentController extends Controller
         try {
             foreach ($invoice->items as $saleItem) {
                 if (!$saleItem->barcode_number) continue;
-                if (!str_starts_with($saleItem->barcode_number, 'CSG-')) continue;
 
-                $consignmentItem = ConsignmentItem::where('barcode_number', $saleItem->barcode_number)
+                // Inbound: CSG- barcode scanned directly at sale
+                if (str_starts_with($saleItem->barcode_number, 'CSG-')) {
+                    $consignmentItem = ConsignmentItem::where('barcode_number', $saleItem->barcode_number)
+                        ->where('item_status', 'in_stock')
+                        ->first();
+
+                    if ($consignmentItem) {
+                        $consignmentItem->update([
+                            'item_status'                => 'sold',
+                            'settled_by_sale_invoice_id' => $invoice->id,
+                            'settled_date'               => $invoice->invoice_date,
+                        ]);
+                        $consignmentItem->consignment->recalcStatus();
+                    }
+                    continue;
+                }
+
+                // Outbound: MJ-/MJT- barcode — match directly on source_barcode
+                $consignmentItem = ConsignmentItem::where('source_barcode', $saleItem->barcode_number)
+                    ->whereHas('consignment', fn($q) => $q->where('direction', 'outbound'))
                     ->where('item_status', 'in_stock')
                     ->first();
 
-                if (!$consignmentItem) continue;
-
-                $consignmentItem->update([
-                    'item_status'                => 'sold',
-                    'settled_by_sale_invoice_id' => $invoice->id,
-                    'settled_date'               => $invoice->invoice_date,
-                ]);
-
-                $consignmentItem->consignment->recalcStatus();
+                if ($consignmentItem) {
+                    $consignmentItem->update([
+                        'item_status'                => 'sold',
+                        'settled_by_sale_invoice_id' => $invoice->id,
+                        'settled_date'               => $invoice->invoice_date,
+                    ]);
+                    $consignmentItem->consignment->recalcStatus();
+                }
             }
         } catch (\Throwable $e) {
             Log::error('ConsignmentController::settleItems — ' . $e->getMessage());
@@ -803,6 +820,7 @@ class ConsignmentController extends Controller
                 'product_id'       => $itemData['product_id']       ?? null,
                 'item_description' => $itemData['item_description'] ?? null,
                 'barcode_number'   => null,
+                'source_barcode'   => ($direction === 'outbound') ? ($itemData['source_barcode'] ?? null) : null,
                 'is_printed'       => false,
                 'gross_weight'     => $baseGross,
                 'purity'           => $purity,

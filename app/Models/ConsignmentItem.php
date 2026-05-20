@@ -8,7 +8,7 @@ class ConsignmentItem extends Model
 {
     protected $fillable = [
         'consignment_id', 'item_name', 'product_id', 'item_description',
-        'barcode_number', 'is_printed',
+        'barcode_number', 'source_barcode' ,'is_printed',
         'gross_weight', 'purity', 'purity_weight', 'col_995',
         'making_rate', 'making_value',
         'material_type', 'material_rate', 'material_value',

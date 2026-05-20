@@ -70,6 +70,21 @@
               </select>
             </div>
 
+            {{-- ── Outbound Consignment Link (optional) ── --}}
+            <div class="col-md-3 mt-2">
+                <label>Linked Consignment <small class="text-muted">(outbound, optional)</small></label>
+                <select name="consignment_id" class="form-control select2-js">
+                    <option value="">-- None --</option>
+                    @foreach($outboundConsignments as $csg)
+                        <option value="{{ $csg->id }}"
+                            {{ $saleInvoice->consignment_id == $csg->id ? 'selected' : '' }}>
+                            {{ $csg->consignment_no }} — {{ optional($csg->partner)->name }}
+                        </option>
+                    @endforeach
+                </select>
+                <small class="text-muted">Link when settling an outbound consignment sale.</small>
+            </div>
+
             {{-- Gold Rates --}}
             <div class="col-12 col-md-2">
               <label>Gold Rate (USD / <b>Ounce</b>)</label>
@@ -252,7 +267,37 @@
               <label class="text-success fw-bold">Overall Profit %</label>
               <input type="text" id="overall_profit_pct" class="form-control fw-bold border-success text-center" readonly style="font-size:1.1rem;">
             </div>
-          </div>
+
+            <div class="col-md-2 mt-3">
+                <label class="fw-bold text-danger">
+                    Invoice VAT %
+                    <small class="text-muted d-block fw-normal" style="font-size:.75rem">
+                        B2C: on total &nbsp;|&nbsp; B2B: use per-item VAT
+                    </small>
+                </label>
+                <input type="number" step="0.01" min="0" max="100"
+                       name="invoice_vat_percent"
+                       id="invoice_vat_percent"
+                       class="form-control border-danger"
+                       value="{{ old('invoice_vat_percent', $saleInvoice->invoice_vat_percent ?? 0) }}"
+                       placeholder="e.g. 5">
+            </div>
+
+            <div class="col-md-2 mt-3">
+                <label>Invoice VAT Amt (AED)</label>
+                <input type="text" id="invoice_vat_amount_display"
+                       class="form-control bg-light fw-bold text-danger" readonly
+                       value="{{ number_format($saleInvoice->invoice_vat_amount ?? 0, 2) }}">
+            </div>
+
+            <div class="col-md-2 mt-3">
+                <label class="fw-bold text-success">Grand Total (AED)</label>
+                <input type="text" id="grand_total_display"
+                       class="form-control fw-bold text-success border-success" readonly
+                       style="font-size:1.05rem;"
+                       value="{{ number_format($saleInvoice->grand_total ?? $saleInvoice->net_amount_aed, 2) }}">
+            </div>
+          </div>{{-- end summary row --}}
 
           {{-- ===================== PAYMENT METHOD ===================== --}}
           <div class="row mb-3">
@@ -446,6 +491,7 @@ $(document).ready(function () {
         calculateTotals();
     });
     $('#exchange_rate').on('input', calculateTotals);
+    $('#invoice_vat_percent').on('input', calculateTotals);
 
     $('.select2-js').select2({ width: '100%' });
 
@@ -565,7 +611,7 @@ $(document).ready(function () {
         const name      = data.item_name        || '';
         const desc      = data.item_description || '';
         const purity    = data.purity           || '0.92';
-        const baseGross = data.gross_weight     || 0;  // stored gross_weight IS the base for sale items
+        const baseGross = data.gross_weight     || 0;
         const mkRate    = data.making_rate      || 0;
         const matType   = data.material_type    || 'gold';
         const vatPct    = data.vat_percent      || 0;
@@ -643,8 +689,6 @@ $(document).ready(function () {
         const itemRow  = $('#SaleTable tr.item-row').last();
         const partsRow = itemRow.next('.parts-row');
 
-        // Set base-gross = stored gross_weight (parts contribution already included)
-        // We recalc to ensure gross-weight column is consistent
         itemRow.find('.base-gross-weight').val(parseFloat(itemData.gross_weight) || 0);
 
         if (itemData.parts && itemData.parts.length > 0) {
@@ -888,6 +932,16 @@ $(document).ready(function () {
         oi.val(label);
         colourProfitInput(oi, pct);
 
+        // ── Invoice-level VAT (B2C: % applied on full net AED amount) ─────────
+        const invoiceVatPct = parseFloat($('#invoice_vat_percent').val()) || 0;
+        const netAed = (currency === 'USD')
+            ? (sumItemTotal * exRate)
+            : sumItemTotal;
+        const invoiceVatAmt     = Math.round(netAed * invoiceVatPct / 100 * 100) / 100;
+        const invoiceGrandTotal = Math.round((netAed + invoiceVatAmt) * 100) / 100;
+        $('#invoice_vat_amount_display').val(invoiceVatAmt.toFixed(2));
+        $('#grand_total_display').val(invoiceGrandTotal.toFixed(2));
+
         if ($('#payment_method').val() === 'material+making cost') {
             $('input[name="material_weight"]').val(sum995.toFixed(4));
             $('input[name="material_purity"]').val(sumPurityWeight.toFixed(4));
@@ -895,27 +949,6 @@ $(document).ready(function () {
             $('input[name="making_charges"]').val(sumMaking.toFixed(4));
         }
     }
-
-    // ===== RATE CONVERSION =====
-    $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #diamond_rate_aed_ounce, #exchange_rate', function() {
-        const id     = $(this).attr('id');
-        const exRate = parseFloat($('#exchange_rate').val()) || 3.6725;
-
-        if (id === 'gold_rate_usd' || id === 'exchange_rate') {
-            const goldUsd = parseFloat($('#gold_rate_usd').val()) || 0;
-            $('#gold_rate_aed_ounce').val((goldUsd * exRate).toFixed(4));
-        }
-        $('#gold_rate_aed').val(((parseFloat($('#gold_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
-
-        if (id === 'diamond_rate_usd' || id === 'exchange_rate') {
-            const diaUsd = parseFloat($('#diamond_rate_usd').val()) || 0;
-            $('#diamond_rate_aed_ounce').val((diaUsd * exRate).toFixed(4));
-        }
-        $('#diamond_rate_aed_gram').val(((parseFloat($('#diamond_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
-
-        $('#SaleTable tr.item-row').each(function() { calculateRow($(this)); });
-        calculateTotals();
-    });
 
     // ===== PAYMENT METHOD =====
     $('#payment_method').on('change', function() {
@@ -938,7 +971,31 @@ $(document).ready(function () {
         row.find('.part-total').val(((qty * rate) + (stoneQty * stoneRate)).toFixed(4));
         recalcItemGrossWeight(row.closest('.parts-row').prev('.item-row'));
     });
-});
+
+    // ===== RATE CONVERSION =====
+    $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #diamond_rate_aed_ounce, #exchange_rate', function() {
+        const id     = $(this).attr('id');
+        const exRate = parseFloat($('#exchange_rate').val()) || 3.6725;
+
+        if (id === 'gold_rate_usd' || id === 'exchange_rate') {
+            const goldUsd = parseFloat($('#gold_rate_usd').val()) || 0;
+            $('#gold_rate_aed_ounce').val((goldUsd * exRate).toFixed(4));
+        }
+        $('#gold_rate_aed').val(((parseFloat($('#gold_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
+
+        if (id === 'diamond_rate_usd' || id === 'exchange_rate') {
+            const diaUsd = parseFloat($('#diamond_rate_usd').val()) || 0;
+            $('#diamond_rate_aed_ounce').val((diaUsd * exRate).toFixed(4));
+        }
+        $('#diamond_rate_aed_gram').val(((parseFloat($('#diamond_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
+
+        $('#SaleTable tr.item-row').each(function() { calculateRow($(this)); });
+        calculateTotals();
+    });
+
+}); // ← closes $(document).ready()
+
+// ===== GLOBAL FUNCTIONS — outside ready() so onclick attributes can reach them =====
 
 function resubmitWithConfirm() {
     const form  = document.getElementById('main-form');

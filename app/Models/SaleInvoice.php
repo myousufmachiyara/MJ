@@ -13,12 +13,16 @@ class SaleInvoice extends Model
         'invoice_no',
         'is_taxable',
         'customer_id',
+        'consignment_id',
         'invoice_date',
         'remarks',
         'currency',
         'exchange_rate',
         'net_amount',
         'net_amount_aed',
+        'invoice_vat_percent',
+        'invoice_vat_amount',
+        'grand_total',
         'payment_method',
         'payment_term',
         // Cheque
@@ -78,6 +82,9 @@ class SaleInvoice extends Model
         'diamond_rate_aed'         => 'float',
         'purchase_gold_rate_aed'   => 'float',
         'purchase_making_rate_aed' => 'float',
+        'invoice_vat_percent' => 'float',
+        'invoice_vat_amount'  => 'float',
+        'grand_total'         => 'float',
     ];
 
     // ── Relationships ──────────────────────────────────────────────────────
@@ -116,5 +123,10 @@ class SaleInvoice extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function consignment()
+    {
+        return $this->belongsTo(Consignment::class);
     }
 }

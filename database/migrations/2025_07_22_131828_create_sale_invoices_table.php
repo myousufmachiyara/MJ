@@ -18,6 +18,7 @@ return new class extends Migration
             $table->string('invoice_no', 20)->unique();
             $table->boolean('is_taxable')->default(1);
             $table->unsignedBigInteger('customer_id');
+            $table->unsignedBigInteger('consignment_id')->nullable();
             $table->date('invoice_date');
             $table->text('remarks')->nullable();
 
@@ -26,6 +27,9 @@ return new class extends Migration
             $table->decimal('exchange_rate', 15, 6)->nullable();
             $table->decimal('net_amount', 18, 2);
             $table->decimal('net_amount_aed', 18, 2)->default(0);
+            $table->decimal('invoice_vat_percent', 5, 2)->default(0);
+            $table->decimal('invoice_vat_amount', 18, 2)->default(0);
+            $table->decimal('grand_total', 18, 2)->default(0);
 
             /* ================= PAYMENT ================= */
             $table->enum('payment_method', ['cash', 'credit', 'bank_transfer', 'cheque', 'material+making cost'])->nullable();

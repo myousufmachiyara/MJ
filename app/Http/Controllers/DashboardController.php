@@ -62,7 +62,13 @@ class DashboardController extends Controller
                 ->unique()
                 ->toArray();
 
-            $excludedBarcodes = array_unique(array_merge($soldBarcodes, $returnedBarcodes));
+            $outboundConsignedBarcodes = ConsignmentItem::where('item_status', 'in_stock')
+            ->whereHas('consignment', fn($q) => $q->where('direction', 'outbound'))
+            ->whereNotNull('source_barcode')
+            ->pluck('source_barcode')
+            ->filter()->unique()->toArray();
+
+            $excludedBarcodes = array_unique(array_merge($soldBarcodes, $returnedBarcodes, $outboundConsignedBarcodes));
 
             $stockQuery = PurchaseInvoiceItem::whereHas('purchaseInvoice', fn($q) => $q->whereNull('deleted_at'));
 

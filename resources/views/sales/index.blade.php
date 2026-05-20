@@ -33,6 +33,8 @@
                 <th>Currency</th>
                 <th>Net Amount</th>
                 <th>Net AED</th>
+                <th>VAT</th>
+                <th>Grand Total</th>
                 <th>Payment</th>
                 <th>Actions</th>
               </tr>
@@ -52,6 +54,18 @@
                 <td>{{ $invoice->currency }}</td>
                 <td class="text-end">{{ number_format($invoice->net_amount, 2) }}</td>
                 <td class="text-end">{{ number_format($invoice->net_amount_aed, 2) }}</td>
+                <td class="text-center">
+                  @if(($invoice->invoice_vat_amount ?? 0) > 0)
+                    <span class="badge bg-warning text-dark">
+                      {{ number_format($invoice->invoice_vat_percent, 1) }}%
+                    </span>
+                  @else
+                    <span class="text-muted">—</span>
+                  @endif
+                </td>
+                <td class="text-end fw-bold {{ ($invoice->invoice_vat_amount ?? 0) > 0 ? 'text-success' : '' }}">
+                  {{ number_format($invoice->grand_total ?? $invoice->net_amount_aed, 2) }}
+                </td>
                 <td>
                   <span class="badge bg-info text-dark" style="font-size:.75rem">
                     {{ ucwords(str_replace(['+','_'], [' + ', ' '], $invoice->payment_method)) }}

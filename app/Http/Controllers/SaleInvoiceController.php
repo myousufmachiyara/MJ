@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\SaleInvoice;
+use App\Http\Controllers\ConsignmentController;
 use App\Models\SaleInvoiceItem;
 use App\Models\SaleInvoiceItemPart;
 use App\Models\PurchaseInvoiceItem;
@@ -41,7 +42,16 @@ class SaleInvoiceController extends Controller
         $products  = Product::with('measurementUnit')->get();
         $purities  = Purity::all();
 
-        return view('sales.create', compact('products', 'customers', 'banks', 'purities'));
+        // Outbound consignments available to link for settlement traceability
+        $outboundConsignments = \App\Models\Consignment::where('direction', 'outbound')
+            ->whereIn('status', ['active', 'partially_settled'])
+            ->with('partner')
+            ->orderByDesc('id')
+            ->get();
+
+        return view('sales.create', compact(
+            'products', 'customers', 'banks', 'purities', 'outboundConsignments'
+        ));
     }
 
     // =========================================================================
@@ -51,17 +61,17 @@ class SaleInvoiceController extends Controller
     public function scanBarcode(Request $request)
     {
         $barcode = trim($request->get('barcode'));
- 
+
         if (!$barcode) {
             return response()->json(['success' => false, 'message' => 'No barcode provided.'], 422);
         }
- 
+
         // ── 1. Look in sale_invoice_items (previously sold items — re-sell) ──
         $saleItem = SaleInvoiceItem::with('parts')
             ->where('barcode_number', $barcode)
             ->latest()
             ->first();
- 
+
         if ($saleItem) {
             return response()->json([
                 'success'          => true,
@@ -85,17 +95,14 @@ class SaleInvoiceController extends Controller
                 ])->values()->toArray(),
             ]);
         }
- 
+
         // ── 2. Look in consignment_items (inbound CSG- barcodes) ─────────────
-        //    CSG- barcodes are inbound consignment items on our shelf.
-        //    We check these BEFORE purchase items so an override is possible.
         if (str_starts_with($barcode, 'CSG-')) {
-            // Delegate to the dedicated consignment scan endpoint logic
             $consignmentItem = \App\Models\ConsignmentItem::with(['parts', 'consignment'])
                 ->where('barcode_number', $barcode)
                 ->where('item_status', 'in_stock')
                 ->first();
- 
+
             if ($consignmentItem) {
                 return response()->json([
                     'success'          => true,
@@ -122,13 +129,13 @@ class SaleInvoiceController extends Controller
                 ]);
             }
         }
- 
+
         // ── 3. Look in purchase_invoice_items (standard MJ/MJT barcodes) ─────
         $purchaseItem = \App\Models\PurchaseInvoiceItem::with('parts')
             ->where('barcode_number', $barcode)
             ->latest()
             ->first();
- 
+
         if ($purchaseItem) {
             return response()->json([
                 'success'          => true,
@@ -152,7 +159,7 @@ class SaleInvoiceController extends Controller
                 ])->values()->toArray(),
             ]);
         }
- 
+
         return response()->json([
             'success' => false,
             'message' => 'Barcode "' . $barcode . '" not found in any record.',
@@ -184,6 +191,7 @@ class SaleInvoiceController extends Controller
                 'invoice_no'               => $invoiceNo,
                 'is_taxable'               => $isTaxable,
                 'customer_id'              => $request->customer_id,
+                'consignment_id'           => $request->consignment_id ?: null,
                 'invoice_date'             => $request->invoice_date,
                 'remarks'                  => $request->remarks,
                 'currency'                 => $request->currency,
@@ -197,6 +205,9 @@ class SaleInvoiceController extends Controller
                 'purchase_making_rate_aed' => $request->purchase_making_rate_aed,
                 'net_amount'               => 0,
                 'net_amount_aed'           => 0,
+                'invoice_vat_percent'      => 0,
+                'invoice_vat_amount'       => 0,
+                'grand_total'              => 0,
                 'payment_method'           => $request->payment_method,
                 'payment_term'             => $request->payment_term,
                 'bank_name'                => $request->bank_name,
@@ -217,6 +228,7 @@ class SaleInvoiceController extends Controller
 
             [$totals] = $this->createItems($invoice, $request->items, $request);
 
+            // ── Net amount (unchanged logic) ──────────────────────────────────
             $calculatedNet    = $invoice->items()->sum('item_total');
             $calculatedNetAed = $request->currency === 'USD'
                 ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
@@ -227,8 +239,22 @@ class SaleInvoiceController extends Controller
                 'net_amount_aed' => $calculatedNetAed,
             ]);
 
+            // ── Invoice-level VAT (B2C: applied on full net AED amount) ───────
+            // B2B invoices: set invoice_vat_percent = 0 and use per-item vat_percent instead.
+            // This field is open — no hardcoded rate. User enters whatever % applies.
+            $invoiceVatPct    = (float) ($request->invoice_vat_percent ?? 0);
+            $invoiceVatAmount = round($calculatedNetAed * $invoiceVatPct / 100, 2);
+            $grandTotal       = round($calculatedNetAed + $invoiceVatAmount, 2);
+
+            $invoice->update([
+                'invoice_vat_percent' => $invoiceVatPct,
+                'invoice_vat_amount'  => $invoiceVatAmount,
+                'grand_total'         => $grandTotal,
+            ]);
+
             $this->storeAttachments($request, $invoice);
             $this->createSaleAccountingEntries($invoice, $totals);
+            ConsignmentController::settleItems($invoice->load('items'));
 
             DB::commit();
 
@@ -262,6 +288,13 @@ class SaleInvoiceController extends Controller
 
         $goldAedOunce    = ($saleInvoice->gold_rate_aed    ?? 0) * 31.1035;
         $diamondAedOunce = ($saleInvoice->diamond_rate_aed ?? 0) * 31.1035;
+
+        // Outbound consignments for the link dropdown
+        $outboundConsignments = \App\Models\Consignment::where('direction', 'outbound')
+            ->whereIn('status', ['active', 'partially_settled'])
+            ->with('partner')
+            ->orderByDesc('id')
+            ->get();
 
         $itemsData = $saleInvoice->items->map(function ($item) {
             return [
@@ -299,7 +332,8 @@ class SaleInvoiceController extends Controller
 
         return view('sales.edit', compact(
             'saleInvoice', 'customers', 'banks', 'products',
-            'itemsData', 'goldAedOunce', 'diamondAedOunce', 'purities'
+            'itemsData', 'goldAedOunce', 'diamondAedOunce', 'purities',
+            'outboundConsignments'
         ));
     }
 
@@ -332,6 +366,7 @@ class SaleInvoiceController extends Controller
             $invoice->update([
                 'is_taxable'               => $request->boolean('is_taxable'),
                 'customer_id'              => $request->customer_id,
+                'consignment_id'           => $request->consignment_id ?: null,
                 'invoice_date'             => $request->invoice_date,
                 'remarks'                  => $request->remarks,
                 'currency'                 => $request->currency,
@@ -367,6 +402,7 @@ class SaleInvoiceController extends Controller
 
             [$totals] = $this->createItems($invoice, $request->items, $request, preservePrinted: true);
 
+            // ── Net amount (unchanged logic) ──────────────────────────────────
             $calculatedNet    = $invoice->items()->sum('item_total');
             $calculatedNetAed = $request->currency === 'USD'
                 ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
@@ -375,6 +411,17 @@ class SaleInvoiceController extends Controller
             $invoice->update([
                 'net_amount'     => round($calculatedNet, 2),
                 'net_amount_aed' => $calculatedNetAed,
+            ]);
+
+            // ── Invoice-level VAT (B2C: applied on full net AED amount) ───────
+            $invoiceVatPct    = (float) ($request->invoice_vat_percent ?? 0);
+            $invoiceVatAmount = round($calculatedNetAed * $invoiceVatPct / 100, 2);
+            $grandTotal       = round($calculatedNetAed + $invoiceVatAmount, 2);
+
+            $invoice->update([
+                'invoice_vat_percent' => $invoiceVatPct,
+                'invoice_vat_amount'  => $invoiceVatAmount,
+                'grand_total'         => $grandTotal,
             ]);
 
             $this->storeAttachments($request, $invoice);
@@ -388,6 +435,7 @@ class SaleInvoiceController extends Controller
             }
 
             $this->createSaleAccountingEntries($invoice, $totals);
+            ConsignmentController::settleItems($invoice->load('items'));
 
             DB::commit();
 
@@ -408,7 +456,7 @@ class SaleInvoiceController extends Controller
     }
 
     // =========================================================================
-    // PRINT
+    // PRINT — detailed B2B invoice
     // =========================================================================
 
     public function print($id)
@@ -499,7 +547,7 @@ class SaleInvoiceController extends Controller
         </table>';
         $pdf->writeHTML($customerHtml, true, false, false, false);
 
-        // Items table
+        // Items table — identical to original
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
@@ -587,6 +635,11 @@ class SaleInvoiceController extends Controller
 
         $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
 
+        // ── Grand total for PDF — net + invoice-level VAT ─────────────────────
+        $printGrandTotal = ($invoice->invoice_vat_amount ?? 0) > 0
+            ? ($invoice->grand_total ?? $aedAmount)
+            : $aedAmount;
+
         $summaryHtml = '
         <table width="100%" cellpadding="0" border="0" style="margin-top:10px;">
             <tr>
@@ -633,7 +686,7 @@ class SaleInvoiceController extends Controller
                         <tr><td>Diamond Parts Val.</td>                      <td align="right">' . number_format($totalDiamondVal, 2) . '</td></tr>
                         <tr><td>Stone Parts Val.</td>                        <td align="right">' . number_format($totalStoneVal, 2) . '</td></tr>
                         <tr><td>Making Charges (MC)</td>                     <td align="right">' . number_format($totalMakingAed, 2) . '</td></tr>
-                        <tr><td>Total VAT (on MC)</td>                       <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>
+                        <tr><td>VAT on MC</td>                               <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>
                         <tr style="font-weight:bold;background-color:#ddeeee;">
                             <td>Currency Payable (MC + Parts + VAT)</td>
                             <td align="right">' . number_format($totalCurrencyPayable, 2) . '</td>
@@ -646,9 +699,20 @@ class SaleInvoiceController extends Controller
         if ($invoice->currency === 'USD') {
             $summaryHtml .= '
                         <tr><td>Exchange Rate</td><td align="right">' . number_format($invoice->exchange_rate, 4) . '</td></tr>
-                        <tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
+                        <tr><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
         } else {
-            $summaryHtml .= '<tr style="font-weight:bold;"><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
+            $summaryHtml .= '<tr><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
+        }
+
+        // Invoice-level VAT rows — only shown when > 0 (B2C invoices)
+        if (($invoice->invoice_vat_amount ?? 0) > 0) {
+            $summaryHtml .= '
+                        <tr><td>Invoice VAT (' . number_format($invoice->invoice_vat_percent, 2) . '%)</td>
+                            <td align="right">' . number_format($invoice->invoice_vat_amount, 2) . '</td></tr>
+                        <tr style="font-weight:bold;background-color:#ddeedd;">
+                            <td>Grand Total (AED)</td>
+                            <td align="right">' . number_format($printGrandTotal, 2) . '</td>
+                        </tr>';
         }
 
         $summaryHtml .= '</table></td></tr></table>';
@@ -663,7 +727,7 @@ class SaleInvoiceController extends Controller
 
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', 'B', 9);
-        $wordsAED = $pdf->convertCurrencyToWords($aedAmount, 'AED');
+        $wordsAED = $pdf->convertCurrencyToWords($printGrandTotal, 'AED');
         if ($invoice->currency === 'USD') {
             $wordsUSD = $pdf->convertCurrencyToWords($invoice->net_amount, 'USD');
             $pdf->Cell(0, 5, 'Amount in Words (USD): ' . $wordsUSD, 0, 1, 'L');
@@ -734,6 +798,7 @@ class SaleInvoiceController extends Controller
         int $startPosition = 1,
         bool $preservePrinted = false
     ): array {
+        // ── UNCHANGED — all formulas identical to original ────────────────────
         $totals = [
             'gold_material'    => 0.0,
             'diamond_material' => 0.0,
@@ -757,11 +822,6 @@ class SaleInvoiceController extends Controller
             $vatPercent  = (float) ($itemData['vat_percent']  ?? 0);
             $matType     = $itemData['material_type'] ?? 'gold';
 
-            // Same formulas as purchase:
-            // purity_weight  = gross_weight × purity
-            // col_995        = purity_weight / 0.995
-            // making_value   = gross_weight × making_rate
-            // material_value = rate × purity_weight
             $purityWeight  = $grossWeight * $purity;
             $col995        = $purityWeight > 0 ? $purityWeight / 0.995 : 0;
             $makingValue   = $grossWeight * $makingRate;
@@ -788,7 +848,6 @@ class SaleInvoiceController extends Controller
                 $itemStoneVal   += $stoneValue;
             }
 
-            // VAT on making only (same as purchase)
             $taxableAmount = $makingValue;
             $vatAmount     = $taxableAmount * ($vatPercent / 100);
             $itemTotal     = $materialValue + $makingValue + $partsTotal + $vatAmount;
@@ -899,10 +958,12 @@ class SaleInvoiceController extends Controller
         $request->validate([
             'is_taxable'               => 'required|boolean',
             'customer_id'              => 'required|exists:chart_of_accounts,id',
+            'consignment_id'           => 'nullable|exists:consignments,id',
             'invoice_date'             => 'required|date',
             'currency'                 => 'required|in:AED,USD',
             'exchange_rate'            => 'nullable|required_if:currency,USD|numeric|min:0',
             'net_amount'               => 'required|numeric|min:0',
+            'invoice_vat_percent'      => 'nullable|numeric|min:0|max:100',
             'payment_method'           => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
             'payment_term'             => 'nullable|string',
             'gold_rate_usd'            => 'nullable|numeric|min:0',
@@ -939,18 +1000,18 @@ class SaleInvoiceController extends Controller
     /**
      * Create accounting voucher + double-entry lines for a sale invoice.
      *
-     * CREDIT entries (revenue recognised) — account codes from DatabaseSeeder:
-     *   401001  Gold Sales Revenue        (gold material + gold parts)
-     *   401002  Diamond Sales Revenue     (diamond material + diamond parts)
-     *   402001  Making Charges Income     (making charges)
-     *   208001  Output VAT Payable        (VAT collected — liability)
+     * CREDIT entries:
+     *   401001  Gold Sales Revenue
+     *   401002  Diamond Sales Revenue
+     *   402001  Making Charges Income
+     *   208001  Output VAT Payable  (per-item VAT on making — B2B)
+     *   208001  Output VAT Payable  (invoice-level VAT on total — B2C, if > 0)
      *
-     * DEBIT entries (what we receive / asset increases):
-     *   credit        → customer AR (full amount)
-     *   cash          → 101001 Cash in Hand (currency portion)
-     *   cheque        → bank COA account (currency portion)
-     *   bank_transfer → transfer bank COA account (currency portion)
-     *   material+MC   → 104001 Gold Inventory (material) + customer AR (making+vat)
+     * DEBIT entries: unchanged per payment method.
+     *
+     * The balance check at the end guarantees debits = credits.
+     * The invoice_vat_amount is included in totalCredit, so currencyDebit
+     * automatically absorbs it — no separate debit entry needed.
      */
     protected function createSaleAccountingEntries(SaleInvoice $invoice, array $totals): Voucher
     {
@@ -983,14 +1044,14 @@ class SaleInvoiceController extends Controller
 
         $entries = [];
 
-        // ── CREDIT entries (revenue) ──────────────────────────────────────────
+        // ── CREDIT entries (revenue) — unchanged ──────────────────────────────
         $goldRev    = round($totals['gold_material']    + $totals['gold_parts'],    2);
         $diamondRev = round($totals['diamond_material'] + $totals['diamond_parts'], 2);
 
         if ($goldRev > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('401001'),   // Gold Sales Revenue
+                'account_id' => $acct('401001'),
                 'debit'      => 0,
                 'credit'     => $goldRev,
                 'narration'  => 'Gold material + parts revenue — Inv# ' . $invoice->invoice_no,
@@ -1000,7 +1061,7 @@ class SaleInvoiceController extends Controller
         if ($diamondRev > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('401002'),   // Diamond Sales Revenue
+                'account_id' => $acct('401002'),
                 'debit'      => 0,
                 'credit'     => $diamondRev,
                 'narration'  => 'Diamond material + parts revenue — Inv# ' . $invoice->invoice_no,
@@ -1010,23 +1071,39 @@ class SaleInvoiceController extends Controller
         if ($totals['making'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('402001'),   // Making Charges Income
+                'account_id' => $acct('402001'),
                 'debit'      => 0,
                 'credit'     => round($totals['making'], 2),
                 'narration'  => 'Making charges income — Inv# ' . $invoice->invoice_no,
             ];
         }
 
+        // Per-item VAT (B2B: on making charges, set per row)
         if ($totals['vat'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('208001'),   // Output VAT Payable (liability)
+                'account_id' => $acct('208001'),
                 'debit'      => 0,
                 'credit'     => round($totals['vat'], 2),
-                'narration'  => 'Output VAT payable — Inv# ' . $invoice->invoice_no,
+                'narration'  => 'Output VAT on making charges — Inv# ' . $invoice->invoice_no,
             ];
         }
 
+        // Invoice-level VAT (B2C: on full net amount, open % field)
+        // Credited to same 208001 Output VAT Payable account.
+        // The currencyDebit will absorb this since totalCredit includes it.
+        if (($invoice->invoice_vat_amount ?? 0) > 0) {
+            $entries[] = [
+                'voucher_id' => $voucher->id,
+                'account_id' => $acct('208001'),
+                'debit'      => 0,
+                'credit'     => round($invoice->invoice_vat_amount, 2),
+                'narration'  => 'Output VAT ' . number_format($invoice->invoice_vat_percent, 2)
+                                . '% on invoice total — Inv# ' . $invoice->invoice_no,
+            ];
+        }
+
+        // totalCredit now includes both per-item VAT and invoice-level VAT
         $totalCredit = round(collect($entries)->sum('credit'), 2);
 
         if ($totalCredit <= 0) {
@@ -1035,13 +1112,11 @@ class SaleInvoiceController extends Controller
             );
         }
 
-        // ── Debit split ───────────────────────────────────────────────────────
-        // materialDebit → always goes to customer AR (they give us the material)
-        // currencyDebit → derived as remainder to guarantee debits = credits exactly
+        // ── Debit split — unchanged logic ─────────────────────────────────────
         $materialDebit = round($totals['gold_material'] + $totals['diamond_material'], 2);
         $currencyDebit = round($totalCredit - $materialDebit, 2);
 
-        // ── DEBIT entries ─────────────────────────────────────────────────────
+        // ── DEBIT entries — identical to original ─────────────────────────────
         switch ($invoice->payment_method) {
 
             case 'credit':
@@ -1078,7 +1153,7 @@ class SaleInvoiceController extends Controller
                 if ($currencyDebit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
-                        'account_id' => $acct('101001'),   // Cash in Hand
+                        'account_id' => $acct('101001'),
                         'debit'      => $currencyDebit,
                         'credit'     => 0,
                         'narration'  => 'Cash received for MC + parts + VAT — Inv# ' . $invoice->invoice_no,
@@ -1140,13 +1215,10 @@ class SaleInvoiceController extends Controller
                 break;
 
             case 'material+making cost':
-                // Customer hands over their own gold as part payment.
-                // DR 104001 Gold Inventory — we receive gold stock
-                // DR Customer AR           — currency portion (MC + parts + VAT) still owed
                 if ($materialDebit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
-                        'account_id' => $acct('104001'),   // Gold Inventory
+                        'account_id' => $acct('104001'),
                         'debit'      => $materialDebit,
                         'credit'     => 0,
                         'narration'  => 'Gold inventory received from customer as material payment'
@@ -1186,29 +1258,27 @@ class SaleInvoiceController extends Controller
         }
 
         Log::info('Sale accounting entries created', [
-            'invoice_no'         => $invoice->invoice_no,
-            'voucher_no'         => $voucher->voucher_no,
-            'payment_method'     => $invoice->payment_method,
-            'cr_401001_gold'     => $goldRev,
-            'cr_401002_diamond'  => $diamondRev,
-            'cr_402001_making'   => round($totals['making'], 2),
-            'cr_208001_vat'      => round($totals['vat'], 2),
-            'dr_material'        => $materialDebit,
-            'dr_currency'        => $currencyDebit,
-            'total_debit'        => $sumDebits,
-            'total_credit'       => $sumCredits,
+            'invoice_no'              => $invoice->invoice_no,
+            'voucher_no'              => $voucher->voucher_no,
+            'payment_method'          => $invoice->payment_method,
+            'cr_401001_gold'          => $goldRev,
+            'cr_401002_diamond'       => $diamondRev,
+            'cr_402001_making'        => round($totals['making'], 2),
+            'cr_208001_vat_per_item'  => round($totals['vat'], 2),
+            'cr_208001_vat_invoice'   => round($invoice->invoice_vat_amount ?? 0, 2),
+            'dr_material'             => $materialDebit,
+            'dr_currency'             => $currencyDebit,
+            'total_debit'             => $sumDebits,
+            'total_credit'            => $sumCredits,
         ]);
 
         return $voucher;
     }
 
     // =========================================================================
-    // PRINT SIMPLE — Walk-in / Retail customer receipt
-    //
-    // Shows only:  Item Name | Gross Weight | Amount
-    // No purity, no parts detail, no rates — clean retail-style receipt.
+    // PRINT SIMPLE — Walk-in / Retail receipt
     // =========================================================================
- 
+
     public function printSimple($id)
     {
         $invoice = SaleInvoice::with([
@@ -1217,7 +1287,7 @@ class SaleInvoiceController extends Controller
             'bank',
             'transferBank',
         ])->findOrFail($id);
- 
+
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
@@ -1226,11 +1296,10 @@ class SaleInvoiceController extends Controller
         $pdf->SetMargins(10, 10, 10);
         $pdf->setCellPadding(1.2);
         $pdf->AddPage();
- 
-        // ── Header — logo left, company right (identical to detailed) ─────────
+
         $logoPath = public_path('assets/img/mj-logo.jpeg');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="85">' : '';
- 
+
         $pdf->writeHTML('
             <table width="100%" cellpadding="3">
                 <tr>
@@ -1242,17 +1311,19 @@ class SaleInvoiceController extends Controller
                     </td>
                 </tr>
             </table><hr>', true, false, false, false);
- 
-        // ── Title ─────────────────────────────────────────────────────────────
+
         $pdf->SetFont('helvetica', 'B', 11);
         $pdf->Cell(0, 6, 'SALE RECEIPT', 0, 1, 'C');
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', '', 9);
- 
+
         $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
- 
-        // ── Customer block left + Invoice meta table right ────────────────────
-        // Remarks used as walk-in customer reference/ID (replaces TRN)
+
+        // Grand total for receipt (includes invoice-level VAT if present)
+        $receiptGrandTotal = ($invoice->invoice_vat_amount ?? 0) > 0
+            ? ($invoice->grand_total ?? $aedAmount)
+            : $aedAmount;
+
         $customerHtml = '
         <table cellpadding="3" width="100%">
             <tr>
@@ -1265,29 +1336,17 @@ class SaleInvoiceController extends Controller
                 </td>
                 <td width="50%">
                     <table border="1" cellpadding="3" width="100%">
-                        <tr>
-                            <td width="45%"><b>Date</b></td>
-                            <td width="55%">' . Carbon::parse($invoice->invoice_date)->format('d.m.Y') . '</td>
-                        </tr>
-                        <tr>
-                            <td><b>Invoice No</b></td>
-                            <td>' . $invoice->invoice_no . '</td>
-                        </tr>
-                        <tr>
-                            <td><b>Payment</b></td>
-                            <td>' . ucwords(str_replace(['+', '_'], [' + ', ' '], $invoice->payment_method)) . '</td>
-                        </tr>
-                        <tr>
-                            <td><b>Currency</b></td>
-                            <td>' . $invoice->currency . '</td>
-                        </tr>
+                        <tr><td width="45%"><b>Date</b></td><td width="55%">' . Carbon::parse($invoice->invoice_date)->format('d.m.Y') . '</td></tr>
+                        <tr><td><b>Invoice No</b></td><td>' . $invoice->invoice_no . '</td></tr>
+                        <tr><td><b>Payment</b></td><td>' . ucwords(str_replace(['+', '_'], [' + ', ' '], $invoice->payment_method)) . '</td></tr>
+                        <tr><td><b>Currency</b></td><td>' . $invoice->currency . '</td></tr>
                     </table>
                 </td>
             </tr>
         </table>';
         $pdf->writeHTML($customerHtml, true, false, false, false);
- 
-        // ── Items table ───────────────────────────────────────────────────────
+
+        // Items table — identical to original
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
@@ -1301,9 +1360,9 @@ class SaleInvoiceController extends Controller
                 </tr>
             </thead>
             <tbody>';
- 
+
         $totalGrossWeight = 0;
- 
+
         foreach ($invoice->items as $i => $item) {
             $html .= '
                 <tr style="text-align:center;background-color:#ffffff;">
@@ -1314,10 +1373,10 @@ class SaleInvoiceController extends Controller
                     <td width="10%">' . ucfirst($item->material_type) . '</td>
                     <td width="18%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
                 </tr>';
- 
+
             $totalGrossWeight += $item->gross_weight;
         }
- 
+
         $html .= '
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
                     <td colspan="3" style="text-align:right;">Net Invoice Amount</td>
@@ -1327,13 +1386,9 @@ class SaleInvoiceController extends Controller
                 </tr>
             </tbody>
         </table>';
- 
+
         $pdf->writeHTML($html, true, false, false, false);
- 
-        // ── Summary block ─────────────────────────────────────────────────────
-        // Left:  payment method details
-        // Right: SIMPLIFIED — Invoice Total and Total (AED) only
-        //        No material/making/VAT breakdown for walk-in customers
+
         $summaryHtml = '
         <table width="100%" cellpadding="0" border="0" style="margin-top:10px;">
             <tr>
@@ -1341,7 +1396,7 @@ class SaleInvoiceController extends Controller
                     <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
                         <tr style="background-color:#f5f5f5;"><td><b>Payment Details</b></td><td><b>Value</b></td></tr>
                         <tr><td>Method</td><td>' . ucfirst($invoice->payment_method) . '</td></tr>';
- 
+
         if ($invoice->payment_method === 'credit') {
             $summaryHtml .= '<tr><td>Payment Term</td><td>' . ($invoice->payment_term ?? '-') . '</td></tr>';
         }
@@ -1370,8 +1425,7 @@ class SaleInvoiceController extends Controller
             <tr><td>Total Pure Weight</td><td>'    . number_format($totalPureWeight, 3) . ' gms</td></tr>
             <tr><td>Making Charges</td><td>'       . number_format($totalMakingAed, 2) . ' AED</td></tr>';
         }
- 
-        // Right side: only Invoice Total + Total AED (no material/making/VAT rows)
+
         $summaryHtml .= '</table>
                 </td>
                 <td width="10%"></td>
@@ -1384,39 +1438,40 @@ class SaleInvoiceController extends Controller
                             <td width="60%">Invoice Total</td>
                             <td width="40%" align="right">' . number_format($invoice->net_amount, 2) . '</td>
                         </tr>';
- 
+
         if ($invoice->currency === 'USD') {
             $summaryHtml .= '
-                        <tr><td>Exchange Rate</td>
-                            <td align="right">' . number_format($invoice->exchange_rate, 4) . '</td>
-                        </tr>
-                        <tr style="font-weight:bold;background-color:#eeeeee;">
-                            <td>Total (AED)</td>
-                            <td align="right">' . number_format($aedAmount, 2) . '</td>
-                        </tr>';
+                        <tr><td>Exchange Rate</td><td align="right">' . number_format($invoice->exchange_rate, 4) . '</td></tr>
+                        <tr><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
         } else {
             $summaryHtml .= '
-                        <tr style="font-weight:bold;">
-                            <td>Total (AED)</td>
-                            <td align="right">' . number_format($aedAmount, 2) . '</td>
+                        <tr><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
+        }
+
+        // Invoice-level VAT rows for receipt
+        if (($invoice->invoice_vat_amount ?? 0) > 0) {
+            $summaryHtml .= '
+                        <tr><td>VAT (' . number_format($invoice->invoice_vat_percent, 2) . '%)</td>
+                            <td align="right">' . number_format($invoice->invoice_vat_amount, 2) . '</td></tr>
+                        <tr style="font-weight:bold;background-color:#ddeedd;">
+                            <td>Grand Total (AED)</td>
+                            <td align="right">' . number_format($receiptGrandTotal, 2) . '</td>
                         </tr>';
         }
- 
+
         $summaryHtml .= '</table></td></tr></table>';
- 
+
         $pdf->Ln(2);
         $pdf->writeHTML($summaryHtml, true, false, false, false);
- 
-        // ── Space check ───────────────────────────────────────────────────────
+
         $remainingSpace = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
         if ($remainingSpace < 70) {
             $pdf->AddPage();
         }
- 
-        // ── Amount in words ───────────────────────────────────────────────────
+
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', 'B', 9);
-        $wordsAED = $pdf->convertCurrencyToWords($aedAmount, 'AED');
+        $wordsAED = $pdf->convertCurrencyToWords($receiptGrandTotal, 'AED');
         if ($invoice->currency === 'USD') {
             $wordsUSD = $pdf->convertCurrencyToWords($invoice->net_amount, 'USD');
             $pdf->Cell(0, 5, 'Amount in Words (USD): ' . $wordsUSD, 0, 1, 'L');
@@ -1424,8 +1479,7 @@ class SaleInvoiceController extends Controller
         } else {
             $pdf->Cell(0, 5, 'Amount in Words (AED): ' . $wordsAED, 0, 1, 'L');
         }
- 
-        // ── HR + Terms ────────────────────────────────────────────────────────
+
         $pdf->Ln(2);
         $pdf->Line(10, $pdf->GetY(), 200, $pdf->GetY());
         $pdf->Ln(2);
@@ -1438,8 +1492,7 @@ class SaleInvoiceController extends Controller
                 Any dispute arising out of or in connection with this sale shall be subject to the exclusive jurisdiction of Dubai Courts.
             </div>';
         $pdf->writeHTML($termsHtml, true, false, false, false);
- 
-        // ── Signatures ────────────────────────────────────────────────────────
+
         $pdf->Ln(26);
         $y = $pdf->GetY();
         $pdf->Line(20, $y, 80, $y);
@@ -1448,7 +1501,7 @@ class SaleInvoiceController extends Controller
         $pdf->Cell(50, 5, "Customer's Signature", 0, 0, 'C');
         $pdf->SetXY(130, $y);
         $pdf->Cell(50, 5, "Authorized Signature", 0, 0, 'C');
- 
+
         return $pdf->Output($invoice->invoice_no . '_receipt.pdf', 'I');
     }
 }
