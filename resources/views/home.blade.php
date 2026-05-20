@@ -63,7 +63,7 @@
 {{-- Header --}}
 <div class="mj-hdr">
     <div>
-        <h4><i class="fas fa-gem me-1 text-warning"></i> Musfira Jewelry L.L.C</h4>
+        <h2 class="card-title"><i class="fas fa-gem me-1 text-warning"></i> Musfira Jewelry L.L.C</h2>
         <p>{{ now()->format('l, d F Y') }}</p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
