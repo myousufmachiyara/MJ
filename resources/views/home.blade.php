@@ -63,18 +63,18 @@
 {{-- Header --}}
 <div class="mj-hdr">
     <div>
-        <h4><i class="ti ti-diamond me-1"></i> Musfira Jewelry L.L.C</h4>
+        <h4><i class="fas fa-gem me-1 text-warning"></i> Musfira Jewelry L.L.C</h4>
         <p>{{ now()->format('l, d F Y') }}</p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
         <a href="{{ route('purchase_invoices.create') }}" class="btn btn-outline-secondary btn-sm">
-            <i class="ti ti-plus me-1"></i>Purchase
+            <i class="fas fa-plus me-1"></i>Purchase
         </a>
         <a href="{{ route('sale_invoices.create') }}" class="btn btn-primary btn-sm">
-            <i class="ti ti-plus me-1"></i>Sale
+            <i class="fas fa-plus me-1"></i>Sale
         </a>
         <a href="{{ route('consignments.create') }}" class="btn btn-outline-secondary btn-sm">
-            <i class="ti ti-handshake me-1"></i>Consignment
+            <i class="fas fa-handshake me-1"></i>Consignment
         </a>
     </div>
 </div>
@@ -83,7 +83,7 @@
 <div class="mj-kpi-grid">
     <div class="mj-kpi">
         <div class="mj-kpi-icon" style="background:#dbeafe">
-            <i class="ti ti-shopping-cart" style="color:#2563eb;font-size:18px"></i>
+            <i class="fas fa-shopping-cart" style="color:#2563eb;font-size:16px"></i>
         </div>
         <div class="mj-kpi-label">Sales this month</div>
         <div class="mj-kpi-val text-primary-mj">AED {{ number_format($totalSalesMonth, 0) }}</div>
@@ -94,7 +94,7 @@
     </div>
     <div class="mj-kpi">
         <div class="mj-kpi-icon" style="background:#fee2e2">
-            <i class="ti ti-file-invoice" style="color:#dc2626;font-size:18px"></i>
+            <i class="fas fa-file-invoice" style="color:#dc2626;font-size:16px"></i>
         </div>
         <div class="mj-kpi-label">Purchases this month</div>
         <div class="mj-kpi-val text-danger-mj">AED {{ number_format($totalPurchasesMonth, 0) }}</div>
@@ -105,7 +105,7 @@
     </div>
     <div class="mj-kpi">
         <div class="mj-kpi-icon" style="background:#d1fae5">
-            <i class="ti ti-chart-line" style="color:#059669;font-size:18px"></i>
+            <i class="fas fa-chart-line" style="color:#059669;font-size:16px"></i>
         </div>
         <div class="mj-kpi-label">Profit this month</div>
         <div class="mj-kpi-val {{ $monthlyProfit['profit'] >= 0 ? 'text-success-mj' : 'text-danger-mj' }}">
@@ -118,7 +118,7 @@
     </div>
     <div class="mj-kpi">
         <div class="mj-kpi-icon" style="background:#fef3c7">
-            <i class="ti ti-box" style="color:#d97706;font-size:18px"></i>
+            <i class="fas fa-boxes" style="color:#d97706;font-size:16px"></i>
         </div>
         <div class="mj-kpi-label">Stock in hand</div>
         <div class="mj-kpi-val">{{ number_format($stockCount) }} items</div>
@@ -133,7 +133,7 @@
 <div class="mj-row2">
     <div class="mj-card">
         <div class="mj-card-hdr">
-            <span class="mj-card-title"><i class="ti ti-chart-bar me-1"></i>Monthly trend — last 6 months</span>
+            <span class="mj-card-title"><i class="fas fa-chart-bar me-1"></i>Monthly trend — last 6 months</span>
         </div>
         <canvas id="mjTrendChart" height="160"></canvas>
         <div class="d-flex gap-3 mt-2" style="font-size:.72rem;color:#6c757d">
@@ -143,7 +143,7 @@
     </div>
     <div class="mj-card">
         <div class="mj-card-hdr">
-            <span class="mj-card-title"><i class="ti ti-handshake me-1"></i>Consignment overview</span>
+            <span class="mj-card-title"><i class="fas fa-handshake me-1"></i>Consignment overview</span>
             <span class="mj-badge bg-info-soft">{{ $activeConsignments }} active</span>
         </div>
         <div class="mj-csg-grid">
@@ -176,7 +176,7 @@
 <div class="mj-row3">
     <div class="mj-card">
         <div class="mj-card-hdr">
-            <span class="mj-card-title"><i class="ti ti-cash me-1"></i>Receivables</span>
+            <span class="mj-card-title"><i class="fas fa-hand-holding-usd me-1"></i>Receivables</span>
             <span style="font-size:.85rem;font-weight:600;color:#059669">AED {{ number_format($receivables['total'], 0) }}</span>
         </div>
         @forelse($receivables['list'] as $rec)
@@ -194,7 +194,7 @@
 
     <div class="mj-card">
         <div class="mj-card-hdr">
-            <span class="mj-card-title"><i class="ti ti-credit-card me-1"></i>Payables</span>
+            <span class="mj-card-title"><i class="fas fa-file-invoice-dollar me-1"></i>Payables</span>
             <span style="font-size:.85rem;font-weight:600;color:#dc2626">AED {{ number_format($payables['total'], 0) }}</span>
         </div>
         @forelse($payables['list'] as $pay)
@@ -212,7 +212,7 @@
 
     <div class="mj-card">
         <div class="mj-card-hdr">
-            <span class="mj-card-title"><i class="ti ti-scale me-1"></i>Business performance</span>
+            <span class="mj-card-title"><i class="fas fa-balance-scale me-1"></i>Business performance</span>
         </div>
         @php
             $perfItems = [
@@ -250,20 +250,26 @@
 <div class="mj-row4">
     <div class="mj-card">
         <div class="mj-card-hdr">
-            <span class="mj-card-title"><i class="ti ti-file-invoice me-1"></i>Recent purchases</span>
+            <span class="mj-card-title"><i class="fas fa-file-invoice me-1"></i>Recent purchases</span>
             <a href="{{ route('purchase_invoices.index') }}" class="btn btn-outline-secondary btn-sm" style="font-size:.7rem;padding:2px 8px">View all</a>
         </div>
         <table class="mj-tbl">
             <thead><tr><th>Invoice</th><th>Vendor</th><th class="mj-amt">AED</th></tr></thead>
             <tbody>
                 @forelse($recentPurchases as $inv)
+                    @php
+                        $invNo     = is_array($inv) ? ($inv['invoice_no']     ?? '') : ($inv->invoice_no     ?? '');
+                        $invDate   = is_array($inv) ? ($inv['invoice_date']   ?? '') : ($inv->invoice_date   ?? '');
+                        $invAed    = is_array($inv) ? ($inv['net_amount_aed'] ?? 0)  : ($inv->net_amount_aed ?? 0);
+                        $invVendor = is_array($inv) ? ($inv['vendor']['name'] ?? '—') : (optional($inv->vendor)->name ?? '—');
+                    @endphp
                     <tr>
                         <td>
-                            <span class="mj-code">{{ $inv['invoice_no'] }}</span>
-                            <div style="font-size:.68rem;color:#6c757d">{{ $inv['invoice_date'] }}</div>
+                            <span class="mj-code">{{ $invNo }}</span>
+                            <div style="font-size:.68rem;color:#6c757d">{{ $invDate ? \Carbon\Carbon::parse($invDate)->format('d-M-Y') : '' }}</div>
                         </td>
-                        <td style="font-size:.75rem">{{ $inv['vendor']['name'] }}</td>
-                        <td class="mj-amt">{{ number_format($inv['net_amount_aed'], 0) }}</td>
+                        <td style="font-size:.75rem">{{ $invVendor }}</td>
+                        <td class="mj-amt">{{ number_format($invAed, 0) }}</td>
                     </tr>
                 @empty
                     <tr><td colspan="3" style="font-size:.78rem;color:#6c757d;padding:8px 0">No recent purchases</td></tr>
@@ -274,20 +280,26 @@
 
     <div class="mj-card">
         <div class="mj-card-hdr">
-            <span class="mj-card-title"><i class="ti ti-shopping-cart me-1"></i>Recent sales</span>
+            <span class="mj-card-title"><i class="fas fa-shopping-cart me-1"></i>Recent sales</span>
             <a href="{{ route('sale_invoices.index') }}" class="btn btn-outline-secondary btn-sm" style="font-size:.7rem;padding:2px 8px">View all</a>
         </div>
         <table class="mj-tbl">
             <thead><tr><th>Invoice</th><th>Customer</th><th class="mj-amt">AED</th></tr></thead>
             <tbody>
                 @forelse($recentSales as $inv)
+                    @php
+                        $invNo      = is_array($inv) ? ($inv['invoice_no']     ?? '') : ($inv->invoice_no     ?? '');
+                        $invDate    = is_array($inv) ? ($inv['invoice_date']   ?? '') : ($inv->invoice_date   ?? '');
+                        $invAed     = is_array($inv) ? ($inv['net_amount_aed'] ?? 0)  : ($inv->net_amount_aed ?? 0);
+                        $invCustomer= is_array($inv) ? ($inv['customer']['name'] ?? '—') : (optional($inv->customer)->name ?? '—');
+                    @endphp
                     <tr>
                         <td>
-                            <span class="mj-code">{{ $inv['invoice_no'] }}</span>
-                            <div style="font-size:.68rem;color:#6c757d">{{ $inv['invoice_date'] }}</div>
+                            <span class="mj-code">{{ $invNo }}</span>
+                            <div style="font-size:.68rem;color:#6c757d">{{ $invDate ? \Carbon\Carbon::parse($invDate)->format('d-M-Y') : '' }}</div>
                         </td>
-                        <td style="font-size:.75rem">{{ $inv['customer']['name'] }}</td>
-                        <td class="mj-amt">{{ number_format($inv['net_amount_aed'], 0) }}</td>
+                        <td style="font-size:.75rem">{{ $invCustomer }}</td>
+                        <td class="mj-amt">{{ number_format($invAed, 0) }}</td>
                     </tr>
                 @empty
                     <tr><td colspan="3" style="font-size:.78rem;color:#6c757d;padding:8px 0">No recent sales</td></tr>
@@ -298,7 +310,7 @@
 
     <div class="mj-card">
         <div class="mj-card-hdr">
-            <span class="mj-card-title"><i class="ti ti-handshake me-1"></i>Recent consignments</span>
+            <span class="mj-card-title"><i class="fas fa-handshake me-1"></i>Recent consignments</span>
             <a href="{{ route('consignments.index') }}" class="btn btn-outline-secondary btn-sm" style="font-size:.7rem;padding:2px 8px">View all</a>
         </div>
         <table class="mj-tbl">
@@ -306,7 +318,13 @@
             <tbody>
                 @forelse($recentConsignments as $c)
                     @php
-                        $badgeClass  = match($c['status']) {
+                        // Support both Eloquent object and legacy array
+                        $cStatus  = is_array($c) ? ($c['status']         ?? '') : ($c->status         ?? '');
+                        $cNo      = is_array($c) ? ($c['consignment_no'] ?? '') : ($c->consignment_no ?? '');
+                        $cDate    = is_array($c) ? ($c['start_date']     ?? '') : ($c->start_date     ?? '');
+                        $cPartner = is_array($c) ? ($c['partner']['name'] ?? '—') : (optional($c->partner)->name ?? '—');
+
+                        $badgeClass = match($cStatus) {
                             'active'            => 'bg-success-soft',
                             'partially_settled' => 'bg-warning-soft',
                             'settled'           => 'bg-info-soft',
@@ -314,14 +332,14 @@
                             'expired'           => 'bg-danger-soft',
                             default             => 'bg-secondary-soft',
                         };
-                        $statusLabel = ucwords(str_replace('_', ' ', $c['status']));
+                        $statusLabel = ucwords(str_replace('_', ' ', $cStatus));
                     @endphp
                     <tr>
                         <td>
-                            <span class="mj-code">{{ $c['consignment_no'] }}</span>
-                            <div style="font-size:.68rem;color:#6c757d">{{ $c['start_date'] }}</div>
+                            <span class="mj-code">{{ $cNo }}</span>
+                            <div style="font-size:.68rem;color:#6c757d">{{ $cDate ? \Carbon\Carbon::parse($cDate)->format('d-M-Y') : '' }}</div>
                         </td>
-                        <td style="font-size:.75rem">{{ $c['partner']['name'] }}</td>
+                        <td style="font-size:.75rem">{{ $cPartner }}</td>
                         <td><span class="mj-badge {{ $badgeClass }}" style="font-size:.68rem">{{ $statusLabel }}</span></td>
                     </tr>
                 @empty

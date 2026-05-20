@@ -3,18 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\PurchaseInvoice;
+use App\Models\PurchaseInvoiceItem;
 use App\Models\SaleInvoice;
-use App\Models\PurchaseReturn;
-use App\Models\SaleReturn;
+use App\Models\SaleInvoiceItem;
 use App\Models\Consignment;
 use App\Models\ConsignmentItem;
 use App\Models\ChartOfAccounts;
 use App\Models\AccountingEntry;
 use App\Models\Voucher;
-use App\Models\PurchaseInvoiceItem;
-use App\Models\PurchaseReturnItem;
-use App\Models\SaleInvoiceItem;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
@@ -30,45 +26,59 @@ class DashboardController extends Controller
             $yearTo    = $now->copy()->endOfYear()->toDateString();
 
             // ── Sales KPIs ────────────────────────────────────────────────────
-            $totalSalesMonth = SaleInvoice::whereBetween('invoice_date', [$monthFrom, $monthTo])
-                ->sum('net_amount_aed');
+            $totalSalesMonth = (float) SaleInvoice::whereBetween('invoice_date', [$monthFrom, $monthTo])
+                ->whereNull('deleted_at')->sum('net_amount_aed');
 
-            $totalSalesYear = SaleInvoice::whereBetween('invoice_date', [$yearFrom, $yearTo])
-                ->sum('net_amount_aed');
+            $totalSalesYear = (float) SaleInvoice::whereBetween('invoice_date', [$yearFrom, $yearTo])
+                ->whereNull('deleted_at')->sum('net_amount_aed');
 
-            $saleCount = SaleInvoice::whereBetween('invoice_date', [$monthFrom, $monthTo])
-                ->count();
+            $saleCount = (int) SaleInvoice::whereBetween('invoice_date', [$monthFrom, $monthTo])
+                ->whereNull('deleted_at')->count();
 
             // ── Purchase KPIs ─────────────────────────────────────────────────
-            $totalPurchasesMonth = PurchaseInvoice::whereBetween('invoice_date', [$monthFrom, $monthTo])
-                ->sum('net_amount_aed');
+            $totalPurchasesMonth = (float) PurchaseInvoice::whereBetween('invoice_date', [$monthFrom, $monthTo])
+                ->whereNull('deleted_at')->sum('net_amount_aed');
 
-            $totalPurchasesYear = PurchaseInvoice::whereBetween('invoice_date', [$yearFrom, $yearTo])
-                ->sum('net_amount_aed');
+            $totalPurchasesYear = (float) PurchaseInvoice::whereBetween('invoice_date', [$yearFrom, $yearTo])
+                ->whereNull('deleted_at')->sum('net_amount_aed');
 
-            $purchaseCount = PurchaseInvoice::whereBetween('invoice_date', [$monthFrom, $monthTo])
-                ->count();
+            $purchaseCount = (int) PurchaseInvoice::whereBetween('invoice_date', [$monthFrom, $monthTo])
+                ->whereNull('deleted_at')->count();
 
             // ── Stock in hand ─────────────────────────────────────────────────
-            // Stock = purchased items whose barcode is NOT in sold items
-            // and NOT in returned purchase items.
-            $soldBarcodes = SaleInvoiceItem::pluck('barcode_number')
-                ->filter()->unique()->values()->toArray();
+            // Stock = purchased items (not soft-deleted) whose barcode
+            // does NOT appear in any sale invoice item (not soft-deleted).
+            // We also exclude items returned via purchase returns.
+            $soldBarcodes = SaleInvoiceItem::whereNotNull('barcode_number')
+                ->whereHas('saleInvoice', fn($q) => $q->whereNull('deleted_at'))
+                ->pluck('barcode_number')
+                ->filter()
+                ->unique()
+                ->toArray();
 
-            $returnedBarcodes = PurchaseReturnItem::pluck('barcode_number')
-                ->filter()->unique()->values()->toArray();
+            $returnedBarcodes = \App\Models\PurchaseReturnItem::whereNotNull('barcode_number')
+                ->pluck('barcode_number')
+                ->filter()
+                ->unique()
+                ->toArray();
 
             $excludedBarcodes = array_unique(array_merge($soldBarcodes, $returnedBarcodes));
 
-            $stockQuery = PurchaseInvoiceItem::when(
-                count($excludedBarcodes) > 0,
-                fn($q) => $q->whereNotIn('barcode_number', $excludedBarcodes)
-            );
+            $stockQuery = PurchaseInvoiceItem::whereHas('purchaseInvoice', fn($q) => $q->whereNull('deleted_at'));
 
-            $stockCount    = (int)   $stockQuery->count();
-            $stockValue    = (float) $stockQuery->sum('item_total');
-            $stockGrossWt  = (float) $stockQuery->sum('gross_weight');
-            $stockPurityWt = (float) $stockQuery->sum('purity_weight');
+            if (!empty($excludedBarcodes)) {
+                $stockQuery->where(function ($q) use ($excludedBarcodes) {
+                    $q->whereNull('barcode_number')
+                      ->orWhereNotIn('barcode_number', $excludedBarcodes);
+                });
+            }
+
+            // Execute once, use collection for all four metrics
+            $stockItems    = $stockQuery->get(['gross_weight', 'purity_weight', 'item_total']);
+            $stockCount    = $stockItems->count();
+            $stockValue    = (float) $stockItems->sum('item_total');
+            $stockGrossWt  = (float) $stockItems->sum('gross_weight');
+            $stockPurityWt = (float) $stockItems->sum('purity_weight');
 
             // ── Consignment overview ──────────────────────────────────────────
             $csgInStockCount  = (int)   ConsignmentItem::where('item_status', 'in_stock')->count();
@@ -77,16 +87,16 @@ class DashboardController extends Controller
             $csgSoldValue     = (float) ConsignmentItem::where('item_status', 'sold')->sum('agreed_value');
             $csgReturnedCount = (int)   ConsignmentItem::where('item_status', 'returned')->count();
 
-            $activeConsignments = (int) Consignment::whereNotIn('status', ['settled', 'expired', 'returned'])->count();
+            $activeConsignments = (int) Consignment::whereIn('status', ['active', 'partially_settled'])->count();
 
-            // Inbound pending = inbound consignments not fully settled/returned
-            $csgInboundCount = (int) Consignment::where('direction', 'inbound')
-                ->whereNotIn('status', ['settled', 'expired', 'returned'])
+            // Inbound pending = in_stock items from inbound consignments
+            $csgInboundCount = (int) ConsignmentItem::where('item_status', 'in_stock')
+                ->whereHas('consignment', fn($q) => $q->where('direction', 'inbound'))
                 ->count();
 
-            // Outbound pending = outbound consignments not fully settled/returned
-            $csgOutboundCount = (int) Consignment::where('direction', 'outbound')
-                ->whereNotIn('status', ['settled', 'expired', 'returned'])
+            // Outbound pending = in_stock items from outbound consignments
+            $csgOutboundCount = (int) ConsignmentItem::where('item_status', 'in_stock')
+                ->whereHas('consignment', fn($q) => $q->where('direction', 'outbound'))
                 ->count();
 
             // ── Monthly profit ────────────────────────────────────────────────
@@ -101,37 +111,15 @@ class DashboardController extends Controller
 
             // ── Recent activity ───────────────────────────────────────────────
             $recentPurchases = PurchaseInvoice::with('vendor')
-                ->latest('invoice_date')
-                ->take(5)
-                ->get()
-                ->map(fn($inv) => [
-                    'invoice_no'     => $inv->invoice_no,
-                    'invoice_date'   => Carbon::parse($inv->invoice_date)->format('d-M-Y'),
-                    'vendor'         => ['name' => optional($inv->vendor)->name ?? '—'],
-                    'net_amount_aed' => round($inv->net_amount_aed, 2),
-                ])->values()->toArray();
+                ->whereNull('deleted_at')
+                ->latest('invoice_date')->take(5)->get();
 
             $recentSales = SaleInvoice::with('customer')
-                ->latest('invoice_date')
-                ->take(5)
-                ->get()
-                ->map(fn($inv) => [
-                    'invoice_no'     => $inv->invoice_no,
-                    'invoice_date'   => Carbon::parse($inv->invoice_date)->format('d-M-Y'),
-                    'customer'       => ['name' => optional($inv->customer)->name ?? '—'],
-                    'net_amount_aed' => round($inv->net_amount_aed, 2),
-                ])->values()->toArray();
+                ->whereNull('deleted_at')
+                ->latest('invoice_date')->take(5)->get();
 
             $recentConsignments = Consignment::with('partner')
-                ->latest('start_date')
-                ->take(5)
-                ->get()
-                ->map(fn($c) => [
-                    'consignment_no' => $c->consignment_no,
-                    'start_date'     => Carbon::parse($c->start_date)->format('d-M-Y'),
-                    'partner'        => ['name' => optional($c->partner)->name ?? '—'],
-                    'status'         => $c->status,
-                ])->values()->toArray();
+                ->latest('start_date')->take(5)->get();
 
             return view('home', compact(
                 'totalSalesMonth',
@@ -166,7 +154,6 @@ class DashboardController extends Controller
                 'line' => $e->getLine(),
                 'file' => $e->getFile(),
             ]);
-
             return view('home', $this->emptyDefaults());
         }
     }
@@ -174,16 +161,11 @@ class DashboardController extends Controller
     // =========================================================================
     // MONTHLY PROFIT
     //
-    // Revenue = sale invoice net_amount_aed for the period
-    // Cost    = for each sale invoice item:
-    //             purchase_gold_rate_aed (stored on invoice) × purity_weight
-    //           + purchase_making_rate_aed                   × gross_weight
-    // Profit  = Revenue - Cost
-    // Margin  = Profit / Revenue × 100
-    //
-    // purchase_gold_rate_aed and purchase_making_rate_aed are saved on
-    // SaleInvoice at time of invoice creation (the cost-of-goods fields).
-    // If these fields are 0 (not filled), cost will be 0 and margin = 100%.
+    // Revenue = sum of net_amount_aed on sale invoices in the period.
+    // Cost    = per sale invoice item:
+    //             purchase_gold_rate_aed (field on sale invoice) × purity_weight
+    //           + purchase_making_rate_aed                       × gross_weight
+    // If those cost fields are 0 (not filled), cost = 0 and margin = 100%.
     // =========================================================================
 
     private function calcMonthlyProfit(string $from, string $to): array
@@ -191,15 +173,15 @@ class DashboardController extends Controller
         try {
             $invoices = SaleInvoice::with('items')
                 ->whereBetween('invoice_date', [$from, $to])
+                ->whereNull('deleted_at')
                 ->get();
 
             $revenue = (float) $invoices->sum('net_amount_aed');
+            $cost    = 0.0;
 
-            $cost = 0.0;
             foreach ($invoices as $invoice) {
                 $goldRate   = (float) ($invoice->purchase_gold_rate_aed   ?? 0);
                 $makingRate = (float) ($invoice->purchase_making_rate_aed ?? 0);
-
                 foreach ($invoice->items as $item) {
                     $cost += $goldRate   * (float) ($item->purity_weight ?? 0);
                     $cost += $makingRate * (float) ($item->gross_weight  ?? 0);
@@ -207,6 +189,7 @@ class DashboardController extends Controller
             }
 
             $profit = $revenue - $cost;
+            // Margin as % of revenue (standard gross margin formula)
             $margin = $revenue > 0 ? round(($profit / $revenue) * 100, 1) : 0;
 
             return [
@@ -223,28 +206,21 @@ class DashboardController extends Controller
     }
 
     // =========================================================================
-    // RECEIVABLES
-    //
-    // For every customer COA account, read accounting_entries:
-    //   net balance = SUM(debit) - SUM(credit)
-    //   positive    = customer still owes us money
-    //
-    // Returns: [ total => float, list => [ [name, amount], … ] ] top-5 desc
+    // RECEIVABLES — reads accounting_entries for all customer accounts.
+    // Net balance = SUM(debit) - SUM(credit) across both simple vouchers
+    // and complex accounting_entries rows.
     // =========================================================================
 
     private function calcReceivables(): array
     {
         try {
             $customers = ChartOfAccounts::where('account_type', 'customer')->get();
+            $list      = [];
 
-            $list = [];
             foreach ($customers as $customer) {
                 $balance = $this->accountNetBalance($customer->id, 'receivable');
                 if ($balance > 0.01) {
-                    $list[] = [
-                        'name'   => $customer->name,
-                        'amount' => round($balance, 2),
-                    ];
+                    $list[] = ['name' => $customer->name, 'amount' => round($balance, 2)];
                 }
             }
 
@@ -262,28 +238,20 @@ class DashboardController extends Controller
     }
 
     // =========================================================================
-    // PAYABLES
-    //
-    // For every vendor COA account, read accounting_entries:
-    //   net balance = SUM(credit) - SUM(debit)
-    //   positive    = we still owe the vendor money
-    //
-    // Returns: [ total => float, list => [ [name, amount], … ] ] top-5 desc
+    // PAYABLES — reads accounting_entries for all vendor accounts.
+    // Net balance = SUM(credit) - SUM(debit).
     // =========================================================================
 
     private function calcPayables(): array
     {
         try {
             $vendors = ChartOfAccounts::where('account_type', 'vendor')->get();
+            $list    = [];
 
-            $list = [];
             foreach ($vendors as $vendor) {
                 $balance = $this->accountNetBalance($vendor->id, 'payable');
                 if ($balance > 0.01) {
-                    $list[] = [
-                        'name'   => $vendor->name,
-                        'amount' => round($balance, 2),
-                    ];
+                    $list[] = ['name' => $vendor->name, 'amount' => round($balance, 2)];
                 }
             }
 
@@ -301,39 +269,50 @@ class DashboardController extends Controller
     }
 
     // =========================================================================
-    // ACCOUNT NET BALANCE
+    // ACCOUNT NET BALANCE — reads BOTH sources:
+    //   1. Simple vouchers (ac_dr_sid / ac_cr_sid, reference_type IS NULL)
+    //   2. AccountingEntry rows from all modules
+    //   3. Opening balance columns on the COA row (receivables / payables)
     //
-    // Reads only accounting_entries (all purchase/sale/return modules write here).
-    //
-    // $type = 'receivable'  →  DR - CR  (AR: debit increases receivable)
-    // $type = 'payable'     →  CR - DR  (AP: credit increases payable)
-    //
-    // Returns the net outstanding amount (always >= 0).
+    // $type = 'receivable' → DR - CR (positive = customer owes us)
+    // $type = 'payable'    → CR - DR (positive = we owe vendor)
     // =========================================================================
 
     private function accountNetBalance(int $accountId, string $type): float
     {
+        $account = ChartOfAccounts::find($accountId);
+        if (!$account) return 0.0;
+
+        // Opening balances stored on the COA record
+        $openingDr = (float) ($account->opening_debit  ?? $account->receivables ?? 0);
+        $openingCr = (float) ($account->opening_credit ?? $account->payables    ?? 0);
+
+        // Simple manual vouchers
+        $simpleDr = (float) Voucher::where('ac_dr_sid', $accountId)
+            ->whereNull('reference_type')->whereNull('deleted_at')->sum('amount');
+
+        $simpleCr = (float) Voucher::where('ac_cr_sid', $accountId)
+            ->whereNull('reference_type')->whereNull('deleted_at')->sum('amount');
+
+        // Complex entries from purchase/sale/return modules
         $row = AccountingEntry::where('account_id', $accountId)
-            ->selectRaw('COALESCE(SUM(debit), 0) as total_dr, COALESCE(SUM(credit), 0) as total_cr')
+            ->whereHas('voucher', fn($q) => $q->whereNull('deleted_at'))
+            ->selectRaw('COALESCE(SUM(debit),0) as total_dr, COALESCE(SUM(credit),0) as total_cr')
             ->first();
 
-        if (!$row) return 0.0;
+        $complexDr = $row ? (float) $row->total_dr : 0.0;
+        $complexCr = $row ? (float) $row->total_cr : 0.0;
 
-        $dr = (float) $row->total_dr;
-        $cr = (float) $row->total_cr;
+        $totalDr = $openingDr + $simpleDr + $complexDr;
+        $totalCr = $openingCr + $simpleCr + $complexCr;
 
         return $type === 'receivable'
-            ? max(0.0, $dr - $cr)
-            : max(0.0, $cr - $dr);
+            ? max(0.0, $totalDr - $totalCr)
+            : max(0.0, $totalCr - $totalDr);
     }
 
     // =========================================================================
-    // MONTHLY TREND — last 6 calendar months
-    //
-    // Returns arrays for Chart.js bar chart:
-    //   months    → ['Dec 2024', 'Jan 2025', …]
-    //   purchases → [AED totals …]
-    //   sales     → [AED totals …]
+    // MONTHLY TREND — last 6 calendar months for Chart.js bar chart
     // =========================================================================
 
     private function buildMonthlyTrend(): array
@@ -348,17 +327,15 @@ class DashboardController extends Controller
                 $from  = $month->copy()->startOfMonth()->toDateString();
                 $to    = $month->copy()->endOfMonth()->toDateString();
 
-                $months[] = $month->format('M Y');
-
+                $months[]    = $month->format('M Y');
                 $purchases[] = round(
-                    PurchaseInvoice::whereBetween('invoice_date', [$from, $to])
-                        ->sum('net_amount_aed'),
+                    (float) PurchaseInvoice::whereBetween('invoice_date', [$from, $to])
+                        ->whereNull('deleted_at')->sum('net_amount_aed'),
                     2
                 );
-
                 $sales[] = round(
-                    SaleInvoice::whereBetween('invoice_date', [$from, $to])
-                        ->sum('net_amount_aed'),
+                    (float) SaleInvoice::whereBetween('invoice_date', [$from, $to])
+                        ->whereNull('deleted_at')->sum('net_amount_aed'),
                     2
                 );
             }
@@ -370,7 +347,7 @@ class DashboardController extends Controller
     }
 
     // =========================================================================
-    // EMPTY DEFAULTS — ensures the view never crashes on DB failure
+    // EMPTY DEFAULTS — view never crashes on DB error
     // =========================================================================
 
     private function emptyDefaults(): array
@@ -398,9 +375,9 @@ class DashboardController extends Controller
             'receivables'         => ['total' => 0, 'list' => []],
             'payables'            => ['total' => 0, 'list' => []],
             'monthlyTrend'        => ['months' => [], 'purchases' => [], 'sales' => []],
-            'recentPurchases'     => [],
-            'recentSales'         => [],
-            'recentConsignments'  => [],
+            'recentPurchases'     => collect(),
+            'recentSales'         => collect(),
+            'recentConsignments'  => collect(),
         ];
     }
 }
