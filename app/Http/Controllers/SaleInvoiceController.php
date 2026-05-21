@@ -181,11 +181,13 @@ class SaleInvoiceController extends Controller
             $isTaxable   = $request->boolean('is_taxable');
             $prefix      = $isTaxable ? 'SAL-TAX-' : 'SAL-';
             $lastInvoice = SaleInvoice::withTrashed()
-                ->where('invoice_no', 'LIKE', $prefix . '%')
+                ->where('invoice_no', 'REGEXP', '^' . preg_quote($prefix) . '[0-9]+$')
                 ->orderBy('id', 'desc')
                 ->first();
-            $nextNumber = $lastInvoice ? ((int) str_replace($prefix, '', $lastInvoice->invoice_no)) + 1 : 1;
-            $invoiceNo  = $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+            $nextNumber = $lastInvoice
+                ? ((int) substr($lastInvoice->invoice_no, strlen($prefix))) + 1
+                : 1;
+            $invoiceNo = $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
 
             $invoice = SaleInvoice::create([
                 'invoice_no'               => $invoiceNo,
