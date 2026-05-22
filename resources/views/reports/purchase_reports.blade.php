@@ -42,7 +42,7 @@
         <div class="col-md-2"><input type="date" name="from_date" class="form-control" value="{{ $from }}"></div>
         <div class="col-md-2"><input type="date" name="to_date" class="form-control" value="{{ $to }}"></div>
         <div class="col-md-3">
-          <select name="vendor_id" class="form-control">
+          <select name="vendor_id" data-plugin-selecttwo class="form-control select2-js">
             <option value="">-- All Vendors --</option>
             @foreach($vendors as $vendor)
               <option value="{{ $vendor->id }}" {{ $vendorId==$vendor->id?'selected':'' }}>{{ $vendor->name }}</option>
@@ -125,7 +125,7 @@
         <div class="col-md-2"><input type="date" name="from_date" class="form-control" value="{{ $from }}"></div>
         <div class="col-md-2"><input type="date" name="to_date" class="form-control" value="{{ $to }}"></div>
         <div class="col-md-3">
-          <select name="vendor_id" class="form-control">
+          <select name="vendor_id" data-plugin-selecttwo class="form-control select2-js">
             <option value="">-- All Vendors --</option>
             @foreach($vendors as $vendor)
               <option value="{{ $vendor->id }}" {{ $vendorId==$vendor->id?'selected':'' }}>{{ $vendor->name }}</option>
@@ -195,7 +195,7 @@
         <div class="col-md-2"><input type="date" name="from_date" class="form-control" value="{{ $from }}"></div>
         <div class="col-md-2"><input type="date" name="to_date" class="form-control" value="{{ $to }}"></div>
         <div class="col-md-3">
-          <select name="vendor_id" class="form-control">
+          <select name="vendor_id" data-plugin-selecttwo class="form-control select2-js">
             <option value="">-- All Vendors --</option>
             @foreach($vendors as $v)
               <option value="{{ $v->id }}" {{ $vendorId==$v->id?'selected':'' }}>{{ $v->name }}</option>
@@ -306,7 +306,7 @@
         <div class="col-md-2"><input type="date" name="from_date" class="form-control" value="{{ $from }}"></div>
         <div class="col-md-2"><input type="date" name="to_date" class="form-control" value="{{ $to }}"></div>
         <div class="col-md-3">
-          <select name="vendor_id" class="form-control">
+          <select name="vendor_id" data-plugin-selecttwo class="form-control select2-js">
             <option value="">-- All Vendors --</option>
             @foreach($vendors as $v)
               <option value="{{ $v->id }}" {{ $vendorId==$v->id?'selected':'' }}>{{ $v->name }}</option>
@@ -370,7 +370,7 @@
         <div class="col-md-2"><input type="date" name="from_date" class="form-control" value="{{ $from }}"></div>
         <div class="col-md-2"><input type="date" name="to_date" class="form-control" value="{{ $to }}"></div>
         <div class="col-md-3">
-          <select name="vendor_id" class="form-control">
+          <select name="vendor_id" data-plugin-selecttwo class="form-control select2-js">
             <option value="">-- All Vendors --</option>
             @foreach($vendors as $v)
               <option value="{{ $v->id }}" {{ $vendorId==$v->id?'selected':'' }}>{{ $v->name }}</option>

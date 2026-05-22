@@ -42,7 +42,7 @@
           <input type="date" name="to_date" class="form-control" value="{{ $to }}">
         </div>
         <div class="col-md-4">
-          <select name="account_id" class="form-control select2">
+          <select name="account_id" data-plugin-selecttwo class="form-control select2-js">
             <option value="">-- Select Account --</option>
             @foreach ($chartOfAccounts as $coa)
               <option value="{{ $coa->id }}" {{ request('account_id') == $coa->id ? 'selected' : '' }}>
@@ -99,7 +99,7 @@
           <input type="date" name="to_date" class="form-control" value="{{ $to }}">
         </div>
         <div class="col-md-4">
-          <select name="account_id" class="form-control select2">
+          <select name="account_id" data-plugin-selecttwo class="form-control select2-js">
             <option value="">-- Select Customer / Vendor --</option>
             @foreach ($chartOfAccounts->whereIn('account_type', ['customer','vendor']) as $coa)
               <option value="{{ $coa->id }}" {{ request('account_id') == $coa->id ? 'selected' : '' }}>
