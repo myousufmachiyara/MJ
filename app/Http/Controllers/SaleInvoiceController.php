@@ -1046,7 +1046,7 @@ class SaleInvoiceController extends Controller
 
         $entries = [];
 
-        // ── CREDIT entries (revenue) — unchanged ──────────────────────────────
+        // ── CREDIT entries (revenue) ──────────────────────────────────────────
         $goldRev    = round($totals['gold_material']    + $totals['gold_parts'],    2);
         $diamondRev = round($totals['diamond_material'] + $totals['diamond_parts'], 2);
 
@@ -1080,7 +1080,7 @@ class SaleInvoiceController extends Controller
             ];
         }
 
-        // Per-item VAT (B2B: on making charges, set per row)
+        // Per-item VAT (B2B: on making charges only, set per row)
         if ($totals['vat'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
@@ -1092,8 +1092,6 @@ class SaleInvoiceController extends Controller
         }
 
         // Invoice-level VAT (B2C: on full net amount, open % field)
-        // Credited to same 208001 Output VAT Payable account.
-        // The currencyDebit will absorb this since totalCredit includes it.
         if (($invoice->invoice_vat_amount ?? 0) > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
@@ -1105,7 +1103,6 @@ class SaleInvoiceController extends Controller
             ];
         }
 
-        // totalCredit now includes both per-item VAT and invoice-level VAT
         $totalCredit = round(collect($entries)->sum('credit'), 2);
 
         if ($totalCredit <= 0) {
@@ -1114,53 +1111,48 @@ class SaleInvoiceController extends Controller
             );
         }
 
-        // ── Debit split — unchanged logic ─────────────────────────────────────
-        $materialDebit = round($totals['gold_material'] + $totals['diamond_material'], 2);
-        $currencyDebit = round($totalCredit - $materialDebit, 2);
+        // ── DEBIT entries ─────────────────────────────────────────────────────
+        //
+        // Debit logic per payment method:
+        //
+        //   credit          → full amount owed by customer → DR Customer AR (full totalCredit)
+        //
+        //   cash            → full amount received in cash → DR Cash in Hand (full totalCredit)
+        //
+        //   cheque          → full amount received by cheque → DR Bank account (full totalCredit)
+        //
+        //   bank_transfer   → full amount received by transfer → DR Bank account (full totalCredit)
+        //
+        //   material+making → customer gives their gold as partial payment:
+        //                     DR Gold Inventory    (material value of gold received)
+        //                     DR Customer AR       (making + parts + VAT still owed in cash)
+        //
+        // The material/currency split ONLY applies to material+making cost.
+        // For all other methods the full invoice amount goes to one account.
+        // ─────────────────────────────────────────────────────────────────────
 
-        // ── DEBIT entries — identical to original ─────────────────────────────
         switch ($invoice->payment_method) {
 
             case 'credit':
-                if ($materialDebit > 0) {
-                    $entries[] = [
-                        'voucher_id' => $voucher->id,
-                        'account_id' => $invoice->customer_id,
-                        'debit'      => $materialDebit,
-                        'credit'     => 0,
-                        'narration'  => 'Material receivable from customer (credit sale) — Inv# ' . $invoice->invoice_no,
-                    ];
-                }
-                if ($currencyDebit > 0) {
-                    $entries[] = [
-                        'voucher_id' => $voucher->id,
-                        'account_id' => $invoice->customer_id,
-                        'debit'      => $currencyDebit,
-                        'credit'     => 0,
-                        'narration'  => 'MC + parts + VAT receivable from customer (credit) — Inv# ' . $invoice->invoice_no,
-                    ];
-                }
+                // Full invoice amount receivable from customer — nothing received yet
+                $entries[] = [
+                    'voucher_id' => $voucher->id,
+                    'account_id' => $invoice->customer_id,
+                    'debit'      => $totalCredit,
+                    'credit'     => 0,
+                    'narration'  => 'Full invoice receivable from customer (credit sale) — Inv# ' . $invoice->invoice_no,
+                ];
                 break;
 
             case 'cash':
-                if ($materialDebit > 0) {
-                    $entries[] = [
-                        'voucher_id' => $voucher->id,
-                        'account_id' => $invoice->customer_id,
-                        'debit'      => $materialDebit,
-                        'credit'     => 0,
-                        'narration'  => 'Material receivable from customer (cash sale) — Inv# ' . $invoice->invoice_no,
-                    ];
-                }
-                if ($currencyDebit > 0) {
-                    $entries[] = [
-                        'voucher_id' => $voucher->id,
-                        'account_id' => $acct('101001'),
-                        'debit'      => $currencyDebit,
-                        'credit'     => 0,
-                        'narration'  => 'Cash received for MC + parts + VAT — Inv# ' . $invoice->invoice_no,
-                    ];
-                }
+                // Full invoice amount received in cash — goes entirely to Cash in Hand
+                $entries[] = [
+                    'voucher_id' => $voucher->id,
+                    'account_id' => $acct('101001'),
+                    'debit'      => $totalCredit,
+                    'credit'     => 0,
+                    'narration'  => 'Cash received in full — Inv# ' . $invoice->invoice_no,
+                ];
                 break;
 
             case 'cheque':
@@ -1169,24 +1161,14 @@ class SaleInvoiceController extends Controller
                         'Bank account required for cheque payment (Inv# ' . $invoice->invoice_no . ').'
                     );
                 }
-                if ($materialDebit > 0) {
-                    $entries[] = [
-                        'voucher_id' => $voucher->id,
-                        'account_id' => $invoice->customer_id,
-                        'debit'      => $materialDebit,
-                        'credit'     => 0,
-                        'narration'  => 'Material receivable from customer (cheque) — Inv# ' . $invoice->invoice_no,
-                    ];
-                }
-                if ($currencyDebit > 0) {
-                    $entries[] = [
-                        'voucher_id' => $voucher->id,
-                        'account_id' => $invoice->bank_name,
-                        'debit'      => $currencyDebit,
-                        'credit'     => 0,
-                        'narration'  => 'Cheque #' . $invoice->cheque_no . ' received for MC + parts + VAT — Inv# ' . $invoice->invoice_no,
-                    ];
-                }
+                // Full invoice amount received by cheque — goes entirely to bank account
+                $entries[] = [
+                    'voucher_id' => $voucher->id,
+                    'account_id' => $invoice->bank_name,
+                    'debit'      => $totalCredit,
+                    'credit'     => 0,
+                    'narration'  => 'Cheque #' . $invoice->cheque_no . ' received in full — Inv# ' . $invoice->invoice_no,
+                ];
                 break;
 
             case 'bank_transfer':
@@ -1195,35 +1177,35 @@ class SaleInvoiceController extends Controller
                         'Transfer-from bank required for bank transfer (Inv# ' . $invoice->invoice_no . ').'
                     );
                 }
-                if ($materialDebit > 0) {
-                    $entries[] = [
-                        'voucher_id' => $voucher->id,
-                        'account_id' => $invoice->customer_id,
-                        'debit'      => $materialDebit,
-                        'credit'     => 0,
-                        'narration'  => 'Material receivable from customer (bank transfer) — Inv# ' . $invoice->invoice_no,
-                    ];
-                }
-                if ($currencyDebit > 0) {
-                    $entries[] = [
-                        'voucher_id' => $voucher->id,
-                        'account_id' => $invoice->transfer_from_bank,
-                        'debit'      => $currencyDebit,
-                        'credit'     => 0,
-                        'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id
-                                        . ' received for MC + parts + VAT — Inv# ' . $invoice->invoice_no,
-                    ];
-                }
+                // Full invoice amount received by transfer — goes entirely to the receiving bank
+                $entries[] = [
+                    'voucher_id' => $voucher->id,
+                    'account_id' => $invoice->transfer_from_bank,
+                    'debit'      => $totalCredit,
+                    'credit'     => 0,
+                    'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id
+                                    . ' received in full — Inv# ' . $invoice->invoice_no,
+                ];
                 break;
 
             case 'material+making cost':
+                // Customer brings their own gold as partial payment.
+                // The material (gold) value goes to Gold Inventory — we received the physical gold.
+                // The remaining currency portion (making + parts + VAT + invoice VAT) is still
+                // owed by the customer in cash.
+                //
+                // materialDebit = gold value of items (gold_material + diamond_material)
+                // currencyDebit = totalCredit - materialDebit (MC + parts + all VAT)
+                $materialDebit = round($totals['gold_material'] + $totals['diamond_material'], 2);
+                $currencyDebit = round($totalCredit - $materialDebit, 2);
+
                 if ($materialDebit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
-                        'account_id' => $acct('104001'),
+                        'account_id' => $acct('104001'),   // Gold Inventory
                         'debit'      => $materialDebit,
                         'credit'     => 0,
-                        'narration'  => 'Gold inventory received from customer as material payment'
+                        'narration'  => 'Gold received from customer as material payment'
                                         . ' (' . ($invoice->material_received_by ?? 'customer') . ')'
                                         . ' — Inv# ' . $invoice->invoice_no,
                     ];
@@ -1234,8 +1216,7 @@ class SaleInvoiceController extends Controller
                         'account_id' => $invoice->customer_id,
                         'debit'      => $currencyDebit,
                         'credit'     => 0,
-                        'narration'  => 'Currency receivable — MC + parts + VAT outstanding from customer'
-                                        . ' — Inv# ' . $invoice->invoice_no,
+                        'narration'  => 'MC + parts + VAT outstanding from customer — Inv# ' . $invoice->invoice_no,
                     ];
                 }
                 break;
@@ -1260,18 +1241,16 @@ class SaleInvoiceController extends Controller
         }
 
         Log::info('Sale accounting entries created', [
-            'invoice_no'              => $invoice->invoice_no,
-            'voucher_no'              => $voucher->voucher_no,
-            'payment_method'          => $invoice->payment_method,
-            'cr_401001_gold'          => $goldRev,
-            'cr_401002_diamond'       => $diamondRev,
-            'cr_402001_making'        => round($totals['making'], 2),
-            'cr_208001_vat_per_item'  => round($totals['vat'], 2),
-            'cr_208001_vat_invoice'   => round($invoice->invoice_vat_amount ?? 0, 2),
-            'dr_material'             => $materialDebit,
-            'dr_currency'             => $currencyDebit,
-            'total_debit'             => $sumDebits,
-            'total_credit'            => $sumCredits,
+            'invoice_no'             => $invoice->invoice_no,
+            'voucher_no'             => $voucher->voucher_no,
+            'payment_method'         => $invoice->payment_method,
+            'cr_401001_gold'         => $goldRev,
+            'cr_401002_diamond'      => $diamondRev,
+            'cr_402001_making'       => round($totals['making'], 2),
+            'cr_208001_vat_per_item' => round($totals['vat'], 2),
+            'cr_208001_vat_invoice'  => round($invoice->invoice_vat_amount ?? 0, 2),
+            'total_credit'           => $sumCredits,
+            'total_debit'            => $sumDebits,
         ]);
 
         return $voucher;
