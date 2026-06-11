@@ -299,10 +299,6 @@
 
           <div class="row mb-3 d-none" id="material_fields">
             <div class="col-md-2">
-              <label>Total Item Wt. Received</label>
-              <input type="text" id="total_wt_received" class="form-control">
-            </div>
-            <div class="col-md-2">
                 <label>Raw Material Weight Given</label>
                 <input type="number" step="any" name="material_weight" class="form-control">
               </div>
@@ -317,18 +313,6 @@
               <div class="col-md-2">
                 <label>Making Charges Payable</label>
                 <input type="number" step="any" name="making_charges" class="form-control">
-              </div>
-              <div class="col-md-2">
-                <label>Gold Used (Invoice)</label>
-                <input type="text" id="gold_used" class="form-control">
-              </div>
-              <div class="col-md-2 mt-3">
-                <label>Gold Balance</label>
-                <input type="text" id="gold_balance" class="form-control fw-bold" readonly>
-              </div>
-              <div class="col-md-2 mt-3">
-                <label>Gold Balance Value (AED)</label>
-                <input type="text" id="gold_balance_value" class="form-control text-danger fw-bold" readonly>
               </div>
               <div class="col-md-2 mt-3">
                 <label>Material Given By</label>

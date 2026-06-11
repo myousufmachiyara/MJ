@@ -16,10 +16,6 @@ class AccountsReportController extends Controller
         'asset', 'customer', 'cash', 'bank', 'expenses', 'purchase',
     ];
 
-    // =========================================================================
-    // ENTRY POINTS
-    // =========================================================================
-
     public function index(Request $request)
     {
         return $this->accounts($request);
@@ -48,10 +44,6 @@ class AccountsReportController extends Controller
         }
     }
 
-    // =========================================================================
-    // DISPATCHER
-    // =========================================================================
-
     private function buildReports(string $tab, string $from, string $to, ?int $accountId): array
     {
         $empty = collect();
@@ -78,10 +70,6 @@ class AccountsReportController extends Controller
         return $result;
     }
 
-    // =========================================================================
-    // EMPTY P&L STRUCTURE — always returned so blade never hits undefined key
-    // =========================================================================
-
     private function emptyPL(): array
     {
         return [
@@ -95,10 +83,6 @@ class AccountsReportController extends Controller
             'net_profit'     => 0.0,
         ];
     }
-
-    // =========================================================================
-    // CORE BALANCE ENGINE
-    // =========================================================================
 
     private function getAccountBalance(int $accountId, string $asOfDate): array
     {
@@ -236,7 +220,7 @@ class AccountsReportController extends Controller
                 'reference'  => 'Opening Balance',
                 'debit'      => '',
                 'credit'     => '',
-                'balance'    => $this->fmt($running),
+                'balance'    => $this->fmtBalance($running),
                 'is_opening' => true,
             ]]);
 
@@ -251,7 +235,7 @@ class AccountsReportController extends Controller
                     'reference'  => $line['reference'],
                     'debit'      => $line['dr'] > 0.001 ? $this->fmt($line['dr']) : '',
                     'credit'     => $line['cr'] > 0.001 ? $this->fmt($line['cr']) : '',
-                    'balance'    => $this->fmt($running),
+                    'balance'    => $this->fmtBalance($running),
                     'is_opening' => false,
                 ]);
             }
@@ -260,9 +244,9 @@ class AccountsReportController extends Controller
                 'date'       => $to,
                 'account'    => $account->name,
                 'reference'  => 'Closing Balance',
-                'debit'      => $isDebit  && $running >= 0 ? $this->fmt($running) : '',
-                'credit'     => !$isDebit && $running >= 0 ? $this->fmt($running) : '',
-                'balance'    => $this->fmt($running),
+                'debit'      => ($isDebit  && $running > 0) ? $this->fmt($running) : '',
+                'credit'     => (!$isDebit && $running > 0) ? $this->fmt($running) : '',
+                'balance'    => $this->fmtBalance($running),
                 'is_opening' => true,
             ]);
 
@@ -347,19 +331,10 @@ class AccountsReportController extends Controller
 
     // =========================================================================
     // 4. PROFIT & LOSS
-    //
-    // ALWAYS returns the full array structure with all keys initialised so
-    // the blade can never hit "Undefined array key".
-    //
-    // Revenue  (account_type = 'revenue')  : CR - DR
-    // COGS     (account_type = 'purchase') : DR - CR
-    // Expenses (account_type = 'expenses') : DR - CR
-    // Net Profit = Revenue - COGS - Expenses
     // =========================================================================
 
     private function profitLoss(string $from, string $to): array
     {
-        // Always start with the safe empty structure
         $pl = $this->emptyPL();
 
         try {
@@ -373,30 +348,21 @@ class AccountsReportController extends Controller
                     case 'revenue':
                         $val = $act['credit'] - $act['debit'];
                         if (abs($val) > 0.005) {
-                            $pl['revenue']->push([
-                                'name'   => $account->name,
-                                'amount' => round($val, 2),
-                            ]);
+                            $pl['revenue']->push(['name' => $account->name, 'amount' => round($val, 2)]);
                         }
                         break;
 
                     case 'purchase':
                         $val = $act['debit'] - $act['credit'];
                         if (abs($val) > 0.005) {
-                            $pl['cogs']->push([
-                                'name'   => $account->name,
-                                'amount' => round($val, 2),
-                            ]);
+                            $pl['cogs']->push(['name' => $account->name, 'amount' => round($val, 2)]);
                         }
                         break;
 
                     case 'expenses':
                         $val = $act['debit'] - $act['credit'];
                         if (abs($val) > 0.005) {
-                            $pl['expenses']->push([
-                                'name'   => $account->name,
-                                'amount' => round($val, 2),
-                            ]);
+                            $pl['expenses']->push(['name' => $account->name, 'amount' => round($val, 2)]);
                         }
                         break;
                 }
@@ -406,15 +372,11 @@ class AccountsReportController extends Controller
             $pl['total_cogs']     = round($pl['cogs']->sum('amount'),    2);
             $pl['gross_profit']   = round($pl['total_revenue'] - $pl['total_cogs'], 2);
 
-            // Merge COGS into expenses collection for the two-column blade display
-            // (keeps the right column showing all cost items together)
             $allExpenses          = $pl['cogs']->concat($pl['expenses']);
             $pl['expenses']       = $allExpenses;
             $pl['total_expenses'] = round($allExpenses->sum('amount'), 2);
-            $pl['net_profit']     = round($pl['gross_profit'] - $pl['expenses']->sum('amount') + $pl['total_cogs'], 2);
 
-            // Recalculate correctly: Revenue - COGS - OpEx = Net Profit
-            $totalOpEx        = round($pl['cogs']->sum('amount') + collect($accounts)
+            $totalOpEx = round($pl['cogs']->sum('amount') + collect($accounts)
                 ->filter(fn($a) => strtolower($a->account_type) === 'expenses')
                 ->sum(function ($a) use ($from, $to) {
                     $act = $this->getAccountActivity($a->id, $from, $to);
@@ -425,7 +387,6 @@ class AccountsReportController extends Controller
 
         } catch (\Throwable $e) {
             Log::error('AccountsReport::profitLoss — ' . $e->getMessage() . ' line ' . $e->getLine());
-            // $pl already has the safe empty structure — just return it
         }
 
         return $pl;
@@ -522,10 +483,7 @@ class AccountsReportController extends Controller
                 ->orderBy('name')->get()
                 ->map(function ($a) use ($to) {
                     $bal = $this->getAccountBalance($a->id, $to);
-                    return [
-                        'name'   => $a->name,
-                        'amount' => round($bal['debit'] - $bal['credit'], 2),
-                    ];
+                    return ['name' => $a->name, 'amount' => round($bal['debit'] - $bal['credit'], 2)];
                 })
                 ->filter(fn($r) => $r['amount'] > 0.005)
                 ->values();
@@ -546,10 +504,7 @@ class AccountsReportController extends Controller
                 ->orderBy('name')->get()
                 ->map(function ($a) use ($to) {
                     $bal = $this->getAccountBalance($a->id, $to);
-                    return [
-                        'name'   => $a->name,
-                        'amount' => round($bal['credit'] - $bal['debit'], 2),
-                    ];
+                    return ['name' => $a->name, 'amount' => round($bal['credit'] - $bal['debit'], 2)];
                 })
                 ->filter(fn($r) => $r['amount'] > 0.005)
                 ->values();
@@ -638,17 +593,20 @@ class AccountsReportController extends Controller
             });
 
         $running = $openingBal;
-        $result  = collect([[
+
+        // ── Opening balance row ───────────────────────────────────────────────
+        $result = collect([[
             'date'       => $from,
             'reference'  => 'Opening Balance',
             'dr_account' => '',
             'cr_account' => '',
             'debit'      => '',
             'credit'     => '',
-            'balance'    => $this->fmt($running),
+            'balance'    => $this->fmtBalance($running),
             'is_opening' => true,
         ]]);
 
+        // ── Transaction rows ──────────────────────────────────────────────────
         foreach ($lines->sortBy('sort') as $line) {
             $running += ($line['dr'] - $line['cr']);
             $result->push([
@@ -658,19 +616,27 @@ class AccountsReportController extends Controller
                 'cr_account' => $line['cr_account'],
                 'debit'      => $line['dr'] > 0.001 ? $this->fmt($line['dr']) : '',
                 'credit'     => $line['cr'] > 0.001 ? $this->fmt($line['cr']) : '',
-                'balance'    => $this->fmt($running),
+                'balance'    => $this->fmtBalance($running),
                 'is_opening' => false,
             ]);
         }
 
+        // ── Closing balance row ───────────────────────────────────────────────
+        // FIX: For cash/bank (debit-nature accounts):
+        //   running > 0 → money in the account  → show in Debit column
+        //   running < 0 → overdrawn             → leave Debit/Credit blank,
+        //                                          fmtBalance() shows (11,642.62) in Balance column
+        //
+        // Old code was putting abs(running) into the Credit column when negative,
+        // making it look like money came IN rather than showing the account is overdrawn.
         $result->push([
             'date'       => $to,
             'reference'  => 'Closing Balance',
             'dr_account' => '',
             'cr_account' => '',
-            'debit'      => $running >= 0 ? $this->fmt($running) : '',
-            'credit'     => $running <  0 ? $this->fmt(abs($running)) : '',
-            'balance'    => $this->fmt($running),
+            'debit'      => $running > 0 ? $this->fmt($running) : '',
+            'credit'     => '',
+            'balance'    => $this->fmtBalance($running),
             'is_opening' => true,
         ]);
 
@@ -802,9 +768,30 @@ class AccountsReportController extends Controller
         return in_array(strtolower($accountType), self::DEBIT_NATURES);
     }
 
+    /**
+     * Format a debit or credit amount column — always positive (no sign).
+     * Used only for individual transaction debit/credit amount columns.
+     */
     private function fmt(float $v): string
     {
         return number_format(abs($v), 2);
+    }
+
+    /**
+     * Format the running balance column — preserves the sign.
+     *
+     * Positive → "11,642.62"
+     * Negative → "(11,642.62)"  ← standard accounting notation for overdrawn/reversed
+     *
+     * Used everywhere a running or closing balance is displayed.
+     * The old fmt() was calling abs() which hid negative balances entirely.
+     */
+    private function fmtBalance(float $v): string
+    {
+        if ($v < 0) {
+            return '(' . number_format(abs($v), 2) . ')';
+        }
+        return number_format($v, 2);
     }
 
     private function voucherTypeLabel(string $type): string
