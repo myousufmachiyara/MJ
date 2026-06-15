@@ -13,7 +13,7 @@ class PurchaseInvoice extends Model
     protected $fillable = [
         'invoice_no', 'is_taxable', 'vendor_id', 'invoice_date', 'remarks',
         'currency', 'exchange_rate', 'net_amount', 'net_amount_aed',
-        'payment_method', 'payment_term', 'received_by',
+        'payment_method', 'payment_term', 'cash_amount_paid', 'received_by',
 
         // Gold rates
         'gold_rate_usd',          // USD / oz  (user input)
@@ -58,6 +58,7 @@ class PurchaseInvoice extends Model
 
         // Payments
         'cheque_amount'        => 'decimal:2',
+        'cash_amount_paid'     => 'decimal:2',
         'transfer_amount'      => 'decimal:2',
         'material_weight'      => 'decimal:3',
         'material_purity'      => 'decimal:3',

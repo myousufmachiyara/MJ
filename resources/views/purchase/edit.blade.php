@@ -250,6 +250,16 @@
             </div>
           </div>
 
+          <div class="row mb-3 d-none" id="cash_fields">
+              <div class="col-md-2">
+                  <label>Amount Paid (Cash)</label>
+                  <input type="number" step="any" name="cash_amount_paid"
+                        class="form-control" value="{{ $purchaseInvoice->cash_amount_paid }}"
+                        placeholder="Leave blank = full payment">
+                  <small class="text-muted">Remaining goes to vendor payable</small>
+              </div>
+          </div>
+
           <div class="row mb-3 d-none" id="cheque_fields">
             <div class="col-md-2">
               <label>Bank Name</label>
@@ -273,6 +283,7 @@
             <div class="col-md-2">
               <label>Cheque Amount</label>
               <input type="number" step="any" name="cheque_amount" class="form-control" value="{{ $purchaseInvoice->cheque_amount }}">
+              <small class="text-muted">Leave blank = full invoice amount. Remaining goes to vendor payable.</small>
             </div>
           </div>
 
@@ -339,6 +350,7 @@
             <div class="col-md-2 mt-2">
               <label>Transfer Amount</label>
               <input type="number" step="any" name="transfer_amount" class="form-control" value="{{ $purchaseInvoice->transfer_amount }}">
+              <small class="text-muted">Leave blank = full invoice amount. Remaining goes to vendor payable.</small>
             </div>
           </div>
 
@@ -564,7 +576,7 @@ $(document).ready(function () {
         const val = $('#payment_method').val();
         $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields').addClass('d-none');
         if (val === 'cheque')                    $('#cheque_fields, #received_by_box').removeClass('d-none');
-        else if (val === 'cash')                 $('#received_by_box').removeClass('d-none');
+        else if (val === 'cash')                 $('#received_by_box, #cash_fields').removeClass('d-none');
         else if (val === 'bank_transfer')        $('#bank_transfer_fields').removeClass('d-none');
         else if (val === 'material+making cost') $('#material_fields').removeClass('d-none');
     }
@@ -837,9 +849,9 @@ $(document).ready(function () {
     // ================= PAYMENT METHOD TOGGLE =================
     $('#payment_method').on('change', function() {
         const val = $(this).val();
-        $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields').addClass('d-none');
+        $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields, #cash_fields').addClass('d-none');
         if (val === 'cheque')                    $('#cheque_fields, #received_by_box').removeClass('d-none');
-        else if (val === 'cash')                 $('#received_by_box').removeClass('d-none');
+        else if (val === 'cash')                 $('#received_by_box, #cash_fields').removeClass('d-none');
         else if (val === 'bank_transfer')        $('#bank_transfer_fields').removeClass('d-none');
         else if (val === 'material+making cost') $('#material_fields').removeClass('d-none');
         calculateTotals();

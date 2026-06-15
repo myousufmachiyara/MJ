@@ -161,14 +161,8 @@ class DatabaseSeeder extends Seeder
             ['account_code' => '104001', 'shoa_id' =>  3, 'name' => 'Gold Inventory',               'account_type' => 'asset'],
             ['account_code' => '104002', 'shoa_id' =>  3, 'name' => 'Diamond Inventory',            'account_type' => 'asset'],
             ['account_code' => '104003', 'shoa_id' =>  3, 'name' => 'Parts Inventory',              'account_type' => 'asset'],
-            // Assets — receivable / customers
-            ['account_code' => '103001', 'shoa_id' =>  4, 'name' => 'Customer 01',                  'account_type' => 'customer'],
-            ['account_code' => '103002', 'shoa_id' =>  4, 'name' => 'Customer 02',                  'account_type' => 'customer'],
             // Assets — VAT input
             ['account_code' => '105001', 'shoa_id' =>  5, 'name' => 'VAT Input Tax Recoverable',    'account_type' => 'asset'],
-            // Liabilities — vendors / payable
-            ['account_code' => '205001', 'shoa_id' =>  6, 'name' => 'Vendor 01',                    'account_type' => 'vendor'],
-            ['account_code' => '205002', 'shoa_id' =>  6, 'name' => 'Vendor 02',                    'account_type' => 'vendor'],
             // Liabilities — VAT output
             ['account_code' => '208001', 'shoa_id' =>  7, 'name' => 'Output VAT Payable',           'account_type' => 'liability'],
             // Equity
@@ -206,6 +200,132 @@ class DatabaseSeeder extends Seeder
                     'created_by'   => $userId,
                     'updated_by'   => $userId,
                 ])
+            );
+        }
+
+        // ── Vendors (Accounts Payable) ──────────────────────────────────────────
+        // 4 dummy vendors with sample contact details, TRN, and credit terms
+
+        $vendorData = [
+            [
+                'account_code' => '205001',
+                'name'         => 'Al Fardan Gold Trading LLC',
+                'address'      => 'Shop 12, Gold Souq, Deira, Dubai, UAE',
+                'contact_no'   => '+971-4-2345001',
+                'trn'          => '100123456700001',
+                'credit_limit' => 50000.00,
+                'remarks'      => 'Primary gold bullion supplier',
+            ],
+            [
+                'account_code' => '205002',
+                'name'         => 'Sunrise Diamond Co.',
+                'address'      => 'Office 304, Almas Tower, JLT, Dubai, UAE',
+                'contact_no'   => '+971-4-2345002',
+                'trn'          => '100123456700002',
+                'credit_limit' => 75000.00,
+                'remarks'      => 'Loose diamonds and certified stones',
+            ],
+            [
+                'account_code' => '205003',
+                'name'         => 'Royal Karat Manufacturing',
+                'address'      => 'Warehouse 7, Al Quoz Industrial Area 3, Dubai, UAE',
+                'contact_no'   => '+971-4-2345003',
+                'trn'          => '100123456700003',
+                'credit_limit' => 30000.00,
+                'remarks'      => 'Custom jewelry manufacturing & making charges',
+            ],
+            [
+                'account_code' => '205004',
+                'name'         => 'Pearl Coast Findings & Parts',
+                'address'      => 'Shop 45, Hamdan Center, Abu Dhabi, UAE',
+                'contact_no'   => '+971-2-2345004',
+                'trn'          => '100123456700004',
+                'credit_limit' => 20000.00,
+                'remarks'      => 'Clasps, chains, and jewelry findings supplier',
+            ],
+        ];
+
+        foreach ($vendorData as $item) {
+            ChartOfAccounts::firstOrCreate(
+                ['account_code' => $item['account_code']],
+                [
+                    'shoa_id'      => 6,
+                    'name'         => $item['name'],
+                    'account_type' => 'vendor',
+                    'receivables'  => 0.00,
+                    'payables'     => 0.00,
+                    'trn'          => $item['trn'],
+                    'opening_date' => $now,
+                    'credit_limit' => $item['credit_limit'],
+                    'remarks'      => $item['remarks'],
+                    'address'      => $item['address'],
+                    'contact_no'   => $item['contact_no'],
+                    'created_by'   => $userId,
+                    'updated_by'   => $userId,
+                ]
+            );
+        }
+
+        // ── Customers (Accounts Receivable) ─────────────────────────────────────
+        // 4 dummy customers with sample contact details and TRN
+
+        $customerData = [
+            [
+                'account_code' => '103001',
+                'name'         => 'Ahmed Al Mansoori',
+                'address'      => 'Villa 23, Jumeirah 1, Dubai, UAE',
+                'contact_no'   => '+971-50-1112001',
+                'trn'          => '100987654300001',
+                'credit_limit' => 15000.00,
+                'remarks'      => 'Regular retail customer',
+            ],
+            [
+                'account_code' => '103002',
+                'name'         => 'Fatima Hussain',
+                'address'      => 'Apt 1204, Marina Tower, Dubai Marina, Dubai, UAE',
+                'contact_no'   => '+971-50-1112002',
+                'trn'          => '100987654300002',
+                'credit_limit' => 10000.00,
+                'remarks'      => 'Walk-in customer, prefers gold jewelry',
+            ],
+            [
+                'account_code' => '103003',
+                'name'         => 'Mohammed Rashid Trading',
+                'address'      => 'Office 9, Al Maktoum Road, Deira, Dubai, UAE',
+                'contact_no'   => '+971-4-3334003',
+                'trn'          => '100987654300003',
+                'credit_limit' => 40000.00,
+                'remarks'      => 'Wholesale customer, bulk orders',
+            ],
+            [
+                'account_code' => '103004',
+                'name'         => 'Layla Karimi',
+                'address'      => 'Villa 8, Al Barsha 2, Dubai, UAE',
+                'contact_no'   => '+971-50-1112004',
+                'trn'          => '100987654300004',
+                'credit_limit' => 8000.00,
+                'remarks'      => 'Prefers diamond jewelry and custom orders',
+            ],
+        ];
+
+        foreach ($customerData as $item) {
+            ChartOfAccounts::firstOrCreate(
+                ['account_code' => $item['account_code']],
+                [
+                    'shoa_id'      => 4,
+                    'name'         => $item['name'],
+                    'account_type' => 'customer',
+                    'receivables'  => 0.00,
+                    'payables'     => 0.00,
+                    'trn'          => $item['trn'],
+                    'opening_date' => $now,
+                    'credit_limit' => $item['credit_limit'],
+                    'remarks'      => $item['remarks'],
+                    'address'      => $item['address'],
+                    'contact_no'   => $item['contact_no'],
+                    'created_by'   => $userId,
+                    'updated_by'   => $userId,
+                ]
             );
         }
 

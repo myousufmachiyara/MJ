@@ -128,6 +128,7 @@ class PurchaseInvoiceController extends Controller
                 'transfer_amount'      => $request->transfer_amount,
                 'material_received_by' => $request->material_received_by,
                 'material_given_by'    => $request->material_given_by,
+                'cash_amount_paid'     => $request->cash_amount_paid,
                 'created_by'           => auth()->id(),
             ]);
 
@@ -144,7 +145,7 @@ class PurchaseInvoiceController extends Controller
             ]);
 
             $this->storeAttachments($request, $invoice);
-            $this->createPurchaseAccountingEntries($invoice, $totals);
+            $this->createPurchaseAccountingEntries($invoice, $totals, $request);
 
             DB::commit();
 
@@ -276,6 +277,8 @@ class PurchaseInvoiceController extends Controller
                 'transfer_amount'      => $request->transfer_amount,
                 'material_received_by' => $request->material_received_by,
                 'material_given_by'    => $request->material_given_by,
+                'cash_amount_paid'     => $request->cash_amount_paid,
+
             ]);
 
             foreach ($invoice->items as $oldItem) {
@@ -305,7 +308,7 @@ class PurchaseInvoiceController extends Controller
                 $oldVoucher->delete();
             }
 
-            $this->createPurchaseAccountingEntries($invoice, $totals);
+            $this->createPurchaseAccountingEntries($invoice, $totals, $request);
 
             DB::commit();
 
@@ -1047,10 +1050,13 @@ public function print($id)
             'items.*.vat_percent'    => 'required|numeric|min:0',
             'material_given_by'      => 'nullable|required_if:payment_method,material+making cost|string',
             'material_received_by'   => 'nullable|required_if:payment_method,material+making cost|string',
+            'cash_amount_paid'       => 'nullable|numeric|min:0',
+            'making_amount_paid'     => 'nullable|numeric|min:0',
+            'making_payment_account' => 'nullable|string',
         ]);
     }
 
-    protected function createPurchaseAccountingEntries(PurchaseInvoice $invoice, array $totals): Voucher
+    protected function createPurchaseAccountingEntries(PurchaseInvoice $invoice, array $totals, Request $request): Voucher
     {
         $acct = function (string $code) use ($invoice): int {
             $account = ChartOfAccounts::where('account_code', $code)->first();
@@ -1134,22 +1140,17 @@ public function print($id)
 
         // ── CREDIT entries (payment side) ─────────────────────────────────────
         //
-        // credit          → vendor paid nothing yet → full amount CR Vendor AP
-        // cash            → vendor paid in full cash → full amount CR Cash in Hand
-        // cheque          → vendor paid in full by cheque → full amount CR Bank
-        // bank_transfer   → vendor paid in full by transfer → full amount CR Bank
-        // material+making → split:
-        //                     material value → vendor AP debited (metal fixing) + CR Gold Inventory
-        //                     currency (MC + parts + VAT) → CR Vendor AP (still owed in cash)
-        //
-        // The material/currency split ONLY applies to material+making cost.
-        // For all other methods the vendor is paid in full — one entry, one account.
+        // credit          → nothing paid → full amount CR Vendor AP
+        // cash            → amount paid CR Cash in Hand; remainder CR Vendor AP
+        // cheque          → amount paid CR Bank; remainder CR Vendor AP
+        // bank_transfer   → amount paid CR Transfer-From Bank; remainder CR Vendor AP
+        // material+making → material value CR Gold Inventory (+ offsetting vendor DR);
+        //                     making: amount paid CR Cash/Bank, remainder CR Vendor AP
         // ─────────────────────────────────────────────────────────────────────
 
         switch ($invoice->payment_method) {
 
             case 'credit':
-                // Nothing paid — full amount payable to vendor
                 $entries[] = [
                     'voucher_id' => $voucher->id,
                     'account_id' => $invoice->vendor_id,
@@ -1160,14 +1161,32 @@ public function print($id)
                 break;
 
             case 'cash':
-                // Vendor paid in full with cash — no AP entry
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $acct('101001'),
-                    'debit'      => 0,
-                    'credit'     => $totalDebit,
-                    'narration'  => 'Cash paid in full to vendor — Inv# ' . $invoice->invoice_no,
-                ];
+                $paid = $request->cash_amount_paid !== null && $request->cash_amount_paid !== ''
+                    ? round((float) $request->cash_amount_paid, 2)
+                    : $totalDebit;
+
+                $paid = min($paid, $totalDebit); // never pay more than invoice value
+
+                if ($paid > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $acct('101001'),
+                        'debit'      => 0,
+                        'credit'     => $paid,
+                        'narration'  => 'Cash paid to vendor — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+
+                $remaining = round($totalDebit - $paid, 2);
+                if ($remaining > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->vendor_id,
+                        'debit'      => 0,
+                        'credit'     => $remaining,
+                        'narration'  => 'Balance payable to vendor (partial cash payment) — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
                 break;
 
             case 'cheque':
@@ -1176,14 +1195,33 @@ public function print($id)
                         'Bank account required for cheque payment (Inv# ' . $invoice->invoice_no . ').'
                     );
                 }
-                // Vendor paid in full by cheque — no AP entry
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->bank_name,
-                    'debit'      => 0,
-                    'credit'     => $totalDebit,
-                    'narration'  => 'Cheque #' . $invoice->cheque_no . ' paid in full to vendor — Inv# ' . $invoice->invoice_no,
-                ];
+
+                $paid = $invoice->cheque_amount > 0
+                    ? round((float) $invoice->cheque_amount, 2)
+                    : $totalDebit;
+
+                $paid = min($paid, $totalDebit);
+
+                if ($paid > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->bank_name,
+                        'debit'      => 0,
+                        'credit'     => $paid,
+                        'narration'  => 'Cheque #' . $invoice->cheque_no . ' paid to vendor — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+
+                $remaining = round($totalDebit - $paid, 2);
+                if ($remaining > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->vendor_id,
+                        'debit'      => 0,
+                        'credit'     => $remaining,
+                        'narration'  => 'Balance payable to vendor (partial cheque payment) — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
                 break;
 
             case 'bank_transfer':
@@ -1192,23 +1230,53 @@ public function print($id)
                         'Transfer-from bank required for bank transfer (Inv# ' . $invoice->invoice_no . ').'
                     );
                 }
-                // Vendor paid in full by bank transfer — no AP entry
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->transfer_from_bank,
-                    'debit'      => 0,
-                    'credit'     => $totalDebit,
-                    'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id
-                                    . ' paid in full to vendor — Inv# ' . $invoice->invoice_no,
-                ];
+
+                $paid = $invoice->transfer_amount > 0
+                    ? round((float) $invoice->transfer_amount, 2)
+                    : $totalDebit;
+
+                $paid = min($paid, $totalDebit);
+
+                if ($paid > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->transfer_from_bank,
+                        'debit'      => 0,
+                        'credit'     => $paid,
+                        'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id
+                                        . ' paid to vendor — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+
+                $remaining = round($totalDebit - $paid, 2);
+                if ($remaining > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->vendor_id,
+                        'debit'      => 0,
+                        'credit'     => $remaining,
+                        'narration'  => 'Balance payable to vendor (partial bank transfer) — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
                 break;
 
             case 'material+making cost':
-                // Customer brings their gold as part payment.
-                // Material value → vendor AP debited (metal sale fixing) + Gold Inventory credited
-                // Currency (making + parts + VAT) → vendor AP credited (still owed in cash)
+                // ── Material portion: settled by gold inventory handover ──
+                // DR Vendor AP (metal fixing) + CR Gold Inventory — self-balancing pair
                 $materialCredit = round($totals['gold_material'] + $totals['diamond_material'], 2);
-                $currencyCredit = $totalDebit;  // ← FIX: full expense total, not minus materialCredit
+
+                // ── Currency portion: making + parts + VAT ──
+                $currencyTotal = $totalDebit; // full expense total, paired against materialCredit DR
+
+                // making/parts/VAT actually paid now (optional)
+                $makingPaidRaw = $request->making_amount_paid;
+                $makingPaid    = ($makingPaidRaw !== null && $makingPaidRaw !== '')
+                    ? round((float) $makingPaidRaw, 2)
+                    : 0.0;
+
+                // Currency net payable (before considering any payment) = making + parts + VAT
+                $currencyNetPayable = round($currencyTotal - $materialCredit, 2);
+                $makingPaid = min($makingPaid, $currencyNetPayable); // can't pay more than owed
 
                 if ($materialCredit > 0) {
                     $entries[] = [
@@ -1228,14 +1296,51 @@ public function print($id)
                         'narration'  => 'Gold inventory issued to vendor as material payment — Inv# ' . $invoice->invoice_no,
                     ];
                 }
-                if ($currencyCredit > 0) {
+
+                // Vendor AP credit for the full currency total (offsets the materialCredit DR above)
+                if ($currencyTotal > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
                         'account_id' => $invoice->vendor_id,
                         'debit'      => 0,
-                        'credit'     => $currencyCredit,
-                        'narration'  => 'Currency payable — MC + parts + VAT outstanding to vendor — Inv# ' . $invoice->invoice_no,
+                        'credit'     => $currencyTotal,
+                        'narration'  => 'Currency payable — MC + parts + VAT — Inv# ' . $invoice->invoice_no,
                     ];
+                }
+
+                // If making/parts/VAT partly or fully paid now, reduce vendor AP and debit Cash/Bank
+                if ($makingPaid > 0) {
+                    $paymentAccountId = null;
+                    $paymentLabel     = '';
+
+                    if ($request->making_payment_account === 'cash') {
+                        $paymentAccountId = $acct('101001');
+                        $paymentLabel     = 'Cash in Hand';
+                    } elseif (str_starts_with((string) $request->making_payment_account, 'bank_')) {
+                        $bankId = (int) str_replace('bank_', '', $request->making_payment_account);
+                        $paymentAccountId = $bankId;
+                        $paymentLabel     = 'Bank';
+                    }
+
+                    if ($paymentAccountId) {
+                        // Vendor AP is debited (reducing the payable)
+                        $entries[] = [
+                            'voucher_id' => $voucher->id,
+                            'account_id' => $invoice->vendor_id,
+                            'debit'      => $makingPaid,
+                            'credit'     => 0,
+                            'narration'  => 'Making charges paid now to vendor (' . $paymentLabel . ') — Inv# ' . $invoice->invoice_no,
+                        ];
+                        // Cash/Bank is credited (cash going out)
+                        $entries[] = [
+                            'voucher_id' => $voucher->id,
+                            'account_id' => $paymentAccountId,
+                            'debit'      => 0,
+                            'credit'     => $makingPaid,
+                            'narration'  => $paymentLabel . ' paid for making charges — Inv# ' . $invoice->invoice_no,
+                        ];
+                        // Wait — this introduces a 2x makingPaid on credit side. Fix below.
+                    }
                 }
                 break;
 

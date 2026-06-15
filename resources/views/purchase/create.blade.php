@@ -273,6 +273,15 @@
             </div>
           </div>
 
+          <div class="row mb-3 d-none" id="cash_fields">
+              <div class="col-md-2">
+                  <label>Amount Paid (Cash)</label>
+                  <input type="number" step="any" name="cash_amount_paid"
+                        class="form-control" placeholder="Leave blank = full payment">
+                  <small class="text-muted">Remaining goes to vendor payable</small>
+              </div>
+          </div>
+
           <div class="row mb-3 d-none" id="cheque_fields">
             <div class="col-md-2">
               <label>Bank Name</label>
@@ -294,6 +303,7 @@
             <div class="col-md-2">
               <label>Cheque Amount</label>
               <input type="number" step="any" name="cheque_amount" class="form-control">
+              <small class="text-muted">Leave blank = full invoice amount. Remaining goes to vendor payable.</small>
             </div>
           </div>
 
@@ -311,8 +321,23 @@
                 <input type="number" step="any" name="material_value" class="form-control">
               </div>
               <div class="col-md-2">
-                <label>Making Charges Payable</label>
-                <input type="number" step="any" name="making_charges" class="form-control">
+                  <label>Making Charges (Calculated)</label>
+                  <input type="number" step="any" name="making_charges" id="making_charges_display" class="form-control" readonly>
+              </div>
+              <div class="col-md-2">
+                  <label>Making Charges Paid Now</label>
+                  <input type="number" step="any" name="making_amount_paid" id="making_amount_paid" class="form-control" value="0">
+                  <small class="text-muted">0 = fully payable to vendor</small>
+              </div>
+              <div class="col-md-2">
+                  <label>Cash/Bank Account (for payment)</label>
+                  <select name="making_payment_account" class="form-control select2-js">
+                      <option value="">None (fully payable)</option>
+                      <option value="cash">Cash in Hand</option>
+                      @foreach ($banks as $bank)
+                          <option value="bank_{{ $bank->id }}">{{ $bank->name }}</option>
+                      @endforeach
+                  </select>
               </div>
               <div class="col-md-2 mt-3">
                 <label>Material Given By</label>
@@ -357,6 +382,7 @@
               <div class="col-md-2 mt-2">
                   <label>Transfer Amount</label>
                   <input type="number" step="any" name="transfer_amount" class="form-control">
+                  <small class="text-muted">Leave blank = full invoice amount. Remaining goes to vendor payable.</small>
               </div>
           </div>
 
@@ -826,11 +852,11 @@
 
     $('#payment_method').on('change', function() {
         const val = $(this).val();
-        $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields').addClass('d-none');
-        if(val === 'cheque')                    $('#cheque_fields, #received_by_box').removeClass('d-none');
-        else if(val === 'cash')                 $('#received_by_box').removeClass('d-none');
-        else if(val === 'bank_transfer')        $('#bank_transfer_fields').removeClass('d-none');
-        else if(val === 'material+making cost') $('#material_fields').removeClass('d-none');
+        $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields, #cash_fields').addClass('d-none');
+        if (val === 'cheque')                    $('#cheque_fields, #received_by_box').removeClass('d-none');
+        else if (val === 'cash')                 $('#received_by_box, #cash_fields').removeClass('d-none');
+        else if (val === 'bank_transfer')        $('#bank_transfer_fields').removeClass('d-none');
+        else if (val === 'material+making cost') $('#material_fields').removeClass('d-none');
         calculateTotals();
     });
 
