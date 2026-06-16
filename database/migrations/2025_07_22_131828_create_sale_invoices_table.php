@@ -34,6 +34,7 @@ return new class extends Migration
             /* ================= PAYMENT ================= */
             $table->enum('payment_method', ['cash', 'credit', 'bank_transfer', 'cheque', 'material+making cost'])->nullable();
             $table->string('payment_term')->nullable();
+            $table->decimal('cash_amount_paid', 18, 2)->nullable();
 
             /* ================= CHEQUE ================= */
             $table->string('cheque_no', 50)->nullable();

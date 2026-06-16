@@ -42,7 +42,6 @@ class SaleInvoiceController extends Controller
         $products  = Product::with('measurementUnit')->get();
         $purities  = Purity::all();
 
-        // Outbound consignments available to link for settlement traceability
         $outboundConsignments = \App\Models\Consignment::where('direction', 'outbound')
             ->whereIn('status', ['active', 'partially_settled'])
             ->with('partner')
@@ -66,7 +65,6 @@ class SaleInvoiceController extends Controller
             return response()->json(['success' => false, 'message' => 'No barcode provided.'], 422);
         }
 
-        // ── 1. Look in sale_invoice_items (previously sold items — re-sell) ──
         $saleItem = SaleInvoiceItem::with('parts')
             ->where('barcode_number', $barcode)
             ->latest()
@@ -96,7 +94,6 @@ class SaleInvoiceController extends Controller
             ]);
         }
 
-        // ── 2. Look in consignment_items (inbound CSG- barcodes) ─────────────
         if (str_starts_with($barcode, 'CSG-')) {
             $consignmentItem = \App\Models\ConsignmentItem::with(['parts', 'consignment'])
                 ->where('barcode_number', $barcode)
@@ -130,7 +127,6 @@ class SaleInvoiceController extends Controller
             }
         }
 
-        // ── 3. Look in purchase_invoice_items (standard MJ/MJT barcodes) ─────
         $purchaseItem = \App\Models\PurchaseInvoiceItem::with('parts')
             ->where('barcode_number', $barcode)
             ->latest()
@@ -212,6 +208,7 @@ class SaleInvoiceController extends Controller
                 'grand_total'              => 0,
                 'payment_method'           => $request->payment_method,
                 'payment_term'             => $request->payment_term,
+                'cash_amount_paid'         => $request->cash_amount_paid,   // ← partial cash
                 'bank_name'                => $request->bank_name,
                 'cheque_no'                => $request->cheque_no,
                 'cheque_date'              => $request->cheque_date,
@@ -230,7 +227,6 @@ class SaleInvoiceController extends Controller
 
             [$totals] = $this->createItems($invoice, $request->items, $request);
 
-            // ── Net amount (unchanged logic) ──────────────────────────────────
             $calculatedNet    = $invoice->items()->sum('item_total');
             $calculatedNetAed = $request->currency === 'USD'
                 ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
@@ -241,9 +237,6 @@ class SaleInvoiceController extends Controller
                 'net_amount_aed' => $calculatedNetAed,
             ]);
 
-            // ── Invoice-level VAT (B2C: applied on full net AED amount) ───────
-            // B2B invoices: set invoice_vat_percent = 0 and use per-item vat_percent instead.
-            // This field is open — no hardcoded rate. User enters whatever % applies.
             $invoiceVatPct    = (float) ($request->invoice_vat_percent ?? 0);
             $invoiceVatAmount = round($calculatedNetAed * $invoiceVatPct / 100, 2);
             $grandTotal       = round($calculatedNetAed + $invoiceVatAmount, 2);
@@ -255,7 +248,7 @@ class SaleInvoiceController extends Controller
             ]);
 
             $this->storeAttachments($request, $invoice);
-            $this->createSaleAccountingEntries($invoice, $totals);
+            $this->createSaleAccountingEntries($invoice, $totals, $request);
             ConsignmentController::settleItems($invoice->load('items'));
 
             DB::commit();
@@ -291,7 +284,6 @@ class SaleInvoiceController extends Controller
         $goldAedOunce    = ($saleInvoice->gold_rate_aed    ?? 0) * 31.1035;
         $diamondAedOunce = ($saleInvoice->diamond_rate_aed ?? 0) * 31.1035;
 
-        // Outbound consignments for the link dropdown
         $outboundConsignments = \App\Models\Consignment::where('direction', 'outbound')
             ->whereIn('status', ['active', 'partially_settled'])
             ->with('partner')
@@ -382,6 +374,7 @@ class SaleInvoiceController extends Controller
                 'purchase_making_rate_aed' => $request->purchase_making_rate_aed,
                 'payment_method'           => $request->payment_method,
                 'payment_term'             => $request->payment_term,
+                'cash_amount_paid'         => $request->cash_amount_paid,   // ← partial cash
                 'bank_name'                => $request->bank_name,
                 'cheque_no'                => $request->cheque_no,
                 'cheque_date'              => $request->cheque_date,
@@ -404,7 +397,6 @@ class SaleInvoiceController extends Controller
 
             [$totals] = $this->createItems($invoice, $request->items, $request, preservePrinted: true);
 
-            // ── Net amount (unchanged logic) ──────────────────────────────────
             $calculatedNet    = $invoice->items()->sum('item_total');
             $calculatedNetAed = $request->currency === 'USD'
                 ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
@@ -415,7 +407,6 @@ class SaleInvoiceController extends Controller
                 'net_amount_aed' => $calculatedNetAed,
             ]);
 
-            // ── Invoice-level VAT (B2C: applied on full net AED amount) ───────
             $invoiceVatPct    = (float) ($request->invoice_vat_percent ?? 0);
             $invoiceVatAmount = round($calculatedNetAed * $invoiceVatPct / 100, 2);
             $grandTotal       = round($calculatedNetAed + $invoiceVatAmount, 2);
@@ -436,7 +427,7 @@ class SaleInvoiceController extends Controller
                 $oldVoucher->delete();
             }
 
-            $this->createSaleAccountingEntries($invoice, $totals);
+            $this->createSaleAccountingEntries($invoice, $totals, $request);
             ConsignmentController::settleItems($invoice->load('items'));
 
             DB::commit();
@@ -458,7 +449,7 @@ class SaleInvoiceController extends Controller
     }
 
     // =========================================================================
-    // PRINT — detailed B2B invoice
+    // PRINT — detailed B2B invoice (unchanged)
     // =========================================================================
 
     public function print($id)
@@ -549,7 +540,6 @@ class SaleInvoiceController extends Controller
         </table>';
         $pdf->writeHTML($customerHtml, true, false, false, false);
 
-        // Items table — identical to original
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
@@ -637,7 +627,6 @@ class SaleInvoiceController extends Controller
 
         $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
 
-        // ── Grand total for PDF — net + invoice-level VAT ─────────────────────
         $printGrandTotal = ($invoice->invoice_vat_amount ?? 0) > 0
             ? ($invoice->grand_total ?? $aedAmount)
             : $aedAmount;
@@ -652,6 +641,9 @@ class SaleInvoiceController extends Controller
 
         if ($invoice->payment_method === 'credit') {
             $summaryHtml .= '<tr><td>Payment Term</td><td>' . ($invoice->payment_term ?? '-') . '</td></tr>';
+        }
+        if ($invoice->payment_method === 'cash' && $invoice->cash_amount_paid > 0) {
+            $summaryHtml .= '<tr><td>Cash Received</td><td>' . number_format($invoice->cash_amount_paid, 2) . '</td></tr>';
         }
         if ($invoice->payment_method === 'cheque') {
             $summaryHtml .= '
@@ -706,7 +698,6 @@ class SaleInvoiceController extends Controller
             $summaryHtml .= '<tr><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
         }
 
-        // Invoice-level VAT rows — only shown when > 0 (B2C invoices)
         if (($invoice->invoice_vat_amount ?? 0) > 0) {
             $summaryHtml .= '
                         <tr><td>Invoice VAT (' . number_format($invoice->invoice_vat_percent, 2) . '%)</td>
@@ -800,7 +791,6 @@ class SaleInvoiceController extends Controller
         int $startPosition = 1,
         bool $preservePrinted = false
     ): array {
-        // ── UNCHANGED — all formulas identical to original ────────────────────
         $totals = [
             'gold_material'    => 0.0,
             'diamond_material' => 0.0,
@@ -996,26 +986,28 @@ class SaleInvoiceController extends Controller
             'items.*.vat_percent'      => 'required|numeric|min:0',
             'material_given_by'        => 'nullable|required_if:payment_method,material+making cost|string',
             'material_received_by'     => 'nullable|required_if:payment_method,material+making cost|string',
+            // ── Partial payment fields (mirrors purchase exactly) ───────────
+            'cash_amount_paid'         => 'nullable|numeric|min:0',
+            'making_amount_paid'       => 'nullable|numeric|min:0',
+            'making_payment_account'   => 'nullable|string',
         ]);
     }
 
-    /**
-     * Create accounting voucher + double-entry lines for a sale invoice.
-     *
-     * CREDIT entries:
-     *   401001  Gold Sales Revenue
-     *   401002  Diamond Sales Revenue
-     *   402001  Making Charges Income
-     *   208001  Output VAT Payable  (per-item VAT on making — B2B)
-     *   208001  Output VAT Payable  (invoice-level VAT on total — B2C, if > 0)
-     *
-     * DEBIT entries: unchanged per payment method.
-     *
-     * The balance check at the end guarantees debits = credits.
-     * The invoice_vat_amount is included in totalCredit, so currencyDebit
-     * automatically absorbs it — no separate debit entry needed.
-     */
-    protected function createSaleAccountingEntries(SaleInvoice $invoice, array $totals): Voucher
+    // =========================================================================
+    // createSaleAccountingEntries
+    //
+    // DEBIT side mirrors purchase CREDIT side exactly:
+    //   credit        → full amount DR Customer AR
+    //   cash          → cash_amount_paid (or full) DR Cash; remainder DR Customer AR
+    //   cheque        → cheque_amount (or full) DR Bank; remainder DR Customer AR
+    //   bank_transfer → transfer_amount (or full) DR Bank; remainder DR Customer AR
+    //   material+making → DR Gold Inventory (material); DR Customer AR (currency remainder)
+    //                      if making_amount_paid > 0 → also DR Cash/Bank, reduce Customer AR
+    //
+    // CREDIT side = revenue accounts (unchanged)
+    // =========================================================================
+
+    protected function createSaleAccountingEntries(SaleInvoice $invoice, array $totals, Request $request): Voucher
     {
         $acct = function (string $code) use ($invoice): int {
             $account = ChartOfAccounts::where('account_code', $code)->first();
@@ -1080,7 +1072,6 @@ class SaleInvoiceController extends Controller
             ];
         }
 
-        // Per-item VAT (B2B: on making charges only, set per row)
         if ($totals['vat'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
@@ -1091,7 +1082,6 @@ class SaleInvoiceController extends Controller
             ];
         }
 
-        // Invoice-level VAT (B2C: on full net amount, open % field)
         if (($invoice->invoice_vat_amount ?? 0) > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
@@ -1111,30 +1101,11 @@ class SaleInvoiceController extends Controller
             );
         }
 
-        // ── DEBIT entries ─────────────────────────────────────────────────────
-        //
-        // Debit logic per payment method:
-        //
-        //   credit          → full amount owed by customer → DR Customer AR (full totalCredit)
-        //
-        //   cash            → full amount received in cash → DR Cash in Hand (full totalCredit)
-        //
-        //   cheque          → full amount received by cheque → DR Bank account (full totalCredit)
-        //
-        //   bank_transfer   → full amount received by transfer → DR Bank account (full totalCredit)
-        //
-        //   material+making → customer gives their gold as partial payment:
-        //                     DR Gold Inventory    (material value of gold received)
-        //                     DR Customer AR       (making + parts + VAT still owed in cash)
-        //
-        // The material/currency split ONLY applies to material+making cost.
-        // For all other methods the full invoice amount goes to one account.
-        // ─────────────────────────────────────────────────────────────────────
-
+        // ── DEBIT entries (collection side — mirrors purchase credit logic) ───
         switch ($invoice->payment_method) {
 
             case 'credit':
-                // Full invoice amount receivable from customer — nothing received yet
+                // Full invoice amount receivable — nothing collected yet
                 $entries[] = [
                     'voucher_id' => $voucher->id,
                     'account_id' => $invoice->customer_id,
@@ -1145,14 +1116,33 @@ class SaleInvoiceController extends Controller
                 break;
 
             case 'cash':
-                // Full invoice amount received in cash — goes entirely to Cash in Hand
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $acct('101001'),
-                    'debit'      => $totalCredit,
-                    'credit'     => 0,
-                    'narration'  => 'Cash received in full — Inv# ' . $invoice->invoice_no,
-                ];
+                // cash_amount_paid = amount collected now; remainder → Customer AR
+                $collected = $request->cash_amount_paid !== null && $request->cash_amount_paid !== ''
+                    ? round((float) $request->cash_amount_paid, 2)
+                    : $totalCredit;
+
+                $collected = min($collected, $totalCredit);
+
+                if ($collected > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $acct('101001'),
+                        'debit'      => $collected,
+                        'credit'     => 0,
+                        'narration'  => 'Cash received from customer — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+
+                $remaining = round($totalCredit - $collected, 2);
+                if ($remaining > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->customer_id,
+                        'debit'      => $remaining,
+                        'credit'     => 0,
+                        'narration'  => 'Balance receivable from customer (partial cash) — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
                 break;
 
             case 'cheque':
@@ -1161,14 +1151,33 @@ class SaleInvoiceController extends Controller
                         'Bank account required for cheque payment (Inv# ' . $invoice->invoice_no . ').'
                     );
                 }
-                // Full invoice amount received by cheque — goes entirely to bank account
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->bank_name,
-                    'debit'      => $totalCredit,
-                    'credit'     => 0,
-                    'narration'  => 'Cheque #' . $invoice->cheque_no . ' received in full — Inv# ' . $invoice->invoice_no,
-                ];
+
+                $collected = $invoice->cheque_amount > 0
+                    ? round((float) $invoice->cheque_amount, 2)
+                    : $totalCredit;
+
+                $collected = min($collected, $totalCredit);
+
+                if ($collected > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->bank_name,
+                        'debit'      => $collected,
+                        'credit'     => 0,
+                        'narration'  => 'Cheque #' . $invoice->cheque_no . ' received from customer — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+
+                $remaining = round($totalCredit - $collected, 2);
+                if ($remaining > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->customer_id,
+                        'debit'      => $remaining,
+                        'credit'     => 0,
+                        'narration'  => 'Balance receivable from customer (partial cheque) — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
                 break;
 
             case 'bank_transfer':
@@ -1177,32 +1186,55 @@ class SaleInvoiceController extends Controller
                         'Transfer-from bank required for bank transfer (Inv# ' . $invoice->invoice_no . ').'
                     );
                 }
-                // Full invoice amount received by transfer — goes entirely to the receiving bank
-                $entries[] = [
-                    'voucher_id' => $voucher->id,
-                    'account_id' => $invoice->transfer_from_bank,
-                    'debit'      => $totalCredit,
-                    'credit'     => 0,
-                    'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id
-                                    . ' received in full — Inv# ' . $invoice->invoice_no,
-                ];
+
+                $collected = $invoice->transfer_amount > 0
+                    ? round((float) $invoice->transfer_amount, 2)
+                    : $totalCredit;
+
+                $collected = min($collected, $totalCredit);
+
+                if ($collected > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->transfer_from_bank,
+                        'debit'      => $collected,
+                        'credit'     => 0,
+                        'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id
+                                        . ' received from customer — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+
+                $remaining = round($totalCredit - $collected, 2);
+                if ($remaining > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->customer_id,
+                        'debit'      => $remaining,
+                        'credit'     => 0,
+                        'narration'  => 'Balance receivable from customer (partial transfer) — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
                 break;
 
             case 'material+making cost':
                 // Customer brings their own gold as partial payment.
-                // The material (gold) value goes to Gold Inventory — we received the physical gold.
-                // The remaining currency portion (making + parts + VAT + invoice VAT) is still
-                // owed by the customer in cash.
-                //
-                // materialDebit = gold value of items (gold_material + diamond_material)
-                // currencyDebit = totalCredit - materialDebit (MC + parts + all VAT)
+                // DR Gold Inventory  (material value received — asset increases)
+                // DR Customer AR     (currency portion still owed: MC + parts + VAT)
+                // If making_amount_paid > 0 → collect that now via Cash/Bank
                 $materialDebit = round($totals['gold_material'] + $totals['diamond_material'], 2);
-                $currencyDebit = round($totalCredit - $materialDebit, 2);
+                $currencyTotal = round($totalCredit - $materialDebit, 2); // MC + parts + VAT
+
+                $makingPaidRaw = $request->making_amount_paid;
+                $makingPaid    = ($makingPaidRaw !== null && $makingPaidRaw !== '')
+                    ? round((float) $makingPaidRaw, 2)
+                    : 0.0;
+
+                $makingPaid = min($makingPaid, max(0, $currencyTotal));
 
                 if ($materialDebit > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
-                        'account_id' => $acct('104001'),   // Gold Inventory
+                        'account_id' => $acct('104001'),
                         'debit'      => $materialDebit,
                         'credit'     => 0,
                         'narration'  => 'Gold received from customer as material payment'
@@ -1210,14 +1242,42 @@ class SaleInvoiceController extends Controller
                                         . ' — Inv# ' . $invoice->invoice_no,
                     ];
                 }
-                if ($currencyDebit > 0) {
+
+                // Currency still owed (after deducting any making paid now)
+                $currencyRemaining = round($currencyTotal - $makingPaid, 2);
+                if ($currencyRemaining > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
                         'account_id' => $invoice->customer_id,
-                        'debit'      => $currencyDebit,
+                        'debit'      => $currencyRemaining,
                         'credit'     => 0,
                         'narration'  => 'MC + parts + VAT outstanding from customer — Inv# ' . $invoice->invoice_no,
                     ];
+                }
+
+                // Collect making charges now if paid immediately
+                if ($makingPaid > 0) {
+                    $paymentAccountId = null;
+                    $paymentLabel     = '';
+
+                    if ($request->making_payment_account === 'cash') {
+                        $paymentAccountId = $acct('101001');
+                        $paymentLabel     = 'Cash in Hand';
+                    } elseif (str_starts_with((string) $request->making_payment_account, 'bank_')) {
+                        $bankId           = (int) str_replace('bank_', '', $request->making_payment_account);
+                        $paymentAccountId = $bankId;
+                        $paymentLabel     = 'Bank';
+                    }
+
+                    if ($paymentAccountId) {
+                        $entries[] = [
+                            'voucher_id' => $voucher->id,
+                            'account_id' => $paymentAccountId,
+                            'debit'      => $makingPaid,
+                            'credit'     => 0,
+                            'narration'  => $paymentLabel . ' received for making charges from customer — Inv# ' . $invoice->invoice_no,
+                        ];
+                    }
                 }
                 break;
 
@@ -1257,7 +1317,7 @@ class SaleInvoiceController extends Controller
     }
 
     // =========================================================================
-    // PRINT SIMPLE — Walk-in / Retail receipt
+    // PRINT SIMPLE — Walk-in / Retail receipt (unchanged)
     // =========================================================================
 
     public function printSimple($id)
@@ -1300,7 +1360,6 @@ class SaleInvoiceController extends Controller
 
         $aedAmount = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
 
-        // Grand total for receipt (includes invoice-level VAT if present)
         $receiptGrandTotal = ($invoice->invoice_vat_amount ?? 0) > 0
             ? ($invoice->grand_total ?? $aedAmount)
             : $aedAmount;
@@ -1327,7 +1386,6 @@ class SaleInvoiceController extends Controller
         </table>';
         $pdf->writeHTML($customerHtml, true, false, false, false);
 
-        // Items table — identical to original
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
@@ -1354,7 +1412,6 @@ class SaleInvoiceController extends Controller
                     <td width="10%">' . ucfirst($item->material_type) . '</td>
                     <td width="18%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
                 </tr>';
-
             $totalGrossWeight += $item->gross_weight;
         }
 
@@ -1380,6 +1437,9 @@ class SaleInvoiceController extends Controller
 
         if ($invoice->payment_method === 'credit') {
             $summaryHtml .= '<tr><td>Payment Term</td><td>' . ($invoice->payment_term ?? '-') . '</td></tr>';
+        }
+        if ($invoice->payment_method === 'cash' && $invoice->cash_amount_paid > 0) {
+            $summaryHtml .= '<tr><td>Cash Received</td><td>' . number_format($invoice->cash_amount_paid, 2) . '</td></tr>';
         }
         if ($invoice->payment_method === 'cheque') {
             $summaryHtml .= '
@@ -1412,9 +1472,7 @@ class SaleInvoiceController extends Controller
                 <td width="10%"></td>
                 <td width="45%" valign="top">
                     <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
-                        <tr style="background-color:#f5f5f5;">
-                            <td colspan="2" align="center"><b>Summary (' . $invoice->currency . ')</b></td>
-                        </tr>
+                        <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary (' . $invoice->currency . ')</b></td></tr>
                         <tr style="font-weight:bold;background-color:#eeeeee;">
                             <td width="60%">Invoice Total</td>
                             <td width="40%" align="right">' . number_format($invoice->net_amount, 2) . '</td>
@@ -1425,11 +1483,9 @@ class SaleInvoiceController extends Controller
                         <tr><td>Exchange Rate</td><td align="right">' . number_format($invoice->exchange_rate, 4) . '</td></tr>
                         <tr><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
         } else {
-            $summaryHtml .= '
-                        <tr><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
+            $summaryHtml .= '<tr><td>Total (AED)</td><td align="right">' . number_format($aedAmount, 2) . '</td></tr>';
         }
 
-        // Invoice-level VAT rows for receipt
         if (($invoice->invoice_vat_amount ?? 0) > 0) {
             $summaryHtml .= '
                         <tr><td>VAT (' . number_format($invoice->invoice_vat_percent, 2) . '%)</td>
@@ -1446,9 +1502,7 @@ class SaleInvoiceController extends Controller
         $pdf->writeHTML($summaryHtml, true, false, false, false);
 
         $remainingSpace = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
-        if ($remainingSpace < 70) {
-            $pdf->AddPage();
-        }
+        if ($remainingSpace < 70) { $pdf->AddPage(); }
 
         $pdf->Ln(2);
         $pdf->SetFont('helvetica', 'B', 9);

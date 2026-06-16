@@ -25,6 +25,7 @@ class SaleInvoice extends Model
         'grand_total',
         'payment_method',
         'payment_term',
+        'cash_amount_paid',       // ← partial cash payment support
         // Cheque
         'cheque_no',
         'cheque_date',
@@ -64,11 +65,10 @@ class SaleInvoice extends Model
         'transfer_date' => 'date',
         'is_taxable'    => 'boolean',
 
-        // Use float (not decimal:N) so arithmetic works correctly.
-        // decimal:N returns a string in Laravel, which breaks sum() and comparisons.
         'net_amount'               => 'float',
         'net_amount_aed'           => 'float',
         'exchange_rate'            => 'float',
+        'cash_amount_paid'         => 'float',  // ← added
         'cheque_amount'            => 'float',
         'transfer_amount'          => 'float',
         'material_weight'          => 'float',
@@ -82,9 +82,9 @@ class SaleInvoice extends Model
         'diamond_rate_aed'         => 'float',
         'purchase_gold_rate_aed'   => 'float',
         'purchase_making_rate_aed' => 'float',
-        'invoice_vat_percent' => 'float',
-        'invoice_vat_amount'  => 'float',
-        'grand_total'         => 'float',
+        'invoice_vat_percent'      => 'float',
+        'invoice_vat_amount'       => 'float',
+        'grand_total'              => 'float',
     ];
 
     // ── Relationships ──────────────────────────────────────────────────────
@@ -114,7 +114,6 @@ class SaleInvoice extends Model
         return $this->hasMany(SaleInvoiceAttachment::class);
     }
 
-    // morphMany is the correct way — matches how PurchaseInvoice uses vouchers()
     public function vouchers()
     {
         return $this->morphMany(Voucher::class, 'reference');
