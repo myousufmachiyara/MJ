@@ -469,53 +469,91 @@ class ConsignmentController extends Controller
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
         $pdf->SetTitle('Barcodes — ' . $consignment->consignment_no);
-        $pdf->SetMargins(5, 5, 5);
-        $pdf->setCellPadding(1);
+        $pdf->SetAutoPageBreak(false); // We handle page breaks manually
         $pdf->AddPage();
 
-        $cols  = 4;
-        $cellW = 47;
-        $cellH = 30;
-        $col   = 0;
+        // ── Layout constants (all in mm) ─────────────────────────────────────────
+        $pageW      = $pdf->getPageWidth();
+        $pageH      = $pdf->getPageHeight();
+        $marginL    = 10;   // left margin
+        $marginR    = 10;   // right margin
+        $marginT    = 10;   // top margin
+        $marginB    = 10;   // bottom margin
+        $cols       = 4;    // barcodes per row
+        $gapX       = 4;    // horizontal gap between barcodes
+        $gapY       = 5;    // vertical gap between rows
+        $cellH      = 32;   // height of each barcode cell
+
+        // Calculate cell width to fill page evenly with gaps
+        $usableW    = $pageW - $marginL - $marginR;
+        $cellW      = ($usableW - ($gapX * ($cols - 1))) / $cols;
+
+        $col        = 0;
+        $row        = 0;
+
+        // Starting Y for first row
+        $startY     = $marginT;
 
         foreach ($items as $item) {
-            if ($col === $cols) {
-                $pdf->Ln($cellH);
-                $col = 0;
+
+            // ── Check if a new row would overflow the page ────────────────────────
+            if ($col === 0 && $row > 0) {
+                $nextRowBottom = $startY + ($row * ($cellH + $gapY)) + $cellH;
+                if ($nextRowBottom > ($pageH - $marginB)) {
+                    $pdf->AddPage();
+                    $row    = 0;
+                    $col    = 0;
+                    $startY = $marginT;
+                }
             }
 
-            $x = $pdf->GetX();
-            $y = $pdf->GetY();
+            // ── Calculate X and Y for this cell ──────────────────────────────────
+            $x = $marginL + ($col * ($cellW + $gapX));
+            $y = $startY  + ($row * ($cellH + $gapY));
+
+            // ── Draw cell border ──────────────────────────────────────────────────
+            $pdf->SetDrawColor(180, 180, 180); // light grey border
             $pdf->Rect($x, $y, $cellW, $cellH);
 
+            // ── Barcode number (bold, top) ────────────────────────────────────────
             $pdf->SetXY($x + 1, $y + 1);
-            $pdf->SetFont('helvetica', 'B', 8);
-            $pdf->Cell($cellW - 2, 4, $item->barcode_number, 0, 1, 'C');
+            $pdf->SetFont('helvetica', 'B', 7);
+            $pdf->Cell($cellW - 2, 4, $item->barcode_number, 0, 0, 'C');
 
-            $pdf->SetXY($x + 1, $y + 6);
-            $pdf->SetFont('helvetica', '', 6);
-            $pdf->Cell($cellW - 2, 3, mb_substr($item->item_name ?: 'N/A', 0, 28), 0, 1, 'C');
+            // ── Item name ─────────────────────────────────────────────────────────
+            $pdf->SetXY($x + 1, $y + 5.5);
+            $pdf->SetFont('helvetica', '', 5.5);
+            $pdf->Cell($cellW - 2, 3, mb_substr($item->item_name ?: 'N/A', 0, 32), 0, 0, 'C');
 
-            $pdf->SetXY($x + 1, $y + 10);
+            // ── Gross weight + purity ─────────────────────────────────────────────
+            $pdf->SetXY($x + 1, $y + 9);
+            $pdf->SetFont('helvetica', '', 5.5);
             $pdf->Cell($cellW - 2, 3,
                 'GW: ' . number_format($item->gross_weight, 3) . 'g  |  Purity: ' . number_format($item->purity, 3),
-                0, 1, 'C');
+                0, 0, 'C');
 
-            $pdf->SetXY($x + 1, $y + 14);
-            $pdf->Cell($cellW - 2, 3, 'AED ' . number_format($item->agreed_value, 2), 0, 1, 'C');
+            // ── Agreed value ──────────────────────────────────────────────────────
+            $pdf->SetXY($x + 1, $y + 12.5);
+            $pdf->SetFont('helvetica', 'B', 6);
+            $pdf->Cell($cellW - 2, 3, 'AED ' . number_format($item->agreed_value, 2), 0, 0, 'C');
 
+            // ── 1D Barcode ────────────────────────────────────────────────────────
             $pdf->write1DBarcode(
                 $item->barcode_number, 'C128',
-                $x + 2, $y + 18,
-                $cellW - 4, 8,
-                0.4,
+                $x + 2, $y + 17,
+                $cellW - 4, 12,
+                0.35,
                 ['fgcolor' => [0, 0, 0], 'bgcolor' => false, 'text' => false, 'padding' => 0]
             );
 
             $item->update(['is_printed' => true]);
 
-            $pdf->SetXY($x + $cellW, $y);
+            // ── Advance column/row counters ───────────────────────────────────────
             $col++;
+            if ($col >= $cols) {
+                $col = 0;
+                $row++;
+            }
         }
 
         return $pdf->Output($consignment->consignment_no . '_barcodes.pdf', 'I');
@@ -585,81 +623,123 @@ class ConsignmentController extends Controller
         </table>', true, false, false, false);
         $pdf->Ln(3);
 
-        $html = '
-        <table border="1" cellpadding="2" width="100%" style="">
+        // =========================================================================
+        // TABLE HEADER — written once, then repeated after each page break
+        // =========================================================================
+
+        $tableHeader = '
+        <table border="1" cellpadding="2" width="100%">
             <thead>
                 <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
-                    <th width="3%"  rowspan="2">#</th>
+                    <th width="5%"  rowspan="2">#</th>
                     <th width="11%" rowspan="2">Item Name</th>
-                    <th width="14%" rowspan="2">Description</th>
+                    <th width="15%" rowspan="2">Description</th>
                     <th width="6%"  rowspan="2">Purity</th>
                     <th width="6%"  rowspan="2">Gross Wt</th>
                     <th width="6%"  rowspan="2">Purity Wt</th>
                     <th width="6%"  rowspan="2">995</th>
                     <th width="13%" colspan="2" style="text-align:center;">Making</th>
-                    <th width="8%"  rowspan="2">Material</th>
-                    <th width="9%"  rowspan="2">Material Val</th>
-                    <th width="8%"  rowspan="2">Agreed Val</th>
-                    <th width="8%"  rowspan="2">Status</th>
+                    <th width="9%"  rowspan="2">Material</th>
+                    <th width="10%" rowspan="2">Material Val</th>
+                    <th width="13%" rowspan="2">Agreed Val</th>
                 </tr>
                 <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
                     <th width="6%">Rate</th>
                     <th width="7%">Value</th>
                 </tr>
             </thead>
-            <tbody>';
+            <tbody></tbody>
+        </table>';
+
+        // Write the header table — TCPDF renders it and advances Y
+        $pdf->writeHTML($tableHeader, true, false, false, false);
+
+        // =========================================================================
+        // ROW HEIGHT CONSTANTS (mm, approximate for font-size 9 + cellpadding 2)
+        // Tune these if rows appear too tight or too loose on the actual PDF.
+        // =========================================================================
+        $ROW_ITEM_H    = 6;   // height of one item data row
+        $ROW_LABEL_H   = 5;   // height of the "Parts:" label row
+        $ROW_PART_H    = 5;   // height of one part detail row
+        $ROW_HEADER_H  = 14;  // height of the two-row thead (written after page break)
+        $SAFETY_MARGIN = 4;   // extra buffer so nothing clips at the very bottom
 
         $totGross = $totMaking = $totMaterial = $totAgreed = 0;
 
         foreach ($consignment->items as $index => $item) {
-            $hasParts = $item->parts && $item->parts->count() > 0;
+
+            $hasParts   = $item->parts && $item->parts->count() > 0;
+            $partsCount = $hasParts ? $item->parts->count() : 0;
+
+            // ── Estimate how many mm this item (+ its parts) will need ───────────
+            $neededHeight = $ROW_ITEM_H
+                + ($hasParts ? $ROW_LABEL_H + ($partsCount * $ROW_PART_H) : 0)
+                + $SAFETY_MARGIN;
+
+            // ── Available space remaining on the current page ────────────────────
+            $availableSpace = $pdf->getPageHeight()
+                - $pdf->GetY()
+                - $pdf->getBreakMargin();
+
+            // ── If not enough room, start a new page and re-print the header ─────
+            if ($neededHeight > $availableSpace) {
+                $pdf->AddPage();
+                $pdf->writeHTML($tableHeader, true, false, false, false);
+            }
+
+            // ── Build this item's HTML (one table containing item row + parts) ───
             $bg = match($item->item_status) {
                 'sold'     => '#d4edda',
                 'returned' => '#fff3cd',
                 default    => '#ffffff',
             };
 
-            $html .= '
-            <tr style="text-align:center;background-color:' . $bg . ';">
-                <td width="3%"  style="text-align:center;">'                             . ($index + 1) . '</td>
-                <td width="11%" style="text-align:left;">'   . htmlspecialchars($item->item_name        ?? '-') . '</td>
-                <td width="14%" style="text-align:left;">'   . htmlspecialchars($item->item_description ?? '-') . '</td>
-                <td width="6%"  style="text-align:center;">' . number_format($item->purity,        3) . '</td>
-                <td width="6%"  style="text-align:center;">' . number_format($item->gross_weight,  3) . '</td>
-                <td width="6%"  style="text-align:center;">' . number_format($item->purity_weight, 3) . '</td>
-                <td width="6%"  style="text-align:center;">' . number_format($item->col_995,       3) . '</td>
-                <td width="6%"  style="text-align:right;">'  . number_format($item->making_rate,   2) . '</td>
-                <td width="7%"  style="text-align:right;">'  . number_format($item->making_value,  2) . '</td>
-                <td width="8%"  style="text-align:center;">' . ucfirst($item->material_type)           . '</td>
-                <td width="9%"  style="text-align:right;">'  . number_format($item->material_value, 2) . '</td>
-                <td width="8%"  style="text-align:right;font-weight:bold;">' . number_format($item->agreed_value, 2) . '</td>
-                <td width="8%"  style="text-align:center;">' . ucfirst($item->item_status)             . '</td>
-            </tr>';
+            $rowHtml = '
+            <table border="1" cellpadding="2" width="100%">
+                <tbody>
+                    <tr style="text-align:center;background-color:' . $bg . ';">
+                        <td width="5%"  style="text-align:center;">' . ($index + 1) . '</td>
+                        <td width="11%" style="text-align:left;">'   . htmlspecialchars($item->item_name        ?? '-') . '</td>
+                        <td width="15%" style="text-align:left;">'   . htmlspecialchars($item->item_description ?? '-') . '</td>
+                        <td width="6%"  style="text-align:center;">' . number_format($item->purity,        3) . '</td>
+                        <td width="6%"  style="text-align:center;">' . number_format($item->gross_weight,  3) . '</td>
+                        <td width="6%"  style="text-align:center;">' . number_format($item->purity_weight, 3) . '</td>
+                        <td width="6%"  style="text-align:center;">' . number_format($item->col_995,       3) . '</td>
+                        <td width="6%"  style="text-align:right;">'  . number_format($item->making_rate,   2) . '</td>
+                        <td width="7%"  style="text-align:right;">'  . number_format($item->making_value,  2) . '</td>
+                        <td width="9%"  style="text-align:center;">' . ucfirst($item->material_type)           . '</td>
+                        <td width="10%" style="text-align:right;">'  . number_format($item->material_value, 2) . '</td>
+                        <td width="13%" style="text-align:right;font-weight:bold;">' . number_format($item->agreed_value, 2) . '</td>
+                    </tr>';
 
             if ($hasParts) {
-                $html .= '
-                <tr style="background-color:#f5f5f5">
-                    <td></td>
-                    <td colspan="12" style="text-align:left;font-style:italic;padding-left:4px;">
-                        <b>Parts:</b>
-                    </td>
-                </tr>';
+                $rowHtml .= '
+                    <tr style="background-color:#f5f5f5">
+                        <td colspan="12" style="text-align:left;font-style:italic;padding-left:4px;">
+                            <b>Parts:</b>
+                        </td>
+                    </tr>';
 
                 foreach ($item->parts as $part) {
-                    $html .= '
+                    $rowHtml .= '
                     <tr style="background-color:#fafafa;text-align:center;">
-                        <td></td>
-                        <td colspan="1" style="text-align:left;">'  . htmlspecialchars($part->item_name        ?? 'Part') . '</td>
+                        <td colspan="2" style="text-align:left;">'  . htmlspecialchars($part->item_name        ?? 'Part') . '</td>
                         <td colspan="2" style="text-align:left;">'  . htmlspecialchars($part->part_description ?? '')     . '</td>
-                        <td colspan="2" style="text-align:center;">'
+                        <td colspan="3" style="text-align:center;">'
                             . number_format($part->qty, 3) . ' Ct @ ' . number_format($part->rate, 2)
                         . '</td>
                         <td colspan="2" style="text-align:center;">St.' . number_format($part->stone_qty  ?? 0, 2) . '</td>
                         <td colspan="2" style="text-align:center;">SR:' . number_format($part->stone_rate ?? 0, 2) . '</td>
-                        <td colspan="2" style="text-align:right;font-weight:bold;">' . number_format($part->total, 2) . '</td>
+                        <td colspan="1" style="text-align:right;font-weight:bold;">' . number_format($part->total, 2) . '</td>
                     </tr>';
                 }
             }
+
+            $rowHtml .= '
+                </tbody>
+            </table>';
+
+            $pdf->writeHTML($rowHtml, true, false, false, false);
 
             $totGross    += $item->gross_weight;
             $totMaking   += $item->making_value;
@@ -667,23 +747,34 @@ class ConsignmentController extends Controller
             $totAgreed   += $item->agreed_value;
         }
 
-        $html .= '
-            <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
-                <td colspan="4" style="text-align:right;">TOTAL</td>
-                <td style="text-align:center;">' . number_format($totGross,    3) . '</td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td style="text-align:right;">'  . number_format($totMaking,   2) . '</td>
-                <td></td>
-                <td style="text-align:right;">'  . number_format($totMaterial, 2) . '</td>
-                <td style="text-align:right;">'  . number_format($totAgreed,   2) . '</td>
-                <td></td>
-            </tr>
+        // =========================================================================
+        // TOTALS SUMMARY TABLE
+        // =========================================================================
+        $totPartsVal = $consignment->items->sum(fn($item) => $item->parts->sum('total'));
+
+        $summaryHtml = '
+        <table border="1" cellpadding="4" width="100%" style="font-size:9px;margin-top:4px;">
+            <thead>
+                <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
+                    <th width="20%">Total Gross Wt (g)</th>
+                    <th width="20%">Total Making Val (AED)</th>
+                    <th width="20%">Total Material Val (AED)</th>
+                    <th width="20%">Total Parts Val (AED)</th>
+                    <th width="20%">Total Agreed Val (AED)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="text-align:center;font-weight:bold;">
+                    <td>' . number_format($totGross,    3) . '</td>
+                    <td>' . number_format($totMaking,   2) . '</td>
+                    <td>' . number_format($totMaterial, 2) . '</td>
+                    <td>' . number_format($totPartsVal, 2) . '</td>
+                    <td style="background-color:#e8f5e9;">' . number_format($totAgreed, 2) . '</td>
+                </tr>
             </tbody>
         </table>';
 
-        $pdf->writeHTML($html, true, false, false, false);
+        $pdf->writeHTML($summaryHtml, true, false, false, false);
 
         if ($consignment->remarks) {
             $pdf->Ln(3);
