@@ -97,7 +97,7 @@
               <small class="text-danger fw-bold">Used for calculations</small>
             </div>
 
-            {{-- Diamond Rates — Ct. only, no gram/ounce conversion --}}
+            {{-- Diamond Rates --}}
             <div class="col-12 col-md-2 mt-2">
               <label>Diamond Rate (USD) / Ct.</label>
               <input type="number" step="any" id="diamond_rate_usd" name="diamond_rate_usd"
@@ -243,6 +243,7 @@
             </div>
           </div>
 
+          {{-- RECEIVED BY --}}
           <div class="row mb-3 d-none" id="received_by_box">
             <div class="col-md-2">
               <label>Received By</label>
@@ -250,16 +251,18 @@
             </div>
           </div>
 
+          {{-- CASH FIELDS --}}
           <div class="row mb-3 d-none" id="cash_fields">
-              <div class="col-md-2">
-                  <label>Amount Paid (Cash)</label>
-                  <input type="number" step="any" name="cash_amount_paid"
-                        class="form-control" value="{{ $purchaseInvoice->cash_amount_paid }}"
-                        placeholder="Leave blank = full payment">
-                  <small class="text-muted">Remaining goes to vendor payable</small>
-              </div>
+            <div class="col-md-2">
+              <label>Amount Paid (Cash)</label>
+              <input type="number" step="any" name="cash_amount_paid"
+                     class="form-control" value="{{ $purchaseInvoice->cash_amount_paid }}"
+                     placeholder="Leave blank = full payment">
+              <small class="text-muted">Remaining goes to vendor payable</small>
+            </div>
           </div>
 
+          {{-- CHEQUE FIELDS --}}
           <div class="row mb-3 d-none" id="cheque_fields">
             <div class="col-md-2">
               <label>Bank Name</label>
@@ -287,6 +290,7 @@
             </div>
           </div>
 
+          {{-- MATERIAL + MAKING COST FIELDS --}}
           <div class="row mb-3 d-none" id="material_fields">
             <div class="col-md-2">
               <label>Raw Material Weight Given</label>
@@ -301,19 +305,39 @@
               <input type="number" step="any" name="material_value" class="form-control" value="{{ $purchaseInvoice->material_value }}">
             </div>
             <div class="col-md-2">
-              <label>Making Charges Payable</label>
-              <input type="number" step="any" name="making_charges" class="form-control" value="{{ $purchaseInvoice->making_charges }}">
+              <label>Making Charges (Calculated)</label>
+              <input type="number" step="any" name="making_charges" id="making_charges_display"
+                     class="form-control" value="{{ $purchaseInvoice->making_charges }}" readonly>
             </div>
             <div class="col-md-2">
+              <label>Making Charges Paid Now</label>
+              <input type="number" step="any" name="making_amount_paid" id="making_amount_paid"
+                     class="form-control" value="0">
+              <small class="text-muted">0 = fully payable to vendor</small>
+            </div>
+            <div class="col-md-2">
+              <label>Cash/Bank Account (for payment)</label>
+              <select name="making_payment_account" class="form-control select2-js">
+                <option value="">None (fully payable)</option>
+                <option value="cash">Cash in Hand</option>
+                @foreach ($banks as $bank)
+                  <option value="bank_{{ $bank->id }}">{{ $bank->name }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-2 mt-3">
               <label>Material Given By</label>
-              <input type="text" name="material_given_by" class="form-control" value="{{ $purchaseInvoice->material_given_by }}">
+              <input type="text" name="material_given_by" class="form-control text-danger fw-bold"
+                     value="{{ $purchaseInvoice->material_given_by }}">
             </div>
-            <div class="col-md-2">
+            <div class="col-md-2 mt-3">
               <label>Material Received By</label>
-              <input type="text" name="material_received_by" class="form-control" value="{{ $purchaseInvoice->material_received_by }}">
+              <input type="text" name="material_received_by" class="form-control text-danger fw-bold"
+                     value="{{ $purchaseInvoice->material_received_by }}">
             </div>
           </div>
 
+          {{-- BANK TRANSFER FIELDS --}}
           <div class="row mb-3 d-none" id="bank_transfer_fields">
             <div class="col-md-2">
               <label>Transfer From Bank</label>
@@ -328,7 +352,8 @@
             </div>
             <div class="col-md-2">
               <label>Vendor Bank Name</label>
-              <input type="text" name="transfer_to_bank" class="form-control" value="{{ $purchaseInvoice->transfer_to_bank }}" placeholder="e.g. Emirates NBD">
+              <input type="text" name="transfer_to_bank" class="form-control"
+                     value="{{ $purchaseInvoice->transfer_to_bank }}" placeholder="e.g. Emirates NBD">
             </div>
             <div class="col-md-2">
               <label>Account Title</label>
@@ -565,7 +590,6 @@ $(document).ready(function () {
             });
         }
 
-        // Always recalc after load to keep gross_weight and all derived values in sync
         recalcItemGrossWeight(itemRow);
     });
 
@@ -574,13 +598,24 @@ $(document).ready(function () {
     // ===== PAYMENT METHOD — show correct section on load =====
     function initPaymentFields() {
         const val = $('#payment_method').val();
-        $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields').addClass('d-none');
+        $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields, #cash_fields').addClass('d-none');
         if (val === 'cheque')                    $('#cheque_fields, #received_by_box').removeClass('d-none');
         else if (val === 'cash')                 $('#received_by_box, #cash_fields').removeClass('d-none');
         else if (val === 'bank_transfer')        $('#bank_transfer_fields').removeClass('d-none');
         else if (val === 'material+making cost') $('#material_fields').removeClass('d-none');
     }
     initPaymentFields();
+
+    // ===== PAYMENT METHOD ON CHANGE =====
+    $('#payment_method').on('change', function() {
+        const val = $(this).val();
+        $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields, #cash_fields').addClass('d-none');
+        if (val === 'cheque')                    $('#cheque_fields, #received_by_box').removeClass('d-none');
+        else if (val === 'cash')                 $('#received_by_box, #cash_fields').removeClass('d-none');
+        else if (val === 'bank_transfer')        $('#bank_transfer_fields').removeClass('d-none');
+        else if (val === 'material+making cost') $('#material_fields').removeClass('d-none');
+        calculateTotals();
+    });
 
     // ===== ADD NEW ROW =====
     window.addNewRow = function() {
@@ -677,22 +712,16 @@ $(document).ready(function () {
 
     // ================= CALCULATIONS =================
 
-    // User types Net Wt — recalc gross + row
     $(document).on('input', '.net-weight', function() {
         recalcItemGrossWeight($(this).closest('tr.item-row'));
     });
 
-    // Purity/rate/type changes — recalc row
     $(document).on('input change', '.purity, .making-rate, .vat-percent, .material-type, #gold_rate_aed, #diamond_rate_aed', function() {
         const row = $(this).closest('tr.item-row');
         if (row.length) recalcItemGrossWeight(row);
         calculateTotals();
     });
 
-    /**
-     * Gross Wt = Net Wt + (diamondCTS / 5) + (stoneCTS / 5)
-     * gross_weight column is readonly — computed here, never typed by user.
-     */
     function recalcItemGrossWeight(itemRow) {
         if (!itemRow || !itemRow.length) return;
 
@@ -712,16 +741,6 @@ $(document).ready(function () {
         calculateTotals();
     }
 
-    /**
-     * Row calculations:
-     *   purity_weight  = net_weight × purity
-     *   col_995        = purity_weight / 0.995
-     *   making_value   = net_weight × making_rate
-     *   material_value = rate × purity_weight
-     *   taxable        = making_value + parts_total
-     *   vat_amount     = taxable × vat% / 100
-     *   item_total     = material_value + taxable + vat_amount
-     */
     function calculateRow(row) {
         const netWt        = parseFloat(row.find('.net-weight').val())    || 0;
         const purity       = parseFloat(row.find('.purity').val())        || 0;
@@ -744,7 +763,6 @@ $(document).ready(function () {
             partsTotal += parseFloat($(this).find('.part-total').val()) || 0;
         });
 
-        // taxable = making only (MC only — VAT on making, not parts)
         const taxableAmount = makingValue;
         const vatAmount     = taxableAmount * vatPercent / 100;
         const itemTotal     = materialValue + makingValue + partsTotal + vatAmount;
@@ -753,7 +771,7 @@ $(document).ready(function () {
         row.find('.col-995').val(col995.toFixed(4));
         row.find('.making-value').val(makingValue.toFixed(4));
         row.find('.material-value').val(materialValue.toFixed(4));
-        row.find('.taxable-amount').val(taxableAmount.toFixed(4));  // making only
+        row.find('.taxable-amount').val(taxableAmount.toFixed(4));
         row.find('.vat-amount').val(vatAmount.toFixed(4));
         row.find('.item-total').val(itemTotal.toFixed(4));
     }
@@ -761,7 +779,7 @@ $(document).ready(function () {
     function calculateTotals() {
         let sumNetWt        = 0;
         let sum995          = 0;
-        let sumMakingValue  = 0;  // making only (no parts)
+        let sumMakingValue  = 0;
         let sumMaterial     = 0;
         let sumVAT          = 0;
         let sumGoldGross    = 0;
@@ -769,7 +787,7 @@ $(document).ready(function () {
         let totalStoneQty   = 0;
         let totalDiamondVal = 0;
         let totalStoneVal   = 0;
-        let sumItemTotal    = 0;  // Σ item_total = net amount
+        let sumItemTotal    = 0;
 
         $('#PurchaseTable tr.item-row').each(function() {
             const itemRow      = $(this);
@@ -778,7 +796,7 @@ $(document).ready(function () {
 
             sumNetWt       += parseFloat(itemRow.find('.purity-weight').val())  || 0;
             sum995         += parseFloat(itemRow.find('.col-995').val())         || 0;
-            sumMakingValue += parseFloat(itemRow.find('.making-value').val())   || 0;  // making only
+            sumMakingValue += parseFloat(itemRow.find('.making-value').val())   || 0;
             sumMaterial    += parseFloat(itemRow.find('.material-value').val())  || 0;
             sumVAT         += parseFloat(itemRow.find('.vat-amount').val())      || 0;
             sumItemTotal   += parseFloat(itemRow.find('.item-total').val())      || 0;
@@ -798,14 +816,14 @@ $(document).ready(function () {
             });
         });
 
-        const netTotal = sumItemTotal;  // material + making + parts + vat
+        const netTotal = sumItemTotal;
 
         $('#sum_gold_gross_weight').val(sumGoldGross.toFixed(4));
         $('#sum_diamond_cts').val(totalDiamondCTS.toFixed(4));
         $('#sum_stone_qty').val(totalStoneQty.toFixed(4));
         $('#sum_purity_weight').val(sumNetWt.toFixed(4));
         $('#sum_995').val(sum995.toFixed(4));
-        $('#sum_making_value').val(sumMakingValue.toFixed(4));  // making only
+        $('#sum_making_value').val(sumMakingValue.toFixed(4));
         $('#sum_material_value').val(sumMaterial.toFixed(4));
         $('#sum_diamond_value').val(totalDiamondVal.toFixed(4));
         $('#sum_stone_value').val(totalStoneVal.toFixed(4));
@@ -821,7 +839,7 @@ $(document).ready(function () {
             $('input[name="material_weight"]').val(sum995.toFixed(4));
             $('input[name="material_purity"]').val(sumNetWt.toFixed(4));
             $('input[name="material_value"]').val(sumMaterial.toFixed(4));
-            $('input[name="making_charges"]').val(sumMakingValue.toFixed(4));  // making only
+            $('#making_charges_display').val(sumMakingValue.toFixed(4));
         }
     }
 
@@ -836,24 +854,12 @@ $(document).ready(function () {
         }
         $('#gold_rate_aed').val(((parseFloat($('#gold_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
 
-        // Diamond: AED/Ct — USD converts via exchange rate only, no gram division
         if (id === 'diamond_rate_usd' || id === 'exchange_rate') {
             const diaUsd = parseFloat($('#diamond_rate_usd').val()) || 0;
             $('#diamond_rate_aed').val((diaUsd * exRate).toFixed(4));
         }
 
         $('#PurchaseTable tr.item-row').each(function() { calculateRow($(this)); });
-        calculateTotals();
-    });
-
-    // ================= PAYMENT METHOD TOGGLE =================
-    $('#payment_method').on('change', function() {
-        const val = $(this).val();
-        $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields, #cash_fields').addClass('d-none');
-        if (val === 'cheque')                    $('#cheque_fields, #received_by_box').removeClass('d-none');
-        else if (val === 'cash')                 $('#received_by_box, #cash_fields').removeClass('d-none');
-        else if (val === 'bank_transfer')        $('#bank_transfer_fields').removeClass('d-none');
-        else if (val === 'material+making cost') $('#material_fields').removeClass('d-none');
         calculateTotals();
     });
 
@@ -903,7 +909,7 @@ $(document).ready(function () {
                     currentItemRow.find('.vat-percent').val(row['VAT %'] || 0);
                     recalcItemGrossWeight(currentItemRow);
                 }
-                if (row['Part Name'] && row['Part Name'].trim() !== "" && currentItemRow) {
+                if (row['Part Name'] && row['Part Name'].trim() !== '' && currentItemRow) {
                     const partsRow = currentItemRow.next('.parts-row');
                     partsRow.show();
                     partsRow.find('.add-part').click();
@@ -915,9 +921,8 @@ $(document).ready(function () {
                     currentPartRow.find('.part-rate').val(row['Part Rate'] || 0);
                     currentPartRow.find('.part-stone-qty').val(row['Stone Qty'] || 0);
                     currentPartRow.find('.part-stone-rate').val(row['Stone Rate'] || 0);
-                    currentPartRow.find('.part-cert-charges').val(row['Cert. Charges'] || 0);  // ← ADD THIS
-
-                    currentPartRow.find('.part-qty').trigger('input');  // fires the calculation listener which reads all fields including cert charges
+                    currentPartRow.find('.part-cert-charges').val(row['Cert. Charges'] || 0);
+                    currentPartRow.find('.part-qty').trigger('input');
                 }
             });
 
