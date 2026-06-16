@@ -248,7 +248,7 @@ $(document).ready(function () {
     $('.select2-js').select2({ width: '100%' });
 
     // =========================================================================
-    // PURITY SNAP — same logic as sale invoice
+    // PURITY SNAP
     // Snaps a decimal purity value (e.g. 0.75) to the nearest <select> option
     // =========================================================================
     function snapPurity(selectEl, purityVal) {
@@ -263,11 +263,7 @@ $(document).ready(function () {
     }
 
     // =========================================================================
-    // BARCODE SCANNER — mirrors sale invoice approach exactly:
-    // 1. addNewRow() with no data (blank row)
-    // 2. manually set each field on the new row
-    // 3. snap purity to nearest option
-    // 4. recalcRow() to compute all derived fields
+    // BARCODE SCANNER
     // =========================================================================
 
     function showScanResult(msg, type) {
@@ -318,11 +314,9 @@ $(document).ready(function () {
                     firstRow.remove();
                 }
 
-                // ── Step 1: add a blank row ───────────────────────────────────
                 addNewRow();
                 const newRow = $('#ConsignmentTable tr.item-row').last();
 
-                // ── Step 2: set fields manually (same as sale invoice) ────────
                 newRow.find('.item-name-input').val(data.item_name || '');
                 newRow.find('input[name*="[source_barcode]"]').val(barcode);
                 newRow.find('input[name*="[item_description]"]').val(data.item_description || '');
@@ -331,10 +325,8 @@ $(document).ready(function () {
                 newRow.find('.material-type').val(data.material_type || 'gold');
                 newRow.find('.vat-percent').val(data.vat_percent || 0);
 
-                // ── Step 3: snap purity to nearest dropdown option ────────────
                 snapPurity(newRow.find('.purity'), data.purity);
 
-                // ── Step 4: load parts if any ─────────────────────────────────
                 if (data.parts && data.parts.length > 0) {
                     const partsRow  = newRow.next('.parts-row');
                     const partsBody = partsRow.find('.parts-table tbody');
@@ -345,7 +337,6 @@ $(document).ready(function () {
                     });
                 }
 
-                // ── Step 5: recalculate — agreed_value stays 0 (auto-calc) ───
                 recalcRow(newRow);
 
                 newRow.addClass('table-warning');
@@ -414,7 +405,6 @@ $(document).ready(function () {
                     currentItemRow.find('.material-type').val(String(row['Material'] || 'gold').toLowerCase());
                     currentItemRow.find('.vat-percent').val(row['VAT %'] || 0);
 
-                    // Non-zero Agreed Value = manual override
                     const agreedVal = parseFloat(row['Agreed Value'] || 0);
                     currentItemRow.find('.agreed-value').val(agreedVal);
                     if (agreedVal > 0) currentItemRow.find('.agreed-value').data('manual', true);
@@ -538,13 +528,10 @@ $(document).ready(function () {
     }
 
     // =========================================================================
-    // ADD NEW ITEM ROW — always creates blank row; caller sets fields after
+    // ADD NEW ITEM ROW
     // =========================================================================
 
     window.addNewRow = function (data) {
-        // data param is ONLY used by INIT_ITEMS load on edit page.
-        // Barcode scan and Excel import call addNewRow() with no args,
-        // then set fields manually — same pattern as sale invoice.
         data = data || null;
         const nextIndex = $('#ConsignmentTable tr.item-row').length;
 
@@ -624,7 +611,6 @@ $(document).ready(function () {
         const newItemRow = $('#ConsignmentTable tr.item-row').last();
         updateRowIndexes();
 
-        // ── If called with data (edit page load only) ─────────────────────────
         if (data) {
             newItemRow.find('.item-name-input').val(data.item_name || '');
             newItemRow.find('input[name*="[item_description]"]').val(data.item_description || '');
@@ -634,15 +620,12 @@ $(document).ready(function () {
             newItemRow.find('.material-type').val(data.material_type || 'gold');
             newItemRow.find('.vat-percent').val(data.vat_percent || 0);
 
-            // Snap purity to nearest option
             snapPurity(newItemRow.find('.purity'), data.purity);
 
-            // Agreed value: non-zero = already computed/overridden, flag as manual
             const agreedVal = parseFloat(data.agreed_value || 0);
             newItemRow.find('.agreed-value').val(agreedVal);
             if (agreedVal > 0) newItemRow.find('.agreed-value').data('manual', true);
 
-            // Load parts
             if (data.parts && data.parts.length > 0) {
                 const partsRow  = newItemRow.next('.parts-row');
                 const partsBody = partsRow.find('.parts-table tbody');
@@ -860,13 +843,85 @@ $(document).ready(function () {
     }
 
     // =========================================================================
-    // PREVENT DOUBLE SUBMIT
+    // FORM SUBMIT — serialize all editable items as a single JSON field
+    //
+    // Why: PHP's default max_input_vars = 1000 is easily exceeded when
+    // importing 50+ items (each item has ~12 fields + parts = ~4000+ vars).
+    // PHP silently truncates POST data beyond that limit, causing validation
+    // errors like "items.49.agreed_value is required".
+    //
+    // Fix: disable all editable item inputs before submit (so they don't count
+    // toward max_input_vars), then inject a single items_json hidden field
+    // containing the entire items array as a JSON string. The controller
+    // decodes this in resolveItems() before processing.
+    //
+    // Immutable rows (sold/returned) use hidden inputs appended directly to
+    // #consignment-form by renderImmutableRow() — those are NOT inside
+    // .item-row table cells, so they are NOT disabled here and POST normally.
     // =========================================================================
 
-    document.getElementById('consignment-form').addEventListener('submit', function () {
+    document.getElementById('consignment-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+
         const btn = document.getElementById('submit_btn');
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+        const itemsPayload = [];
+
+        // Collect all editable (non-immutable) item rows
+        $('#ConsignmentTable tr.item-row:not(.table-success):not(.table-warning)').each(function () {
+            const row   = $(this);
+            const parts = [];
+
+            row.next('.parts-row').find('.part-item-row').each(function () {
+                const pr = $(this);
+                parts.push({
+                    item_name:        pr.find('input[name*="[item_name]"]').val()        || '',
+                    part_description: pr.find('input[name*="[part_description]"]').val() || '',
+                    qty:              pr.find('.part-qty').val()        || 0,
+                    rate:             pr.find('.part-rate').val()       || 0,
+                    stone_qty:        pr.find('.part-stone-qty').val()  || 0,
+                    stone_rate:       pr.find('.part-stone-rate').val() || 0,
+                    total:            pr.find('.part-total').val()      || 0,
+                });
+            });
+
+            itemsPayload.push({
+                item_name:        row.find('.item-name-input').val()                  || '',
+                item_description: row.find('input[name*="[item_description]"]').val() || '',
+                source_barcode:   row.find('input[name*="[source_barcode]"]').val()   || '',
+                purity:           row.find('.purity').val()         || 0,
+                gross_weight:     row.find('.gross-weight').val()   || 0,
+                purity_weight:    row.find('.purity-weight').val()  || 0,
+                col_995:          row.find('.col-995').val()        || 0,
+                making_rate:      row.find('.making-rate').val()    || 0,
+                making_value:     row.find('.making-value').val()   || 0,
+                material_type:    row.find('.material-type').val()  || 'gold',
+                material_value:   row.find('.material-value').val() || 0,
+                vat_percent:      row.find('.vat-percent').val()    || 0,
+                agreed_value:     row.find('.agreed-value').val()   || 0,
+                parts:            parts,
+            });
+        });
+
+        // IMPORTANT: Remove ALL inputs/selects inside editable item rows AND their
+        // associated parts rows from the DOM entirely before submitting.
+        // This ensures zero items[N][field] keys reach PHP — preventing PHP from
+        // creating partial items[] sub-arrays that would confuse validation.
+        // Immutable row hidden inputs are appended to #consignment-form directly
+        // (not inside table rows) so they are untouched and POST normally.
+        $('#ConsignmentTable tr.item-row:not(.table-success):not(.table-warning), ' +
+          '#ConsignmentTable tr.parts-row')
+            .find('input, select, textarea').remove();
+
+        // Inject entire items array as a single JSON string — no input var limit.
+        $('<input type="hidden" name="items_json">')
+            .val(JSON.stringify(itemsPayload))
+            .appendTo('#consignment-form');
+
+        // Now safe to submit
+        this.submit();
     });
 
     // =========================================================================
@@ -877,7 +932,7 @@ $(document).ready(function () {
         if (item.item_status === 'sold' || item.item_status === 'returned') {
             renderImmutableRow(item);
         } else {
-            addNewRow(item);  // passes data so addNewRow sets all fields
+            addNewRow(item);
         }
     });
 
@@ -888,7 +943,7 @@ $(document).ready(function () {
     calculateTotals();
 
     // =========================================================================
-    // IMMUTABLE ROW (sold / returned)
+    // IMMUTABLE ROW (sold / returned) — cannot be edited
     // =========================================================================
 
     function renderImmutableRow(item) {
@@ -916,6 +971,9 @@ $(document).ready(function () {
         <tr class="parts-row" style="display:none;"></tr>`);
 
         const idx    = $('#ConsignmentTable tr.item-row').length - 1;
+
+        // These hidden inputs are appended directly to the FORM (not inside table cells),
+        // so they will NOT be disabled by the submit handler and will POST normally.
         const fields = [
             'item_status','item_name','item_description','barcode_number','is_printed',
             'gross_weight','purity','purity_weight','col_995',

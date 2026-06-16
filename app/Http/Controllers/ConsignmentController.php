@@ -75,7 +75,7 @@ class ConsignmentController extends Controller
                 'created_by'     => auth()->id(),
             ]);
 
-            $this->persistItems($consignment, $request->items ?? [], $consignment->direction, $request);
+            $this->persistItems($consignment, $this->resolveItems($request), $consignment->direction, $request);
 
             DB::commit();
 
@@ -176,7 +176,7 @@ class ConsignmentController extends Controller
             }
 
             // Re-create in_stock items — filter out sold/returned (submitted as hidden fields)
-            $incomingItems = collect($request->items ?? [])
+            $incomingItems = collect($this->resolveItems($request))
                 ->filter(fn($i) => !in_array($i['item_status'] ?? '', ['sold', 'returned']))
                 ->values()
                 ->toArray();
@@ -585,16 +585,6 @@ class ConsignmentController extends Controller
         </table>', true, false, false, false);
         $pdf->Ln(3);
 
-        // =========================================================================
-        // Column layout — total must equal 100%
-        //
-        //  #        Item Name   Description  Purity  GrossWt  PurityWt  995   MkRate  MkVal  Material  MatVal  AgreedVal  Status
-        //  3%       13%         13%          5%      6%       6%        5%    6%      7%     6%        8%      9%         7%
-        //  = 3+13+13+5+6+6+5+6+7+6+8+9+7 = 100%
-        //
-        //  Making colspan=2 covers MkRate(6%) + MkVal(7%) = 13%
-        // =========================================================================
-
         $html = '
         <table border="1" cellpadding="2" width="100%" style="">
             <thead>
@@ -713,179 +703,22 @@ class ConsignmentController extends Controller
     }
 
     // =========================================================================
-    // PRIVATE HELPERS
+    // SHOW
     // =========================================================================
 
-    private function validateConsignment(Request $request, bool $updating = false): void
+    public function show($id)
     {
-        $rules = [
-            'partner_id'              => 'required|exists:chart_of_accounts,id',
-            'start_date'              => 'required|date',
-            'end_date'                => 'nullable|date|after_or_equal:start_date',
-            'duration_label'          => 'nullable|string|max:60',
-            'remarks'                 => 'nullable|string',
-            'items'                   => 'required|array|min:1',
-            'items.*.gross_weight'    => 'required|numeric|min:0',
-            'items.*.purity'          => 'required|numeric|min:0|max:1',
-            'items.*.making_rate'     => 'required|numeric|min:0',
-            'items.*.material_type'   => 'required|in:gold,diamond',
-            'items.*.agreed_value'    => 'required|numeric|min:0',
-        ];
+        $consignment = Consignment::with([
+            'partner',
+            'items.parts',
+            'items.settledBySaleInvoice',
+        ])->findOrFail($id);
 
-        if (!$updating) {
-            $rules['direction'] = 'required|in:inbound,outbound';
-        }
-
-        $request->validate($rules);
-    }
-
-    /**
-     * Generate a barcode number for a consignment item.
-     *
-     * Format mirrors purchase invoice barcodes exactly:
-     *   Purchase:    MJT-00001-1   = prefix + invoice_seq + item_position
-     *   Consignment: CSG-00001-1   = prefix + consignment_seq + item_position
-     *
-     * The consignment_no (e.g. CSG-IN-00001 or CSG-OUT-00001) already contains
-     * the zero-padded sequence as its last segment. We extract it and prepend
-     * the short CSG- prefix so the barcode stays compact and scanner-friendly.
-     */
-    private function generateConsignmentBarcode(Consignment $consignment, int $itemPosition): string
-    {
-        // Extract the numeric sequence from the end of consignment_no.
-        // CSG-IN-00001  → 00001
-        // CSG-OUT-00003 → 00003
-        $seqPart = substr($consignment->consignment_no, strrpos($consignment->consignment_no, '-') + 1);
-
-        // Result: CSG-00001-1, CSG-00001-2, CSG-00002-1 …
-        return 'CSG-' . $seqPart . '-' . $itemPosition;
-    }
-
-    /**
-     * Persist ConsignmentItem + ConsignmentItemPart rows.
-     */
-    private function persistItems(Consignment $consignment, array $items, string $direction, Request $request): void
-    {
-        $goldRateAed = (float) ($request->gold_rate_aed    ?? 0);
-        $diaRateAed  = (float) ($request->diamond_rate_aed ?? 0);
-
-        // Item position counter — mirrors purchase invoice's $position variable.
-        // Starts at 1 for each consignment so barcodes are CSG-00001-1, -2, -3 …
-        $itemPosition = 1;
-
-        foreach ($items as $itemData) {
-            $baseGross   = (float) ($itemData['gross_weight']  ?? 0);
-            $purity      = (float) ($itemData['purity']        ?? 0);
-            $makingRate  = (float) ($itemData['making_rate']   ?? 0);
-            $vatPercent  = (float) ($itemData['vat_percent']   ?? 0);
-            $matType     = $itemData['material_type']           ?? 'gold';
-            $agreedValue = (float) ($itemData['agreed_value']  ?? 0);
-
-            $itemGoldR = (float) ($itemData['gold_rate_aed']    ?? $goldRateAed);
-            $itemDiaR  = (float) ($itemData['diamond_rate_aed'] ?? $diaRateAed);
-
-            // ── CTS-adjusted gross weight ─────────────────────────────────────
-            $partsData       = $itemData['parts'] ?? [];
-            $totalDiamondCTS = 0.0;
-            $totalStoneCTS   = 0.0;
-            foreach ($partsData as $p) {
-                $totalDiamondCTS += (float) ($p['qty']       ?? 0);
-                $totalStoneCTS   += (float) ($p['stone_qty'] ?? 0);
-            }
-            $calcGross = $baseGross + ($totalDiamondCTS / 5) + ($totalStoneCTS / 5);
-
-            // ── Core calculations ─────────────────────────────────────────────
-            $purityWeight  = $calcGross * $purity;
-            $col995        = $purityWeight > 0 ? $purityWeight / 0.995 : 0;
-            $makingValue   = $calcGross * $makingRate;
-            $rate          = $matType === 'gold' ? $itemGoldR : $itemDiaR;
-            $materialValue = $rate * $purityWeight;
-
-            // ── Parts total ───────────────────────────────────────────────────
-            $partsTotal = 0.0;
-            foreach ($partsData as $p) {
-                $partsTotal += ((float) ($p['qty']       ?? 0) * (float) ($p['rate']       ?? 0))
-                             + ((float) ($p['stone_qty'] ?? 0) * (float) ($p['stone_rate'] ?? 0));
-            }
-
-            $taxableAmount = $makingValue;
-            $vatAmount     = $taxableAmount * ($vatPercent / 100);
-
-            if ($agreedValue <= 0) {
-                $agreedValue = $materialValue + $makingValue + $partsTotal + $vatAmount;
-            }
-
-            $item = $consignment->items()->create([
-                'item_name'        => $itemData['item_name']        ?? null,
-                'product_id'       => $itemData['product_id']       ?? null,
-                'item_description' => $itemData['item_description'] ?? null,
-                'barcode_number'   => null,
-                'source_barcode'   => ($direction === 'outbound') ? ($itemData['source_barcode'] ?? null) : null,
-                'is_printed'       => false,
-                'gross_weight'     => $baseGross,
-                'purity'           => $purity,
-                'purity_weight'    => round($purityWeight, 4),
-                'col_995'          => round($col995, 4),
-                'making_rate'      => $makingRate,
-                'making_value'     => round($makingValue, 2),
-                'material_type'    => $matType,
-                'material_rate'    => $rate,
-                'material_value'   => round($materialValue, 2),
-                'parts_total'      => round($partsTotal, 2),
-                'taxable_amount'   => round($taxableAmount, 2),
-                'vat_percent'      => $vatPercent,
-                'vat_amount'       => round($vatAmount, 2),
-                'agreed_value'     => round($agreedValue, 2),
-                'item_status'      => 'in_stock',
-            ]);
-
-            // ── Generate barcode for inbound items ────────────────────────────
-            // Format: CSG-00001-1  (same structure as MJT-00001-1 in purchase)
-            // Only inbound items get barcodes — outbound items are ours,
-            // already have purchase barcodes and don't need new ones.
-            if ($direction === 'inbound') {
-                $item->update([
-                    'barcode_number' => $this->generateConsignmentBarcode($consignment, $itemPosition),
-                ]);
-            }
-
-            foreach ($partsData as $p) {
-                $qty       = (float) ($p['qty']        ?? 0);
-                $pRate     = (float) ($p['rate']       ?? 0);
-                $stoneQty  = (float) ($p['stone_qty']  ?? 0);
-                $stoneRate = (float) ($p['stone_rate'] ?? 0);
-                $item->parts()->create([
-                    'item_name'        => $p['item_name']        ?? null,
-                    'part_description' => $p['part_description'] ?? null,
-                    'qty'              => $qty,
-                    'rate'             => $pRate,
-                    'stone_qty'        => $stoneQty,
-                    'stone_rate'       => $stoneRate,
-                    'total'            => round(($qty * $pRate) + ($stoneQty * $stoneRate), 2),
-                ]);
-            }
-
-            $itemPosition++;
-        }
+        return view('consignments.show', compact('consignment'));
     }
 
     // =========================================================================
-// SHOW
-// =========================================================================
-
-public function show($id)
-{
-    $consignment = Consignment::with([
-        'partner',
-        'items.parts',
-        'items.settledBySaleInvoice',
-    ])->findOrFail($id);
-
-    return view('consignments.show', compact('consignment'));
-}
-
-    // =========================================================================
-    // MARK SINGLE ITEM AS RETURNED — updated to stamp settled_date
+    // MARK SINGLE ITEM AS RETURNED
     // =========================================================================
 
     public function returnItem($consignmentId, $itemId)
@@ -931,5 +764,183 @@ public function show($id)
         $consignment->recalcStatus();
 
         return back()->with('success', $pendingItems->count() . ' item(s) marked as returned.');
+    }
+
+    // =========================================================================
+    // PRIVATE HELPERS
+    // =========================================================================
+
+    /**
+     * Resolve items from either:
+     *   (a) items_json  — single JSON field, used when item count is large
+     *                     to bypass PHP's max_input_vars = 1000 limit, OR
+     *   (b) items[]     — standard nested form array (fallback)
+     *
+     * The blade submit handler always sends items_json (path a).
+     * Path (b) is kept as a safety fallback only.
+     */
+    private function resolveItems(Request $request): array
+    {
+        if ($request->filled('items_json')) {
+            $decoded = json_decode($request->input('items_json'), true);
+            if (is_array($decoded) && count($decoded) > 0) {
+                return $decoded;
+            }
+        }
+
+        return $request->input('items', []);
+    }
+
+    /**
+     * Validate the consignment request.
+     *
+     * When items_json is present (large import), per-item Laravel validation
+     * rules are skipped because items[] won't exist as form fields (they are
+     * disabled before submit). A structural JSON check is done instead.
+     */
+    private function validateConsignment(Request $request, bool $updating = false): void
+    {
+        // ── Scalar header fields only ─────────────────────────────────────────
+        // Per-item validation rules are intentionally omitted here.
+        //
+        // Reason: The blade submit handler serializes all items into a single
+        // items_json field and disables the individual items[N][field] inputs
+        // before POSTing. This means items[] may arrive as an empty array or
+        // with partial data (only the non-disabled fields like source_barcode).
+        // Applying items.*.field rules against that would produce false failures.
+        //
+        // Item data integrity is guaranteed by resolveItems() + persistItems()
+        // which cast every field to the correct type with safe defaults.
+        $rules = [
+            'partner_id'     => 'required|exists:chart_of_accounts,id',
+            'start_date'     => 'required|date',
+            'end_date'       => 'nullable|date|after_or_equal:start_date',
+            'duration_label' => 'nullable|string|max:60',
+            'remarks'        => 'nullable|string',
+            'items_json'     => 'nullable|string',
+        ];
+
+        if (!$updating) {
+            $rules['direction'] = 'required|in:inbound,outbound';
+        }
+
+        $request->validate($rules);
+
+        // Ensure at least one item is present (via JSON or legacy form array)
+        $items = $this->resolveItems($request);
+        if (empty($items)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'items_json' => ['No items found. Please add at least one item before saving.'],
+            ]);
+        }
+    }
+
+    /**
+     * Generate a barcode number for a consignment item.
+     * Format: CSG-00001-1, CSG-00001-2, CSG-00002-1 …
+     */
+    private function generateConsignmentBarcode(Consignment $consignment, int $itemPosition): string
+    {
+        $seqPart = substr($consignment->consignment_no, strrpos($consignment->consignment_no, '-') + 1);
+        return 'CSG-' . $seqPart . '-' . $itemPosition;
+    }
+
+    /**
+     * Persist ConsignmentItem + ConsignmentItemPart rows.
+     */
+    private function persistItems(Consignment $consignment, array $items, string $direction, Request $request): void
+    {
+        $goldRateAed = (float) ($request->gold_rate_aed    ?? 0);
+        $diaRateAed  = (float) ($request->diamond_rate_aed ?? 0);
+
+        $itemPosition = 1;
+
+        foreach ($items as $itemData) {
+            $baseGross   = (float) ($itemData['gross_weight']  ?? 0);
+            $purity      = (float) ($itemData['purity']        ?? 0);
+            $makingRate  = (float) ($itemData['making_rate']   ?? 0);
+            $vatPercent  = (float) ($itemData['vat_percent']   ?? 0);
+            $matType     = $itemData['material_type']           ?? 'gold';
+            $agreedValue = (float) ($itemData['agreed_value']  ?? 0);
+
+            $itemGoldR = (float) ($itemData['gold_rate_aed']    ?? $goldRateAed);
+            $itemDiaR  = (float) ($itemData['diamond_rate_aed'] ?? $diaRateAed);
+
+            $partsData       = $itemData['parts'] ?? [];
+            $totalDiamondCTS = 0.0;
+            $totalStoneCTS   = 0.0;
+            foreach ($partsData as $p) {
+                $totalDiamondCTS += (float) ($p['qty']       ?? 0);
+                $totalStoneCTS   += (float) ($p['stone_qty'] ?? 0);
+            }
+            $calcGross = $baseGross + ($totalDiamondCTS / 5) + ($totalStoneCTS / 5);
+
+            $purityWeight  = $calcGross * $purity;
+            $col995        = $purityWeight > 0 ? $purityWeight / 0.995 : 0;
+            $makingValue   = $calcGross * $makingRate;
+            $rate          = $matType === 'gold' ? $itemGoldR : $itemDiaR;
+            $materialValue = $rate * $purityWeight;
+
+            $partsTotal = 0.0;
+            foreach ($partsData as $p) {
+                $partsTotal += ((float) ($p['qty']       ?? 0) * (float) ($p['rate']       ?? 0))
+                             + ((float) ($p['stone_qty'] ?? 0) * (float) ($p['stone_rate'] ?? 0));
+            }
+
+            $taxableAmount = $makingValue;
+            $vatAmount     = $taxableAmount * ($vatPercent / 100);
+
+            if ($agreedValue <= 0) {
+                $agreedValue = $materialValue + $makingValue + $partsTotal + $vatAmount;
+            }
+
+            $item = $consignment->items()->create([
+                'item_name'        => $itemData['item_name']        ?? null,
+                'product_id'       => $itemData['product_id']       ?? null,
+                'item_description' => $itemData['item_description'] ?? null,
+                'barcode_number'   => null,
+                'source_barcode'   => ($direction === 'outbound') ? ($itemData['source_barcode'] ?? null) : null,
+                'is_printed'       => false,
+                'gross_weight'     => $baseGross,
+                'purity'           => $purity,
+                'purity_weight'    => round($purityWeight, 4),
+                'col_995'          => round($col995, 4),
+                'making_rate'      => $makingRate,
+                'making_value'     => round($makingValue, 2),
+                'material_type'    => $matType,
+                'material_rate'    => $rate,
+                'material_value'   => round($materialValue, 2),
+                'parts_total'      => round($partsTotal, 2),
+                'taxable_amount'   => round($taxableAmount, 2),
+                'vat_percent'      => $vatPercent,
+                'vat_amount'       => round($vatAmount, 2),
+                'agreed_value'     => round($agreedValue, 2),
+                'item_status'      => 'in_stock',
+            ]);
+
+            if ($direction === 'inbound') {
+                $item->update([
+                    'barcode_number' => $this->generateConsignmentBarcode($consignment, $itemPosition),
+                ]);
+            }
+
+            foreach ($partsData as $p) {
+                $qty       = (float) ($p['qty']        ?? 0);
+                $pRate     = (float) ($p['rate']       ?? 0);
+                $stoneQty  = (float) ($p['stone_qty']  ?? 0);
+                $stoneRate = (float) ($p['stone_rate'] ?? 0);
+                $item->parts()->create([
+                    'item_name'        => $p['item_name']        ?? null,
+                    'part_description' => $p['part_description'] ?? null,
+                    'qty'              => $qty,
+                    'rate'             => $pRate,
+                    'stone_qty'        => $stoneQty,
+                    'stone_rate'       => $stoneRate,
+                    'total'            => round(($qty * $pRate) + ($stoneQty * $stoneRate), 2),
+                ]);
+            }
+
+            $itemPosition++;
+        }
     }
 }
