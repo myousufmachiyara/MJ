@@ -50,7 +50,9 @@ Route::middleware(['auth'])->group(function () {
     // ── Sale Helpers ──────────────────────────────────────────────────────────
     Route::get('/sale-invoices/scan-barcode',      [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
     Route::get('/sale-invoices/{id}/print-simple', [SaleInvoiceController::class, 'printSimple'])->middleware('check.permission:sale_invoices.print')->name('sale_invoices.print_simple');
-
+    Route::get('/sale-invoices/scan-barcode',      [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
+    Route::get('/sale-invoices/search-by-name',    [SaleInvoiceController::class, 'searchByName'])->name('sale.search_by_name');
+    
     // ── Sale Return Helper (AJAX — must be before the modules loop) ───────────
     Route::get('/sale-return/{invoiceId}/items', [SaleReturnController::class, 'getInvoiceItems'])->name('sale_return.invoice_items');
 

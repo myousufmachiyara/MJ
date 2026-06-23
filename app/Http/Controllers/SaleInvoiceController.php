@@ -1539,4 +1539,79 @@ class SaleInvoiceController extends Controller
 
         return $pdf->Output($invoice->invoice_no . '_receipt.pdf', 'I');
     }
+
+
+    // =========================================================================
+    // SEARCH BY NAME — Ajax typeahead for Item Name field
+    // =========================================================================
+
+    public function searchByName(Request $request)
+    {
+        $query = trim($request->get('q', ''));
+
+        if (mb_strlen($query) < 2) {
+            return response()->json(['success' => true, 'results' => []]);
+        }
+
+        $results = collect();
+
+        // 1️⃣ Sale invoice items
+        SaleInvoiceItem::with('parts')
+            ->where('item_name', 'like', "%{$query}%")
+            ->latest()
+            ->limit(10)
+            ->get()
+            ->each(fn($item) => $results->push($this->formatNameSearchResult($item, 'sale')));
+
+        // 2️⃣ Consignment items (in stock only)
+        \App\Models\ConsignmentItem::with(['parts', 'consignment'])
+            ->where('item_name', 'like', "%{$query}%")
+            ->where('item_status', 'in_stock')
+            ->limit(10)
+            ->get()
+            ->each(fn($item) => $results->push(
+                $this->formatNameSearchResult($item, 'consignment', $item->consignment->consignment_no ?? null)
+            ));
+
+        // 3️⃣ Purchase invoice items
+        \App\Models\PurchaseInvoiceItem::with('parts')
+            ->where('item_name', 'like', "%{$query}%")
+            ->latest()
+            ->limit(10)
+            ->get()
+            ->each(fn($item) => $results->push($this->formatNameSearchResult($item, 'purchase')));
+
+        // De-dup by barcode (fallback to name) and cap the list
+        $results = $results
+            ->unique(fn($r) => $r['barcode_number'] ?: $r['item_name'] . '|' . $r['source'])
+            ->take(15)
+            ->values();
+
+        return response()->json(['success' => true, 'results' => $results]);
+    }
+
+    private function formatNameSearchResult($item, string $source, ?string $consignmentNo = null): array
+    {
+        return [
+            'source'           => $source,
+            'consignment_no'   => $consignmentNo,
+            'barcode_number'   => $item->barcode_number,
+            'item_name'        => $item->item_name,
+            'item_description' => $item->item_description,
+            'purity'           => $item->purity,
+            'gross_weight'     => $item->gross_weight,
+            'making_rate'      => $item->making_rate,
+            'material_type'    => $item->material_type,
+            'vat_percent'      => $item->vat_percent,
+            'parts'            => $item->parts->map(fn($p) => [
+                'item_name'        => $p->item_name,
+                'part_description' => $p->part_description,
+                'qty'              => $p->qty,
+                'rate'             => $p->rate,
+                'stone_qty'        => $p->stone_qty,
+                'stone_rate'       => $p->stone_rate,
+                'total'            => $p->total,
+            ])->values()->toArray(),
+        ];
+    }
 }

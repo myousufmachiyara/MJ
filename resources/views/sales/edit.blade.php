@@ -420,6 +420,7 @@ $(document).ready(function () {
     const existingItems      = @json($itemsData);
     const TROY_OUNCE_TO_GRAM = 31.1035;
     const BARCODE_SCAN_URL   = '{{ route("sale.scan_barcode") }}';
+    const NAME_SEARCH_URL    = '{{ route("sale.search_by_name") }}';
 
     $(document).on('click', '.toggle-parts', function() {
         $(this).closest('tr').next('.parts-row').fadeToggle(200);
@@ -580,6 +581,113 @@ $(document).ready(function () {
             <td><button type="button" class="btn btn-sm btn-danger remove-part"><i class="fas fa-times"></i></button></td>
         </tr>`;
     }
+
+    function applyItemDataToRow(row, data) {
+      row.find('.item-name-input').val(data.item_name);
+      row.find('input[name*="[barcode_number]"]').val(data.barcode_number || '');
+      row.find('input[name*="[item_description]"]').val(data.item_description || '');
+
+      const pur = parseFloat(data.purity);
+      let nearestOpt = null, minDiff = Infinity;
+      row.find('.purity option').each(function() {
+          const diff = Math.abs(parseFloat($(this).val()) - pur);
+          if (diff < minDiff) { minDiff = diff; nearestOpt = $(this).val(); }
+      });
+      if (nearestOpt) row.find('.purity').val(nearestOpt);
+
+      row.find('.base-gross-weight').val((parseFloat(data.gross_weight) || 0).toFixed(3));
+      row.find('.making-rate').val(data.making_rate || 0);
+      row.find('.material-type').val(data.material_type || 'gold');
+      row.find('.vat-percent').val(data.vat_percent || 0);
+
+      const partsRow  = row.next('.parts-row');
+      const partsBody = partsRow.find('.parts-table tbody');
+      partsBody.empty();
+      if (data.parts && data.parts.length > 0) {
+          partsRow.show();
+          data.parts.forEach((part, j) => partsBody.append(buildPartRowHtml(row.data('item-index'), j, part)));
+      } else {
+          partsRow.hide();
+      }
+
+      recalcItemGrossWeight(row);
+      calculateTotals();
+    }
+
+    // ===== SEARCH BY PRODUCT NAME (typeahead on Item Name field) =====
+    let nameSearchTimer = null;
+
+    function escapeHtml(str) {
+        return $('<div>').text(str || '').html();
+    }
+
+    function showNameSuggestions(row, results) {
+        const wrapper = row.find('.product-wrapper');
+        wrapper.find('.name-suggestions').remove();
+
+        let html = '<div class="name-suggestions list-group position-absolute shadow-sm" style="z-index:1000;max-height:220px;overflow-y:auto;width:280px;top:100%;left:0;">';
+        results.forEach((r, i) => {
+            const badge = r.source === 'purchase'
+                ? '<span class="badge bg-info">Purchase</span>'
+                : r.source === 'consignment'
+                    ? '<span class="badge bg-warning text-dark">Consignment</span>'
+                    : '<span class="badge bg-success">Sale</span>';
+            html += `<a href="#" class="list-group-item list-group-item-action py-1 px-2 name-suggestion-item" data-index="${i}" style="font-size:.85rem;">
+                <strong>${escapeHtml(r.item_name)}</strong> ${badge}
+                ${r.barcode_number ? '<br><small class="text-muted">' + escapeHtml(r.barcode_number) + '</small>' : ''}
+            </a>`;
+        });
+        html += '</div>';
+
+        wrapper.css('position', 'relative').append(html);
+        wrapper.data('suggestion-results', results);
+    }
+
+    function closeNameSuggestions(row) {
+        row.find('.name-suggestions').remove();
+    }
+
+    $(document).on('input', 'tr.item-row .item-name-input', function() {
+        const input = $(this);
+        const row   = input.closest('tr.item-row');
+        const query = input.val().trim();
+
+        clearTimeout(nameSearchTimer);
+        closeNameSuggestions(row);
+
+        if (query.length < 2) return;
+
+        nameSearchTimer = setTimeout(() => {
+            $.ajax({
+                url: NAME_SEARCH_URL,
+                method: 'GET',
+                data: { q: query },
+                success: function(resp) {
+                    if (resp.success && resp.results.length) {
+                        showNameSuggestions(row, resp.results);
+                    }
+                }
+            });
+        }, 300);
+    });
+
+    $(document).on('click', '.name-suggestion-item', function(e) {
+        e.preventDefault();
+        const wrapper = $(this).closest('.product-wrapper');
+        const row     = wrapper.closest('tr.item-row');
+        const results = wrapper.data('suggestion-results') || [];
+        const data    = results[$(this).data('index')];
+        if (!data) return;
+
+        applyItemDataToRow(row, data);
+        closeNameSuggestions(row);
+    });
+
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.product-wrapper').length) {
+            $('.name-suggestions').remove();
+        }
+    });
 
     // ===== LOAD EXISTING ITEMS =====
     existingItems.forEach(function(itemData, i) {

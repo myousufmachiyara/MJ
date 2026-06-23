@@ -52,7 +52,7 @@
               </select>
             </div>
 
-            <div class="col-md-3 mt-2">
+            <div class="col-md-3">
                 <label>Linked Consignment <small class="text-muted">(outbound, optional)</small></label>
                 <select name="consignment_id" class="form-control select2-js">
                     <option value="">-- None --</option>
@@ -210,7 +210,7 @@
                     <td><input type="number" name="items[0][vat_percent]" class="form-control vat-percent" step="any" value="0"></td>
                     <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
                     <td><input type="number" class="form-control item-total" readonly></td>
-                    <td><input type="text" class="form-control item-profit-pct fw-bold text-center" readonly style="min-width:80px;font-size:.9rem;"></td>
+                    <td><input type="text" class="form-control item-profit-pct fw-bold text-center" style="min-width:80px;font-size:.9rem;"></td>
                     <td>
                       <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
                       <button type="button" class="btn btn-sm btn-primary toggle-parts"><i class="fas fa-wrench"></i></button>
@@ -287,7 +287,7 @@
             </div>
             <div class="col-md-2 mt-3">
               <label class="text-success fw-bold">Overall Profit %</label>
-              <input type="text" id="overall_profit_pct" class="form-control fw-bold border-success text-center" readonly style="font-size:1.1rem;">
+              <input type="text" id="overall_profit_pct" class="form-control fw-bold border-success text-center" style="font-size:1.1rem;">
             </div>
             <div class="col-md-2 mt-3">
                 <label class="fw-bold text-danger">
@@ -490,10 +490,11 @@
 </div>
 
 <script>
-$(document).ready(function () {
+  $(document).ready(function () {
     const products           = @json($products);
     const TROY_OUNCE_TO_GRAM = 31.1035;
     const BARCODE_SCAN_URL   = '{{ route("sale.scan_barcode") }}';
+    const NAME_SEARCH_URL    = '{{ route("sale.search_by_name") }}';
 
     $(document).on('click', '.toggle-parts', function() {
         $(this).closest('tr').next('.parts-row').fadeToggle(200);
@@ -511,6 +512,7 @@ $(document).ready(function () {
         }
         calculateTotals();
     });
+
     $('#exchange_rate').on('input', calculateTotals);
     $('#invoice_vat_percent').on('input', calculateTotals);
 
@@ -636,6 +638,113 @@ $(document).ready(function () {
         </tr>`;
     }
 
+    function applyItemDataToRow(row, data) {
+      row.find('.item-name-input').val(data.item_name);
+      row.find('input[name*="[barcode_number]"]').val(data.barcode_number || '');
+      row.find('input[name*="[item_description]"]').val(data.item_description || '');
+
+      const pur = parseFloat(data.purity);
+      let nearestOpt = null, minDiff = Infinity;
+      row.find('.purity option').each(function() {
+          const diff = Math.abs(parseFloat($(this).val()) - pur);
+          if (diff < minDiff) { minDiff = diff; nearestOpt = $(this).val(); }
+      });
+      if (nearestOpt) row.find('.purity').val(nearestOpt);
+
+      row.find('.base-gross-weight').val((parseFloat(data.gross_weight) || 0).toFixed(3));
+      row.find('.making-rate').val(data.making_rate || 0);
+      row.find('.material-type').val(data.material_type || 'gold');
+      row.find('.vat-percent').val(data.vat_percent || 0);
+
+      const partsRow  = row.next('.parts-row');
+      const partsBody = partsRow.find('.parts-table tbody');
+      partsBody.empty();
+      if (data.parts && data.parts.length > 0) {
+          partsRow.show();
+          data.parts.forEach((part, j) => partsBody.append(buildPartRowHtml(row.data('item-index'), j, part)));
+      } else {
+          partsRow.hide();
+      }
+
+      recalcItemGrossWeight(row);
+      calculateTotals();
+    }
+
+    // ===== SEARCH BY PRODUCT NAME (typeahead on Item Name field) =====
+    let nameSearchTimer = null;
+
+    function escapeHtml(str) {
+        return $('<div>').text(str || '').html();
+    }
+
+    function showNameSuggestions(row, results) {
+        const wrapper = row.find('.product-wrapper');
+        wrapper.find('.name-suggestions').remove();
+
+        let html = '<div class="name-suggestions list-group position-absolute shadow-sm" style="z-index:1000;max-height:220px;overflow-y:auto;width:280px;top:100%;left:0;">';
+        results.forEach((r, i) => {
+            const badge = r.source === 'purchase'
+                ? '<span class="badge bg-info">Purchase</span>'
+                : r.source === 'consignment'
+                    ? '<span class="badge bg-warning text-dark">Consignment</span>'
+                    : '<span class="badge bg-success">Sale</span>';
+            html += `<a href="#" class="list-group-item list-group-item-action py-1 px-2 name-suggestion-item" data-index="${i}" style="font-size:.85rem;">
+                <strong>${escapeHtml(r.item_name)}</strong> ${badge}
+                ${r.barcode_number ? '<br><small class="text-muted">' + escapeHtml(r.barcode_number) + '</small>' : ''}
+            </a>`;
+        });
+        html += '</div>';
+
+        wrapper.css('position', 'relative').append(html);
+        wrapper.data('suggestion-results', results);
+    }
+
+    function closeNameSuggestions(row) {
+        row.find('.name-suggestions').remove();
+    }
+
+    $(document).on('input', 'tr.item-row .item-name-input', function() {
+        const input = $(this);
+        const row   = input.closest('tr.item-row');
+        const query = input.val().trim();
+
+        clearTimeout(nameSearchTimer);
+        closeNameSuggestions(row);
+
+        if (query.length < 2) return;
+
+        nameSearchTimer = setTimeout(() => {
+            $.ajax({
+                url: NAME_SEARCH_URL,
+                method: 'GET',
+                data: { q: query },
+                success: function(resp) {
+                    if (resp.success && resp.results.length) {
+                        showNameSuggestions(row, resp.results);
+                    }
+                }
+            });
+        }, 300);
+    });
+
+    $(document).on('click', '.name-suggestion-item', function(e) {
+        e.preventDefault();
+        const wrapper = $(this).closest('.product-wrapper');
+        const row     = wrapper.closest('tr.item-row');
+        const results = wrapper.data('suggestion-results') || [];
+        const data    = results[$(this).data('index')];
+        if (!data) return;
+
+        applyItemDataToRow(row, data);
+        closeNameSuggestions(row);
+    });
+
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('.product-wrapper').length) {
+            $('.name-suggestions').remove();
+        }
+    });
+
     window.addNewRow = function() {
         const nextIndex = $('#SaleTable tr.item-row').length;
         const purityOptions = `@foreach($purities as $p)<option value="{{ $p->value }}">{{ $p->label }}</option>@endforeach`;
@@ -663,7 +772,7 @@ $(document).ready(function () {
             <td><input type="number" name="items[${nextIndex}][vat_percent]" class="form-control vat-percent" step="any" value="0"></td>
             <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
             <td><input type="number" class="form-control item-total" readonly></td>
-            <td><input type="text" class="form-control item-profit-pct fw-bold text-center" readonly style="min-width:80px;font-size:.9rem;"></td>
+            <td><input type="text" class="form-control item-profit-pct fw-bold text-center" style="min-width:80px;font-size:.9rem;"></td>
             <td>
                 <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
                 <button type="button" class="btn btn-sm btn-primary toggle-parts"><i class="fas fa-wrench"></i></button>
@@ -878,39 +987,39 @@ $(document).ready(function () {
 
     // ===== RATE CONVERSION =====
     $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #diamond_rate_aed_ounce, #exchange_rate', function() {
-        const id = $(this).attr('id');
-        const exRate = parseFloat($('#exchange_rate').val()) || 3.6725;
-        if (id === 'gold_rate_usd' || id === 'exchange_rate') $('#gold_rate_aed_ounce').val(((parseFloat($('#gold_rate_usd').val()) || 0) * exRate).toFixed(4));
-        $('#gold_rate_aed').val(((parseFloat($('#gold_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
-        if (id === 'diamond_rate_usd' || id === 'exchange_rate') $('#diamond_rate_aed_ounce').val(((parseFloat($('#diamond_rate_usd').val()) || 0) * exRate).toFixed(4));
-        $('#diamond_rate_aed_gram').val(((parseFloat($('#diamond_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
-        $('#SaleTable tr.item-row').each(function() { calculateRow($(this)); });
-        calculateTotals();
+      const id = $(this).attr('id');
+      const exRate = parseFloat($('#exchange_rate').val()) || 3.6725;
+      if (id === 'gold_rate_usd' || id === 'exchange_rate') $('#gold_rate_aed_ounce').val(((parseFloat($('#gold_rate_usd').val()) || 0) * exRate).toFixed(4));
+      $('#gold_rate_aed').val(((parseFloat($('#gold_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
+      if (id === 'diamond_rate_usd' || id === 'exchange_rate') $('#diamond_rate_aed_ounce').val(((parseFloat($('#diamond_rate_usd').val()) || 0) * exRate).toFixed(4));
+      $('#diamond_rate_aed_gram').val(((parseFloat($('#diamond_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
+      $('#SaleTable tr.item-row').each(function() { calculateRow($(this)); });
+      calculateTotals();
     });
 
     // ===== PAYMENT METHOD =====
     $('#payment_method').on('change', function() {
-        const val = $(this).val();
-        $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields, #cash_fields').addClass('d-none');
-        if (val === 'cheque')                    $('#cheque_fields, #received_by_box').removeClass('d-none');
-        else if (val === 'cash')                 $('#received_by_box, #cash_fields').removeClass('d-none');
-        else if (val === 'bank_transfer')        $('#bank_transfer_fields').removeClass('d-none');
-        else if (val === 'material+making cost') $('#material_fields').removeClass('d-none');
-        calculateTotals();
+      const val = $(this).val();
+      $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields, #cash_fields').addClass('d-none');
+      if (val === 'cheque')                    $('#cheque_fields, #received_by_box').removeClass('d-none');
+      else if (val === 'cash')                 $('#received_by_box, #cash_fields').removeClass('d-none');
+      else if (val === 'bank_transfer')        $('#bank_transfer_fields').removeClass('d-none');
+      else if (val === 'material+making cost') $('#material_fields').removeClass('d-none');
+      calculateTotals();
     });
 
     // ===== PARTS CALCULATION =====
     $(document).on('input', '.part-qty, .part-rate, .part-stone-qty, .part-stone-rate', function() {
-        const row = $(this).closest('tr');
-        row.find('.part-total').val(((parseFloat(row.find('.part-qty').val()) || 0) * (parseFloat(row.find('.part-rate').val()) || 0) + (parseFloat(row.find('.part-stone-qty').val()) || 0) * (parseFloat(row.find('.part-stone-rate').val()) || 0)).toFixed(4));
-        recalcItemGrossWeight(row.closest('.parts-row').prev('.item-row'));
+      const row = $(this).closest('tr');
+      row.find('.part-total').val(((parseFloat(row.find('.part-qty').val()) || 0) * (parseFloat(row.find('.part-rate').val()) || 0) + (parseFloat(row.find('.part-stone-qty').val()) || 0) * (parseFloat(row.find('.part-stone-rate').val()) || 0)).toFixed(4));
+      recalcItemGrossWeight(row.closest('.parts-row').prev('.item-row'));
     });
 
     document.querySelector('form').addEventListener('submit', function() {
-        const btn = this.querySelector('button[type="submit"]');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+      const btn = this.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
     });
-});
+  });
 </script>
 @endsection
