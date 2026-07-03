@@ -328,11 +328,39 @@ class PurchaseInvoiceController extends Controller
         }
     }
 
+
+    // =========================================================================
+    // DESTROY
+    // =========================================================================
+
+    public function destroy($id)
+    {
+        $invoice = PurchaseInvoice::findOrFail($id);
+
+        DB::beginTransaction();
+        try {
+            $voucher = Voucher::where('reference_type', PurchaseInvoice::class)
+                ->where('reference_id', $invoice->id)
+                ->first();
+            if ($voucher) {
+                AccountingEntry::where('voucher_id', $voucher->id)->delete();
+                $voucher->delete();
+            }
+
+            $invoice->delete(); // soft delete — sets deleted_at, preserves the row
+
+            DB::commit();
+            return redirect()->route('purchase_invoices.index')->with('success', 'Invoice #' . $invoice->invoice_no . ' deleted.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return back()->with('error', 'Error: ' . $e->getMessage());
+        }
+    }
     // =========================================================================
     // PRINT
     // =========================================================================
 
-public function print($id)
+    public function print($id)
     {
         $invoice = PurchaseInvoice::with([
             'vendor',
@@ -651,7 +679,6 @@ public function print($id)
  
         return $pdf->Output($invoice->invoice_no . '.pdf', 'I');
     }
- 
  
     // =========================================================================
     // renderCurrencyPaymentPage — replace your existing method with this one
