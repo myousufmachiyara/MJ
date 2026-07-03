@@ -257,6 +257,12 @@
     </div>
 
     <script>
+
+        $(document).ready(function () {
+            $('#cust-datatable-default').DataTable({
+            "pageLength": 100
+            });
+        });
         function editAccount(id) {
             fetch('/coa/' + id + '/edit')
                 .then(res => res.json())
