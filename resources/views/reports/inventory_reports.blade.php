@@ -35,6 +35,8 @@
 
     {{-- ================================================================== --}}
     {{-- 1. STOCK IN HAND                                                    --}}
+    {{-- Now shows REMAINING weight per item.                                --}}
+    {{-- Partial items (some grams sold) show remaining grams with a badge.  --}}
     {{-- ================================================================== --}}
     <div id="SIH" class="tab-pane fade {{ $tab=='SIH'?'show active':'' }}">
       <form method="GET" action="{{ route('reports.inventory') }}" class="row g-2 mb-3">
@@ -49,23 +51,28 @@
       </form>
 
       @php
+        // gross_weight in each row is already remaining_weight (from controller)
         $totalItems    = $unsoldItems->count();
         $totalValue    = $unsoldItems->sum('item_total');
-        $totalGrossWt  = $unsoldItems->sum('gross_weight');
-        $totalPurityWt = $unsoldItems->sum('purity_weight');
+        $totalGrossWt  = $unsoldItems->sum('gross_weight');   // remaining grams total
+        $totalPurityWt = $unsoldItems->sum('purity_weight');  // remaining purity wt
+        $partialCount  = $unsoldItems->where('is_partial', true)->count();
       @endphp
 
       <div class="row mb-3">
         <div class="col-md-3"><div class="card text-center"><div class="card-body py-2">
           <div class="text-muted small">Items In Stock</div>
           <h4 class="text-primary mb-0">{{ $totalItems }}</h4>
+          @if($partialCount > 0)
+            <small class="text-warning">{{ $partialCount }} partially sold</small>
+          @endif
         </div></div></div>
         <div class="col-md-3"><div class="card text-center"><div class="card-body py-2">
           <div class="text-muted small">Total Stock Value (AED)</div>
           <h4 class="text-danger mb-0">{{ number_format($totalValue, 2) }}</h4>
         </div></div></div>
         <div class="col-md-3"><div class="card text-center"><div class="card-body py-2">
-          <div class="text-muted small">Total Gross Weight (g)</div>
+          <div class="text-muted small">Total Remaining Weight (g)</div>
           <h4 class="text-success mb-0">{{ number_format($totalGrossWt, 3) }}</h4>
         </div></div></div>
         <div class="col-md-3"><div class="card text-center"><div class="card-body py-2">
@@ -78,23 +85,47 @@
         <table class="table table-bordered table-striped table-sm datatable">
           <thead class="table-light">
             <tr>
-              <th>Barcode</th><th>Item Name</th><th>Vendor</th><th>Invoice</th><th>Date</th>
-              <th>Material</th><th class="text-end">Purity</th><th class="text-end">Gross Wt</th>
-              <th class="text-end">Purity Wt</th><th class="text-end">Material Val</th>
-              <th class="text-end">Making Val</th><th class="text-end">Item Total</th><th>Printed</th>
+              <th>Barcode</th>
+              <th>Item Name</th>
+              <th>Vendor</th>
+              <th>Invoice</th>
+              <th>Date</th>
+              <th>Material</th>
+              <th class="text-end">Purity</th>
+              <th class="text-end">Purchased (g)</th>
+              <th class="text-end">Sold (g)</th>
+              <th class="text-end text-success fw-bold">Remaining (g)</th>
+              <th class="text-end">Purity Wt</th>
+              <th class="text-end">Material Val</th>
+              <th class="text-end">Making Val</th>
+              <th class="text-end">Item Total</th>
+              <th>Printed</th>
             </tr>
           </thead>
           <tbody>
             @forelse($unsoldItems as $row)
-              <tr>
-                <td><code>{{ $row['barcode'] }}</code></td>
+              <tr class="{{ $row['is_partial'] ? 'table-warning' : '' }}">
+                <td>
+                  <code>{{ $row['barcode'] }}</code>
+                  @if($row['is_partial'])
+                    <span class="badge bg-warning text-dark ms-1" title="Partially sold — showing remaining weight">Partial</span>
+                  @endif
+                </td>
                 <td>{{ $row['item_name'] }}</td>
                 <td>{{ $row['vendor'] }}</td>
                 <td>{{ $row['purchase_invoice'] }}</td>
                 <td>{{ $row['purchase_date'] }}</td>
-                <td><span class="badge bg-{{ $row['material_type']==='Gold'?'warning text-dark':'info text-dark' }}">{{ $row['material_type'] }}</span></td>
+                <td>
+                  <span class="badge bg-{{ $row['material_type']==='Gold'?'warning text-dark':'info text-dark' }}">
+                    {{ $row['material_type'] }}
+                  </span>
+                </td>
                 <td class="text-end">{{ $row['purity'] }}</td>
-                <td class="text-end">{{ number_format($row['gross_weight'], 3) }}</td>
+                <td class="text-end text-muted">{{ number_format($row['purchased_weight'], 3) }}</td>
+                <td class="text-end text-danger">
+                  {{ $row['sold_weight'] > 0 ? number_format($row['sold_weight'], 3) : '—' }}
+                </td>
+                <td class="text-end fw-bold text-success">{{ number_format($row['gross_weight'], 3) }}</td>
                 <td class="text-end">{{ number_format($row['purity_weight'], 3) }}</td>
                 <td class="text-end">{{ number_format($row['material_value'], 2) }}</td>
                 <td class="text-end">{{ number_format($row['making_value'], 2) }}</td>
@@ -108,14 +139,16 @@
                 </td>
               </tr>
             @empty
-              <tr><td colspan="13" class="text-center text-muted">No stock in hand.</td></tr>
+              <tr><td colspan="15" class="text-center text-muted">No stock in hand.</td></tr>
             @endforelse
           </tbody>
           @if($unsoldItems->count())
           <tfoot class="table-light fw-bold">
             <tr>
-              <td colspan="7">Totals</td>
-              <td class="text-end">{{ number_format($totalGrossWt, 3) }}</td>
+              <td colspan="7">Totals ({{ $totalItems }} items{{ $partialCount > 0 ? ', '.$partialCount.' partial' : '' }})</td>
+              <td class="text-end text-muted">{{ number_format($unsoldItems->sum('purchased_weight'), 3) }}</td>
+              <td class="text-end text-danger">{{ number_format($unsoldItems->sum('sold_weight'), 3) }}</td>
+              <td class="text-end text-success">{{ number_format($totalGrossWt, 3) }}</td>
               <td class="text-end">{{ number_format($totalPurityWt, 3) }}</td>
               <td class="text-end">{{ number_format($unsoldItems->sum('material_value'), 2) }}</td>
               <td class="text-end">{{ number_format($unsoldItems->sum('making_value'), 2) }}</td>
@@ -129,7 +162,7 @@
     </div>
 
     {{-- ================================================================== --}}
-    {{-- 2. PURCHASED ITEMS                                                  --}}
+    {{-- 2. PURCHASED ITEMS (unchanged)                                      --}}
     {{-- ================================================================== --}}
     <div id="PI" class="tab-pane fade {{ $tab=='PI'?'show active':'' }}">
       <form method="GET" action="{{ route('reports.inventory') }}" class="row g-2 mb-3">
@@ -191,7 +224,7 @@
     </div>
 
     {{-- ================================================================== --}}
-    {{-- 3. SOLD ITEMS                                                       --}}
+    {{-- 3. SOLD ITEMS (unchanged)                                           --}}
     {{-- ================================================================== --}}
     <div id="SI" class="tab-pane fade {{ $tab=='SI'?'show active':'' }}">
       <form method="GET" action="{{ route('reports.inventory') }}" class="row g-2 mb-3">
@@ -255,7 +288,7 @@
     </div>
 
     {{-- ================================================================== --}}
-    {{-- 4. WEIGHT SUMMARY                                                   --}}
+    {{-- 4. WEIGHT SUMMARY (unchanged in blade — controller data is fixed)   --}}
     {{-- ================================================================== --}}
     <div id="WS" class="tab-pane fade {{ $tab=='WS'?'show active':'' }}">
       <form method="GET" action="{{ route('reports.inventory') }}" class="row g-2 mb-3">
@@ -280,7 +313,7 @@
                 <tbody>
                   <tr><td>Purchased</td><td class="text-end">{{ $weightSummary['gold_purchased_count'] }}</td><td class="text-end">{{ number_format($weightSummary['gold_purchased_gross'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['gold_purchased_purity'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['gold_purchased_value'], 2) }}</td></tr>
                   <tr><td>Sold</td><td class="text-end">{{ $weightSummary['gold_sold_count'] }}</td><td class="text-end">{{ number_format($weightSummary['gold_sold_gross'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['gold_sold_purity'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['gold_sold_value'], 2) }}</td></tr>
-                  <tr class="table-warning fw-bold"><td>In Hand</td><td class="text-end">{{ $weightSummary['gold_inhand_count'] }}</td><td class="text-end">{{ number_format($weightSummary['gold_inhand_gross'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['gold_inhand_purity'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['gold_inhand_value'], 2) }}</td></tr>
+                  <tr class="table-warning fw-bold"><td>In Hand <small class="fw-normal text-muted">(remaining)</small></td><td class="text-end">{{ $weightSummary['gold_inhand_count'] }}</td><td class="text-end">{{ number_format($weightSummary['gold_inhand_gross'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['gold_inhand_purity'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['gold_inhand_value'], 2) }}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -297,7 +330,7 @@
                 <tbody>
                   <tr><td>Purchased</td><td class="text-end">{{ $weightSummary['diamond_purchased_count'] }}</td><td class="text-end">{{ number_format($weightSummary['diamond_purchased_gross'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['diamond_purchased_purity'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['diamond_purchased_value'], 2) }}</td></tr>
                   <tr><td>Sold</td><td class="text-end">{{ $weightSummary['diamond_sold_count'] }}</td><td class="text-end">{{ number_format($weightSummary['diamond_sold_gross'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['diamond_sold_purity'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['diamond_sold_value'], 2) }}</td></tr>
-                  <tr class="table-info fw-bold"><td>In Hand</td><td class="text-end">{{ $weightSummary['diamond_inhand_count'] }}</td><td class="text-end">{{ number_format($weightSummary['diamond_inhand_gross'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['diamond_inhand_purity'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['diamond_inhand_value'], 2) }}</td></tr>
+                  <tr class="table-info fw-bold"><td>In Hand <small class="fw-normal text-muted">(remaining)</small></td><td class="text-end">{{ $weightSummary['diamond_inhand_count'] }}</td><td class="text-end">{{ number_format($weightSummary['diamond_inhand_gross'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['diamond_inhand_purity'], 3) }}</td><td class="text-end">{{ number_format($weightSummary['diamond_inhand_value'], 2) }}</td></tr>
                 </tbody>
               </table>
             </div>
@@ -330,7 +363,7 @@
     </div>
 
     {{-- ================================================================== --}}
-    {{-- 5. CONSIGNMENT INVENTORY                                            --}}
+    {{-- 5. CONSIGNMENT INVENTORY (unchanged)                                --}}
     {{-- ================================================================== --}}
     <div id="CI" class="tab-pane fade {{ $tab=='CI'?'show active':'' }}">
       <form method="GET" action="{{ route('reports.inventory') }}" class="row g-2 mb-3">
@@ -352,7 +385,6 @@
         $ciOutbound  = $ci->where('direction','Outbound');
       @endphp
 
-      {{-- Summary Cards --}}
       <div class="row mb-3 g-2">
         <div class="col-6 col-md-2"><div class="card text-center border-0 bg-light"><div class="card-body py-2">
           <div class="fs-4 fw-bold">{{ $ci->count() }}</div><div class="small text-muted">Total Items</div>
@@ -386,22 +418,12 @@
         <table class="table table-bordered table-striped table-sm datatable">
           <thead class="table-light">
             <tr>
-              <th>Consignment No</th>
-              <th>Direction</th>
-              <th>Partner</th>
-              <th>Start Date</th>
-              <th>Barcode</th>
-              <th>Item Name</th>
-              <th>Material</th>
-              <th class="text-end">Purity</th>
-              <th class="text-end">Gross Wt</th>
-              <th class="text-end">Purity Wt</th>
-              <th class="text-end">Making Val</th>
-              <th class="text-end">Material Val</th>
-              <th class="text-end">Parts Val</th>
-              <th class="text-end">Agreed Val</th>
-              <th class="text-center">Status</th>
-              <th>Settled Date</th>
+              <th>Consignment No</th><th>Direction</th><th>Partner</th><th>Start Date</th>
+              <th>Barcode</th><th>Item Name</th><th>Material</th>
+              <th class="text-end">Purity</th><th class="text-end">Gross Wt</th>
+              <th class="text-end">Purity Wt</th><th class="text-end">Making Val</th>
+              <th class="text-end">Material Val</th><th class="text-end">Parts Val</th>
+              <th class="text-end">Agreed Val</th><th class="text-center">Status</th><th>Settled Date</th>
             </tr>
           </thead>
           <tbody>

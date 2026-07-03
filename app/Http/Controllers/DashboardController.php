@@ -24,6 +24,7 @@ class DashboardController extends Controller
             $monthTo   = $now->copy()->endOfMonth()->toDateString();
             $yearFrom  = $now->copy()->startOfYear()->toDateString();
             $yearTo    = $now->copy()->endOfYear()->toDateString();
+            $today     = $now->toDateString();
 
             // ── Sales KPIs ────────────────────────────────────────────────────
             $totalSalesMonth = (float) SaleInvoice::whereBetween('invoice_date', [$monthFrom, $monthTo])
@@ -45,46 +46,80 @@ class DashboardController extends Controller
             $purchaseCount = (int) PurchaseInvoice::whereBetween('invoice_date', [$monthFrom, $monthTo])
                 ->whereNull('deleted_at')->count();
 
-            // ── Stock in hand ─────────────────────────────────────────────────
-            // Stock = purchased items (not soft-deleted) whose barcode
-            // does NOT appear in any sale invoice item (not soft-deleted).
-            // We also exclude items returned via purchase returns.
-            $soldBarcodes = SaleInvoiceItem::whereNotNull('barcode_number')
+            // ── Stock in hand (PARTIAL WEIGHT SUPPORT) ────────────────────────
+            //
+            // Gold is purchased in bulk and sold in chunks (e.g. buy 100gm, sell
+            // 35gm, 42gm separately). A purchase item is NOT fully consumed until
+            // the sum of sold weights equals the purchased weight.
+            //
+            // Algorithm:
+            //   1. Build sold_weight per barcode from sale_invoice_items
+            //   2. Build outbound_weight per barcode from active outbound consignments
+            //   3. Build returned_weight per barcode from purchase_return_items
+            //   4. For each purchase item: remaining = purchased - sold - outbound - returned
+            //   5. Items with remaining > 0 are in stock; sum their remaining weights
+            //
+            // This replaces the old binary "barcode in $soldBarcodes → exclude" logic.
+
+            // Step 1: sold weight per barcode (all time, not soft-deleted invoices)
+            $soldWeightByBarcode = SaleInvoiceItem::whereNotNull('barcode_number')
                 ->whereHas('saleInvoice', fn($q) => $q->whereNull('deleted_at'))
-                ->pluck('barcode_number')
-                ->filter()
-                ->unique()
+                ->selectRaw('barcode_number, SUM(gross_weight) as total_sold')
+                ->groupBy('barcode_number')
+                ->pluck('total_sold', 'barcode_number')
                 ->toArray();
 
-            $returnedBarcodes = \App\Models\PurchaseReturnItem::whereNotNull('barcode_number')
-                ->pluck('barcode_number')
-                ->filter()
-                ->unique()
+            // Step 2: outbound consignment weight per source_barcode (currently away)
+            $outboundWeightByBarcode = ConsignmentItem::where('item_status', 'in_stock')
+                ->whereHas('consignment', fn($q) => $q->where('direction', 'outbound'))
+                ->whereNotNull('source_barcode')
+                ->selectRaw('source_barcode, SUM(gross_weight) as total_outbound')
+                ->groupBy('source_barcode')
+                ->pluck('total_outbound', 'source_barcode')
                 ->toArray();
 
-            $outboundConsignedBarcodes = ConsignmentItem::where('item_status', 'in_stock')
-            ->whereHas('consignment', fn($q) => $q->where('direction', 'outbound'))
-            ->whereNotNull('source_barcode')
-            ->pluck('source_barcode')
-            ->filter()->unique()->toArray();
-
-            $excludedBarcodes = array_unique(array_merge($soldBarcodes, $returnedBarcodes, $outboundConsignedBarcodes));
-
-            $stockQuery = PurchaseInvoiceItem::whereHas('purchaseInvoice', fn($q) => $q->whereNull('deleted_at'));
-
-            if (!empty($excludedBarcodes)) {
-                $stockQuery->where(function ($q) use ($excludedBarcodes) {
-                    $q->whereNull('barcode_number')
-                      ->orWhereNotIn('barcode_number', $excludedBarcodes);
-                });
+            // Step 3: returned weight per barcode (purchase returns)
+            $returnedWeightByBarcode = [];
+            if (class_exists(\App\Models\PurchaseReturnItem::class)) {
+                $returnedWeightByBarcode = \App\Models\PurchaseReturnItem::whereNotNull('barcode_number')
+                    ->selectRaw('barcode_number, SUM(gross_weight) as total_returned')
+                    ->groupBy('barcode_number')
+                    ->pluck('total_returned', 'barcode_number')
+                    ->toArray();
             }
 
-            // Execute once, use collection for all four metrics
-            $stockItems    = $stockQuery->get(['gross_weight', 'purity_weight', 'item_total']);
-            $stockCount    = $stockItems->count();
-            $stockValue    = (float) $stockItems->sum('item_total');
-            $stockGrossWt  = (float) $stockItems->sum('gross_weight');
-            $stockPurityWt = (float) $stockItems->sum('purity_weight');
+            // Step 4: load all purchase items (not soft-deleted) and compute remaining
+            $allPurchaseItems = PurchaseInvoiceItem::whereHas(
+                'purchaseInvoice', fn($q) => $q->whereNull('deleted_at')
+            )->get(['barcode_number', 'gross_weight', 'purity_weight', 'item_total', 'material_type']);
+
+            $stockCount    = 0;
+            $stockValue    = 0.0;
+            $stockGrossWt  = 0.0;
+            $stockPurityWt = 0.0;
+
+            foreach ($allPurchaseItems as $item) {
+                $barcode     = $item->barcode_number;
+                $purchasedWt = (float) $item->gross_weight;
+
+                $soldWt     = $barcode ? (float) ($soldWeightByBarcode[$barcode]     ?? 0) : 0.0;
+                $outboundWt = $barcode ? (float) ($outboundWeightByBarcode[$barcode] ?? 0) : 0.0;
+                $returnedWt = $barcode ? (float) ($returnedWeightByBarcode[$barcode] ?? 0) : 0.0;
+
+                $remainingWt = $purchasedWt - $soldWt - $outboundWt - $returnedWt;
+
+                if ($remainingWt <= 0.0001) {
+                    continue; // fully consumed — not in stock
+                }
+
+                // Scale value/weight proportionally to remaining
+                $ratio = $purchasedWt > 0 ? $remainingWt / $purchasedWt : 1;
+
+                $stockCount++;
+                $stockGrossWt  += $remainingWt;
+                $stockPurityWt += (float) $item->purity_weight * $ratio;
+                $stockValue    += (float) $item->item_total    * $ratio;
+            }
 
             // ── Consignment overview ──────────────────────────────────────────
             $csgInStockCount  = (int)   ConsignmentItem::where('item_status', 'in_stock')->count();
@@ -95,12 +130,10 @@ class DashboardController extends Controller
 
             $activeConsignments = (int) Consignment::whereIn('status', ['active', 'partially_settled'])->count();
 
-            // Inbound pending = in_stock items from inbound consignments
             $csgInboundCount = (int) ConsignmentItem::where('item_status', 'in_stock')
                 ->whereHas('consignment', fn($q) => $q->where('direction', 'inbound'))
                 ->count();
 
-            // Outbound pending = in_stock items from outbound consignments
             $csgOutboundCount = (int) ConsignmentItem::where('item_status', 'in_stock')
                 ->whereHas('consignment', fn($q) => $q->where('direction', 'outbound'))
                 ->count();
@@ -166,12 +199,6 @@ class DashboardController extends Controller
 
     // =========================================================================
     // MONTHLY PROFIT
-    //
-    // Revenue = sum of net_amount_aed on sale invoices in the period.
-    // Cost    = per sale invoice item:
-    //             purchase_gold_rate_aed (field on sale invoice) × purity_weight
-    //           + purchase_making_rate_aed                       × gross_weight
-    // If those cost fields are 0 (not filled), cost = 0 and margin = 100%.
     // =========================================================================
 
     private function calcMonthlyProfit(string $from, string $to): array
@@ -195,7 +222,6 @@ class DashboardController extends Controller
             }
 
             $profit = $revenue - $cost;
-            // Margin as % of revenue (standard gross margin formula)
             $margin = $revenue > 0 ? round(($profit / $revenue) * 100, 1) : 0;
 
             return [
@@ -212,9 +238,7 @@ class DashboardController extends Controller
     }
 
     // =========================================================================
-    // RECEIVABLES — reads accounting_entries for all customer accounts.
-    // Net balance = SUM(debit) - SUM(credit) across both simple vouchers
-    // and complex accounting_entries rows.
+    // RECEIVABLES
     // =========================================================================
 
     private function calcReceivables(): array
@@ -244,8 +268,7 @@ class DashboardController extends Controller
     }
 
     // =========================================================================
-    // PAYABLES — reads accounting_entries for all vendor accounts.
-    // Net balance = SUM(credit) - SUM(debit).
+    // PAYABLES
     // =========================================================================
 
     private function calcPayables(): array
@@ -275,13 +298,7 @@ class DashboardController extends Controller
     }
 
     // =========================================================================
-    // ACCOUNT NET BALANCE — reads BOTH sources:
-    //   1. Simple vouchers (ac_dr_sid / ac_cr_sid, reference_type IS NULL)
-    //   2. AccountingEntry rows from all modules
-    //   3. Opening balance columns on the COA row (receivables / payables)
-    //
-    // $type = 'receivable' → DR - CR (positive = customer owes us)
-    // $type = 'payable'    → CR - DR (positive = we owe vendor)
+    // ACCOUNT NET BALANCE
     // =========================================================================
 
     private function accountNetBalance(int $accountId, string $type): float
@@ -289,18 +306,15 @@ class DashboardController extends Controller
         $account = ChartOfAccounts::find($accountId);
         if (!$account) return 0.0;
 
-        // Opening balances stored on the COA record
         $openingDr = (float) ($account->opening_debit  ?? $account->receivables ?? 0);
         $openingCr = (float) ($account->opening_credit ?? $account->payables    ?? 0);
 
-        // Simple manual vouchers
         $simpleDr = (float) Voucher::where('ac_dr_sid', $accountId)
             ->whereNull('reference_type')->whereNull('deleted_at')->sum('amount');
 
         $simpleCr = (float) Voucher::where('ac_cr_sid', $accountId)
             ->whereNull('reference_type')->whereNull('deleted_at')->sum('amount');
 
-        // Complex entries from purchase/sale/return modules
         $row = AccountingEntry::where('account_id', $accountId)
             ->whereHas('voucher', fn($q) => $q->whereNull('deleted_at'))
             ->selectRaw('COALESCE(SUM(debit),0) as total_dr, COALESCE(SUM(credit),0) as total_cr')
@@ -318,7 +332,7 @@ class DashboardController extends Controller
     }
 
     // =========================================================================
-    // MONTHLY TREND — last 6 calendar months for Chart.js bar chart
+    // MONTHLY TREND
     // =========================================================================
 
     private function buildMonthlyTrend(): array
@@ -353,7 +367,7 @@ class DashboardController extends Controller
     }
 
     // =========================================================================
-    // EMPTY DEFAULTS — view never crashes on DB error
+    // EMPTY DEFAULTS
     // =========================================================================
 
     private function emptyDefaults(): array
