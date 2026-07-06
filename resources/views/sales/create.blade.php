@@ -117,7 +117,6 @@
 
           </div>
 
-          {{-- =================== BARCODE SCANNER =================== --}}
           {{-- =================== BARCODE / NAME SCANNER =================== --}}
           <div class="card mb-3 border-primary shadow-sm">
             <div class="card-body py-2 bg-primary bg-opacity-10">
