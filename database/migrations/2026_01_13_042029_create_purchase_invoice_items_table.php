@@ -18,6 +18,7 @@ return new class extends Migration
             /* ================= PRODUCT ================= */
             $table->string('item_name')->nullable();
             $table->unsignedBigInteger('product_id')->nullable();
+            $table->string('image_path')->nullable();
             $table->unsignedBigInteger('variation_id')->nullable();
             $table->string('item_description')->nullable();
             $table->decimal('net_weight', 15, 4)->default(0);

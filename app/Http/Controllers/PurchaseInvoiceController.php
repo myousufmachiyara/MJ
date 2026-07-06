@@ -185,6 +185,10 @@ class PurchaseInvoiceController extends Controller
                 'barcode_number'   => $item->barcode_number,
                 'is_printed'       => $item->is_printed,
                 'product_id'       => $item->product_id,
+                // FIX (point 2): expose the item's own stored image (for custom/no-product items)
+                // so the edit view's JS can show it without relying solely on the product AJAX lookup.
+                'image_path'       => $item->image_path,
+                'image_url'        => $item->image_path ? Storage::url($item->image_path) : null,
                 'item_description' => $item->item_description,
                 'purity'           => $item->purity,
                 'net_weight'       => $item->net_weight,
@@ -934,16 +938,31 @@ class PurchaseInvoiceController extends Controller
             $vatAmount     = $taxableAmount * ($vatPercent / 100);
             $itemTotal     = $materialValue + $makingValue + $partsTotal + $vatAmount;
 
+            // FIX (point 2): preserve/derive the item's image.
+            // - On update (preservePrinted), keep the previously stored image_path
+            //   unless a new file is uploaded for this row.
+            // - On create/update, if items[N][image] is an uploaded file, store it
+            //   and use its path (covers custom items with no product_id).
             $existingBarcode   = $itemData['barcode_number'] ?? null;
             $wasAlreadyPrinted = false;
+            $imagePath         = null;
+
             if ($preservePrinted && $existingBarcode) {
-                $wasAlreadyPrinted = PurchaseInvoiceItem::where('barcode_number', $existingBarcode)
-                    ->value('is_printed') ?? false;
+                $existingItemRow = PurchaseInvoiceItem::where('barcode_number', $existingBarcode)->first();
+                if ($existingItemRow) {
+                    $wasAlreadyPrinted = (bool) $existingItemRow->is_printed;
+                    $imagePath         = $existingItemRow->image_path;
+                }
+            }
+
+            if (isset($itemData['image']) && $itemData['image'] instanceof \Illuminate\Http\UploadedFile) {
+                $imagePath = $itemData['image']->store('purchase_invoice_items', 'public');
             }
 
             $invoiceItem = $invoice->items()->create([
                 'item_name'        => $itemData['item_name']        ?? null,
                 'product_id'       => $itemData['product_id']       ?? null,
+                'image_path'       => $imagePath,
                 'item_description' => $itemData['item_description'] ?? null,
                 'net_weight'       => $netWeight,
                 'gross_weight'     => $grossWeight,
@@ -1068,6 +1087,7 @@ class PurchaseInvoiceController extends Controller
             'items'                  => 'required|array|min:1',
             'items.*.item_name'      => 'nullable|string|required_without:items.*.product_id',
             'items.*.product_id'     => 'nullable|exists:products,id|required_without:items.*.item_name',
+            'items.*.image'          => 'nullable|image|max:5120',
             'items.*.net_weight'     => 'required|numeric|min:0',
             'items.*.gross_weight'   => 'required|numeric|min:0',
             'items.*.purity'         => 'required|numeric|min:0|max:1',
@@ -1078,7 +1098,46 @@ class PurchaseInvoiceController extends Controller
             'material_received_by'   => 'nullable|required_if:payment_method,material+making cost|string',
             'cash_amount_paid'       => 'nullable|numeric|min:0',
             'making_amount_paid'     => 'nullable|numeric|min:0',
-            'making_payment_account' => 'nullable|string',
+            // FIX (point 1): require a valid Cash/Bank account whenever
+            // making_amount_paid > 0 under material+making cost, instead of
+            // silently reaching an "Accounting imbalance" exception later.
+            'making_payment_account' => [
+                'nullable',
+                'string',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->payment_method !== 'material+making cost') {
+                        return;
+                    }
+
+                    $paidRaw = $request->making_amount_paid;
+                    $paid    = ($paidRaw !== null && $paidRaw !== '') ? (float) $paidRaw : 0.0;
+
+                    if ($paid <= 0) {
+                        return; // fully payable to vendor — no account needed
+                    }
+
+                    if (empty($value)) {
+                        $fail('Please select a Cash/Bank account — making charges paid now is greater than 0.');
+                        return;
+                    }
+
+                    if ($value !== 'cash' && !str_starts_with($value, 'bank_')) {
+                        $fail('Invalid Cash/Bank account selected.');
+                        return;
+                    }
+
+                    if (str_starts_with($value, 'bank_')) {
+                        $accountId = (int) str_replace('bank_', '', $value);
+                        $exists = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])
+                            ->where('id', $accountId)
+                            ->exists();
+
+                        if (!$exists) {
+                            $fail('Selected Cash/Bank account is invalid.');
+                        }
+                    }
+                },
+            ],
         ]);
     }
 
@@ -1093,9 +1152,9 @@ class PurchaseInvoiceController extends Controller
             }
             return $account->id;
         };
-
+ 
         $isMaterial = str_contains($invoice->payment_method, 'material');
-
+ 
         $voucher = Voucher::create([
             'voucher_no'     => Voucher::generateVoucherNo('purchase'),
             'voucher_type'   => 'purchase',
@@ -1106,76 +1165,67 @@ class PurchaseInvoiceController extends Controller
             'ac_cr_sid'      => null,
             'amount'         => null,
             'remarks'        => 'Purchase Invoice #' . $invoice->invoice_no
-                                . ($isMaterial ? ' [Metal Sale Fixing + Currency Payment]' : ''),
+                                . ($isMaterial ? ' [Material + Making Cost]' : ''),
             'created_by'     => auth()->id(),
         ]);
-
+ 
         $entries = [];
-
-        // ── DEBIT entries (expense/asset side) ───────────────────────────────
-        $goldDebit    = round($totals['gold_material']    + $totals['gold_parts'],    2);
-        $diamondDebit = round($totals['diamond_material'] + $totals['diamond_parts'], 2);
-
-        if ($goldDebit > 0) {
+ 
+        // ── DEBIT entries (what we received — assets/expenses increase) ───────
+        $goldCost    = round($totals['gold_material']    + $totals['gold_parts'],    2);
+        $diamondCost = round($totals['diamond_material'] + $totals['diamond_parts'], 2);
+ 
+        if ($goldCost > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('510001'),
-                'debit'      => $goldDebit,
+                'account_id' => $acct('104001'),
+                'debit'      => $goldCost,
                 'credit'     => 0,
-                'narration'  => 'Gold material + parts purchase — Inv# ' . $invoice->invoice_no,
+                'narration'  => 'Gold inventory received — Inv# ' . $invoice->invoice_no,
             ];
         }
-
-        if ($diamondDebit > 0) {
+ 
+        if ($diamondCost > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('510002'),
-                'debit'      => $diamondDebit,
+                'account_id' => $acct('104002'),
+                'debit'      => $diamondCost,
                 'credit'     => 0,
-                'narration'  => 'Diamond material + parts purchase — Inv# ' . $invoice->invoice_no,
+                'narration'  => 'Diamond inventory received — Inv# ' . $invoice->invoice_no,
             ];
         }
-
+ 
         if ($totals['making'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('510003'),
+                'account_id' => $acct('501001'),
                 'debit'      => round($totals['making'], 2),
                 'credit'     => 0,
-                'narration'  => 'Making charges — Inv# ' . $invoice->invoice_no,
+                'narration'  => 'Making charges expense — Inv# ' . $invoice->invoice_no,
             ];
         }
-
+ 
         if ($totals['vat'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('105001'),
+                'account_id' => $acct('207001'),
                 'debit'      => round($totals['vat'], 2),
                 'credit'     => 0,
-                'narration'  => 'Input VAT recoverable — Inv# ' . $invoice->invoice_no,
+                'narration'  => 'Input VAT on purchase — Inv# ' . $invoice->invoice_no,
             ];
         }
-
+ 
         $totalDebit = round(collect($entries)->sum('debit'), 2);
-
+ 
         if ($totalDebit <= 0) {
             throw new \Exception(
                 "Invoice #{$invoice->invoice_no} has zero accounting value — no entries created."
             );
         }
-
-        // ── CREDIT entries (payment side) ─────────────────────────────────────
-        //
-        // credit          → nothing paid → full amount CR Vendor AP
-        // cash            → amount paid CR Cash in Hand; remainder CR Vendor AP
-        // cheque          → amount paid CR Bank; remainder CR Vendor AP
-        // bank_transfer   → amount paid CR Transfer-From Bank; remainder CR Vendor AP
-        // material+making → material value CR Gold Inventory (+ offsetting vendor DR);
-        //                     making: amount paid CR Cash/Bank, remainder CR Vendor AP
-        // ─────────────────────────────────────────────────────────────────────
-
+ 
+        // ── CREDIT entries (how we paid / what we owe) ────────────────────────
         switch ($invoice->payment_method) {
-
+ 
             case 'credit':
                 $entries[] = [
                     'voucher_id' => $voucher->id,
@@ -1185,14 +1235,14 @@ class PurchaseInvoiceController extends Controller
                     'narration'  => 'Full invoice payable to vendor (credit purchase) — Inv# ' . $invoice->invoice_no,
                 ];
                 break;
-
+ 
             case 'cash':
                 $paid = $request->cash_amount_paid !== null && $request->cash_amount_paid !== ''
                     ? round((float) $request->cash_amount_paid, 2)
                     : $totalDebit;
-
-                $paid = min($paid, $totalDebit); // never pay more than invoice value
-
+ 
+                $paid = min($paid, $totalDebit);
+ 
                 if ($paid > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
@@ -1202,7 +1252,7 @@ class PurchaseInvoiceController extends Controller
                         'narration'  => 'Cash paid to vendor — Inv# ' . $invoice->invoice_no,
                     ];
                 }
-
+ 
                 $remaining = round($totalDebit - $paid, 2);
                 if ($remaining > 0) {
                     $entries[] = [
@@ -1210,34 +1260,34 @@ class PurchaseInvoiceController extends Controller
                         'account_id' => $invoice->vendor_id,
                         'debit'      => 0,
                         'credit'     => $remaining,
-                        'narration'  => 'Balance payable to vendor (partial cash payment) — Inv# ' . $invoice->invoice_no,
+                        'narration'  => 'Balance payable to vendor (partial cash) — Inv# ' . $invoice->invoice_no,
                     ];
                 }
                 break;
-
+ 
             case 'cheque':
                 if (!$invoice->bank_name) {
                     throw new \Exception(
                         'Bank account required for cheque payment (Inv# ' . $invoice->invoice_no . ').'
                     );
                 }
-
+ 
                 $paid = $invoice->cheque_amount > 0
                     ? round((float) $invoice->cheque_amount, 2)
                     : $totalDebit;
-
+ 
                 $paid = min($paid, $totalDebit);
-
+ 
                 if ($paid > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
                         'account_id' => $invoice->bank_name,
                         'debit'      => 0,
                         'credit'     => $paid,
-                        'narration'  => 'Cheque #' . $invoice->cheque_no . ' paid to vendor — Inv# ' . $invoice->invoice_no,
+                        'narration'  => 'Cheque #' . $invoice->cheque_no . ' issued to vendor — Inv# ' . $invoice->invoice_no,
                     ];
                 }
-
+ 
                 $remaining = round($totalDebit - $paid, 2);
                 if ($remaining > 0) {
                     $entries[] = [
@@ -1245,24 +1295,24 @@ class PurchaseInvoiceController extends Controller
                         'account_id' => $invoice->vendor_id,
                         'debit'      => 0,
                         'credit'     => $remaining,
-                        'narration'  => 'Balance payable to vendor (partial cheque payment) — Inv# ' . $invoice->invoice_no,
+                        'narration'  => 'Balance payable to vendor (partial cheque) — Inv# ' . $invoice->invoice_no,
                     ];
                 }
                 break;
-
+ 
             case 'bank_transfer':
                 if (!$invoice->transfer_from_bank) {
                     throw new \Exception(
-                        'Transfer-from bank required for bank transfer (Inv# ' . $invoice->invoice_no . ').'
+                        'Transfer bank required for bank transfer (Inv# ' . $invoice->invoice_no . ').'
                     );
                 }
-
+ 
                 $paid = $invoice->transfer_amount > 0
                     ? round((float) $invoice->transfer_amount, 2)
                     : $totalDebit;
-
+ 
                 $paid = min($paid, $totalDebit);
-
+ 
                 if ($paid > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
@@ -1270,10 +1320,10 @@ class PurchaseInvoiceController extends Controller
                         'debit'      => 0,
                         'credit'     => $paid,
                         'narration'  => 'Bank transfer Ref# ' . $invoice->transaction_id
-                                        . ' paid to vendor — Inv# ' . $invoice->invoice_no,
+                                        . ' to vendor — Inv# ' . $invoice->invoice_no,
                     ];
                 }
-
+ 
                 $remaining = round($totalDebit - $paid, 2);
                 if ($remaining > 0) {
                     $entries[] = [
@@ -1281,126 +1331,119 @@ class PurchaseInvoiceController extends Controller
                         'account_id' => $invoice->vendor_id,
                         'debit'      => 0,
                         'credit'     => $remaining,
-                        'narration'  => 'Balance payable to vendor (partial bank transfer) — Inv# ' . $invoice->invoice_no,
+                        'narration'  => 'Balance payable to vendor (partial transfer) — Inv# ' . $invoice->invoice_no,
                     ];
                 }
                 break;
-
+ 
             case 'material+making cost':
-                // ── Material portion: settled by gold inventory handover ──
-                // DR Vendor AP (metal fixing) + CR Gold Inventory — self-balancing pair
+                // Vendor supplies raw material against the gold value.
+                // DR Gold Inventory (materialCredit) — already done above in debit entries.
+                // CR Gold Inventory (materialCredit) — cancel out the gold asset (exchanged back).
+                // CR Vendor AP      (currencyTotal)  — making + parts + VAT still owed.
+                // If making_amount_paid > 0 → CR Cash/Bank immediately.
+ 
                 $materialCredit = round($totals['gold_material'] + $totals['diamond_material'], 2);
-
-                // ── Currency portion: making + parts + VAT ──
-                $currencyTotal = $totalDebit; // full expense total, paired against materialCredit DR
-
-                // making/parts/VAT actually paid now (optional)
+                $currencyTotal  = round($totalDebit - $materialCredit, 2);
+ 
                 $makingPaidRaw = $request->making_amount_paid;
                 $makingPaid    = ($makingPaidRaw !== null && $makingPaidRaw !== '')
                     ? round((float) $makingPaidRaw, 2)
                     : 0.0;
-
-                // Currency net payable (before considering any payment) = making + parts + VAT
-                $currencyNetPayable = round($currencyTotal - $materialCredit, 2);
-                $makingPaid = min($makingPaid, $currencyNetPayable); // can't pay more than owed
-
+ 
+                $makingPaid = min($makingPaid, max(0, $currencyTotal));
+ 
+                // CR Gold/Diamond Inventory — material exchanged with vendor
                 if ($materialCredit > 0) {
-                    $entries[] = [
-                        'voucher_id' => $voucher->id,
-                        'account_id' => $invoice->vendor_id,
-                        'debit'      => $materialCredit,
-                        'credit'     => 0,
-                        'narration'  => 'Metal sale fixing — vendor AP settled by gold inventory handover'
-                                        . ' (' . ($invoice->material_given_by ?? 'vendor') . ')'
-                                        . ' — Inv# ' . $invoice->invoice_no,
-                    ];
                     $entries[] = [
                         'voucher_id' => $voucher->id,
                         'account_id' => $acct('104001'),
                         'debit'      => 0,
                         'credit'     => $materialCredit,
-                        'narration'  => 'Gold inventory issued to vendor as material payment — Inv# ' . $invoice->invoice_no,
+                        'narration'  => 'Raw material given to vendor'
+                                        . ' (' . ($invoice->material_given_by ?? 'us') . ')'
+                                        . ' — Inv# ' . $invoice->invoice_no,
                     ];
                 }
-
-                // Vendor AP credit for the full currency total (offsets the materialCredit DR above)
-                if ($currencyTotal > 0) {
+ 
+                // CR Vendor AP — currency portion (making + parts + VAT minus any immediate payment)
+                $currencyRemaining = round($currencyTotal - $makingPaid, 2);
+                if ($currencyRemaining > 0) {
                     $entries[] = [
                         'voucher_id' => $voucher->id,
                         'account_id' => $invoice->vendor_id,
                         'debit'      => 0,
-                        'credit'     => $currencyTotal,
-                        'narration'  => 'Currency payable — MC + parts + VAT — Inv# ' . $invoice->invoice_no,
+                        'credit'     => $currencyRemaining,
+                        'narration'  => 'Making + parts + VAT payable to vendor — Inv# ' . $invoice->invoice_no,
                     ];
                 }
-
-                // If making/parts/VAT partly or fully paid now, reduce vendor AP and debit Cash/Bank
+ 
+                // CR Cash/Bank — making charges paid immediately if making_amount_paid > 0
                 if ($makingPaid > 0) {
                     $paymentAccountId = null;
                     $paymentLabel     = '';
-
+ 
+                    // ── FIXED: no more hardcoded 'cash' value.
+                    //    All accounts (including cash accounts) now come through
+                    //    as bank_N from the blade select, where N is the COA id.
+                    //    The old 'cash' literal is kept as a legacy fallback only.
                     if ($request->making_payment_account === 'cash') {
-                        $paymentAccountId = $acct('101001');
+                        // Legacy fallback — find the first cash account in COA
+                        $cashAcc          = ChartOfAccounts::where('account_type', 'cash')->first();
+                        $paymentAccountId = $cashAcc?->id;
                         $paymentLabel     = 'Cash in Hand';
                     } elseif (str_starts_with((string) $request->making_payment_account, 'bank_')) {
-                        $bankId = (int) str_replace('bank_', '', $request->making_payment_account);
-                        $paymentAccountId = $bankId;
-                        $paymentLabel     = 'Bank';
+                        $paymentAccountId = (int) str_replace('bank_', '', $request->making_payment_account);
+                        $paymentLabel     = ChartOfAccounts::find($paymentAccountId)?->name ?? 'Bank/Cash';
                     }
-
-                    if ($paymentAccountId) {
-                        // Vendor AP is debited (reducing the payable)
-                        $entries[] = [
-                            'voucher_id' => $voucher->id,
-                            'account_id' => $invoice->vendor_id,
-                            'debit'      => $makingPaid,
-                            'credit'     => 0,
-                            'narration'  => 'Making charges paid now to vendor (' . $paymentLabel . ') — Inv# ' . $invoice->invoice_no,
-                        ];
-                        // Cash/Bank is credited (cash going out)
-                        $entries[] = [
-                            'voucher_id' => $voucher->id,
-                            'account_id' => $paymentAccountId,
-                            'debit'      => 0,
-                            'credit'     => $makingPaid,
-                            'narration'  => $paymentLabel . ' paid for making charges — Inv# ' . $invoice->invoice_no,
-                        ];
-                        // Wait — this introduces a 2x makingPaid on credit side. Fix below.
+ 
+                    // FIX (point 1): validateInvoice() now guarantees a valid account
+                    // exists whenever $makingPaid > 0, so this should never be null here.
+                    // Kept as a hard safety net instead of silently dropping the entry
+                    // (which previously caused a debit/credit imbalance).
+                    if (!$paymentAccountId) {
+                        throw new \Exception(
+                            'Cash/Bank account for making charges paid could not be resolved — Inv# ' . $invoice->invoice_no
+                        );
                     }
+ 
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $paymentAccountId,
+                        'debit'      => 0,
+                        'credit'     => $makingPaid,
+                        'narration'  => $paymentLabel . ' paid for making charges — Inv# ' . $invoice->invoice_no,
+                    ];
                 }
                 break;
-
+ 
             default:
                 throw new \Exception('Unrecognised payment method: "' . $invoice->payment_method . '"');
         }
-
+ 
         foreach ($entries as $entry) {
             AccountingEntry::create($entry);
         }
-
+ 
         // ── Balance check ─────────────────────────────────────────────────────
         $sumDebits  = round(collect($entries)->sum('debit'),  2);
         $sumCredits = round(collect($entries)->sum('credit'), 2);
-
+ 
         if ($sumDebits !== $sumCredits) {
             throw new \Exception(
-                "Accounting imbalance on Invoice #{$invoice->invoice_no}: " .
+                "Accounting imbalance on Purchase Invoice #{$invoice->invoice_no}: " .
                 "Debits {$sumDebits} ≠ Credits {$sumCredits}."
             );
         }
-
+ 
         Log::info('Purchase accounting entries created', [
-            'invoice_no'               => $invoice->invoice_no,
-            'voucher_no'               => $voucher->voucher_no,
-            'payment_method'           => $invoice->payment_method,
-            'dr_510001_gold'           => $goldDebit,
-            'dr_510002_diamond'        => $diamondDebit,
-            'dr_510003_making'         => round($totals['making'], 2),
-            'dr_105001_vat'            => round($totals['vat'], 2),
-            'total_debit'              => $sumDebits,
-            'total_credit'             => $sumCredits,
+            'invoice_no'     => $invoice->invoice_no,
+            'voucher_no'     => $voucher->voucher_no,
+            'payment_method' => $invoice->payment_method,
+            'total_debit'    => $sumDebits,
+            'total_credit'   => $sumCredits,
         ]);
-
+ 
         return $voucher;
     }
 

@@ -107,9 +107,7 @@
                     <th width="10%" rowspan="2">Item Name</th>
                     <th width="10%" rowspan="2">Item Description</th>
                     <th width="6%" rowspan="2">Purity</th>
-                    {{-- Base Gross Wt: user-entered value, never auto-modified --}}
                     <th rowspan="2">Net Wt<br><small class="text-muted">(User Input)</small></th>
-                    {{-- Gross Wt: auto-calculated = base + CTS contributions --}}
                     <th rowspan="2">Gold Gross Wt<br><small class="text-muted">(Calculated)</small></th>
                     <th rowspan="2">Purity Wt</th>
                     <th rowspan="2">995</th>
@@ -120,6 +118,7 @@
                     <th rowspan="2">VAT %</th>
                     <th rowspan="2">VAT Amt</th>
                     <th rowspan="2">Gross Total</th>
+                    <th rowspan="2" width="4%">Img</th>
                     <th width="5%" rowspan="2">Action</th>
                   </tr>
                   <tr>
@@ -134,6 +133,7 @@
                       <div class="product-wrapper">
                         <input type="text" name="items[0][item_name]" class="form-control item-name-input" placeholder="Product Name">
                         <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
+                        <input type="file" name="items[0][image]" class="form-control form-control-sm item-image-input mt-1" accept="image/*">
                       </div>
                     </td>
                     <td><input type="text" name="items[0][item_description]" class="form-control" required></td>
@@ -144,9 +144,7 @@
                         @endforeach
                       </select>
                     </td>
-                    {{-- Base Gross Wt: editable by user --}}
                     <td><input type="number" name="items[0][net_weight]" step="any" value="0" class="form-control net-weight"></td>
-                    {{-- Gross Wt: readonly, auto-calculated --}}
                     <td><input type="number" name="items[0][gross_weight]" step="any" value="0" class="form-control gross-weight bg-light text-primary fw-bold" readonly></td>
                     <td><input type="number" name="items[0][purity_weight]" step="any" value="0" class="form-control purity-weight" readonly></td>
                     <td><input type="number" name="items[0][995]" step="any" value="0" class="form-control col-995" readonly></td>
@@ -163,6 +161,7 @@
                     <td><input type="number" name="items[0][vat_percent]" class="form-control vat-percent" step="any" value="0"></td>
                     <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
                     <td><input type="number" class="form-control item-total" readonly></td>
+                    <td class="item-img-cell" style="text-align:center;vertical-align:middle;padding:4px;"></td>
                     <td>
                       <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
                       <button type="button" class="btn btn-sm btn-primary toggle-parts"> <i class="fas fa-wrench"></i> </button>
@@ -265,7 +264,6 @@
             </div>
           </div>
 
-          {{-- ADDITIONAL FIELDS (Hidden/Shown via JS) --}}
           <div class="row mb-3 d-none" id="received_by_box">
             <div class="col-md-2">
               <label>Received By</label>
@@ -332,10 +330,10 @@
               <div class="col-md-2">
                   <label>Cash/Bank Account (for payment)</label>
                   <select name="making_payment_account" class="form-control select2-js">
-                      <option value="">None (fully payable)</option>
-                      @foreach ($banks as $bank)
-                          <option value="bank_{{ $bank->id }}">{{ $bank->name }}</option>
-                      @endforeach
+                    <option value="">None (fully payable)</option>
+                    @foreach ($banks as $account)
+                        <option value="bank_{{ $account->id }}">{{ $account->name }}</option>
+                    @endforeach
                   </select>
               </div>
               <div class="col-md-2 mt-3">
@@ -450,6 +448,33 @@
 
     $('.select2-js').select2({ width: '100%' });
 
+    // ================= PRODUCT IMAGE =================
+    const PRODUCT_IMG_BASE = '{{ url("/product") }}';
+
+    function showItemImage(row, imageUrl, productName) {
+        const cell = row.find('.item-img-cell');
+        if (!imageUrl) {
+            cell.html('');
+            return;
+        }
+        cell.html(
+            `<img src="${imageUrl}" alt="${productName || ''}" title="${productName || ''}"
+                  style="width:42px;height:42px;object-fit:cover;border-radius:6px;
+                         cursor:pointer;border:1px solid #dee2e6;"
+                  onclick="window.open('${imageUrl}','_blank')">`
+        );
+    }
+
+    function fetchAndShowImage(row, productId) {
+        if (!productId) { row.find('.item-img-cell').html(''); return; }
+        $.ajax({
+            url: PRODUCT_IMG_BASE + '/' + productId + '/image',
+            method: 'GET',
+            success: function(data) { showItemImage(row, data.image_url || null, data.name || ''); },
+            error:   function()     { row.find('.item-img-cell').html(''); }
+        });
+    }
+
     // ================= ROW MANAGEMENT =================
     function updateRowIndexes() {
         $('#PurchaseTable tr.item-row').each(function(i) {
@@ -483,6 +508,7 @@
                 <div class="product-wrapper">
                     <input type="text" name="items[${nextIndex}][item_name]" class="form-control item-name-input" placeholder="Product Name">
                     <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
+                    <input type="file" name="items[${nextIndex}][image]" class="form-control form-control-sm item-image-input mt-1" accept="image/*">
                 </div>
             </td>
             <td><input type="text" name="items[${nextIndex}][item_description]" class="form-control" required></td>
@@ -510,6 +536,7 @@
             <td><input type="number" name="items[${nextIndex}][vat_percent]" class="form-control vat-percent" step="any" value="0"></td>
             <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
             <td><input type="number" class="form-control item-total" readonly></td>
+            <td class="item-img-cell" style="text-align:center;vertical-align:middle;padding:4px;"></td>
             <td>
                 <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
                 <button type="button" class="btn btn-sm btn-primary toggle-parts"><i class="fas fa-wrench"></i></button>
@@ -649,17 +676,21 @@
                 }
                 variationSelect.html(options).trigger('change');
             });
+
+        // Load product image for this item row (only main item rows, not part rows)
+        const itemRow = row.closest('tr.item-row');
+        if (itemRow.length) {
+            fetchAndShowImage(itemRow, productId);
+        }
     });
 
     // ================= CALCULATIONS =================
 
-    // User types into Base Gross Wt — recalc gross wt + all row values
     $(document).on('input', '.net-weight', function() {
         const itemRow = $(this).closest('tr.item-row');
         recalcItemGrossWeight(itemRow);
     });
 
-    // Purity or other item fields changed — re-derive gross wt (purity affects the formula) then recalc row
     $(document).on('input change', '.purity, .making-rate, .vat-percent, .material-type, #gold_rate_aed, #diamond_rate_aed', function() {
         const row = $(this).closest('tr.item-row');
         if (row.length) {
@@ -668,26 +699,6 @@
         calculateTotals();
     });
 
-    /**
-     * FIX: Selects the <option> in a Purity <select> whose numeric value is
-     * closest to the given raw value (string or number), instead of relying
-     * on jQuery's .val() exact-string match.
-     *
-     * WHY THIS WAS NEEDED:
-     * The Purity <select> options render their `value` attribute straight
-     * from the `purities` DB column (e.g. "0.7500" if stored as decimal(8,4)).
-     * When importing from Excel/CSV, SheetJS auto-detects numeric cells and
-     * hands back a JS number (0.75), which jQuery's .val(0.75) stringifies to
-     * "0.75" — this does NOT exact-match an option value of "0.7500", so the
-     * select silently fails to change and keeps its default (wrong) option.
-     * Every downstream calc (purity weight, 995, material value) then used
-     * the wrong purity for imported rows.
-     *
-     * This function compares parsed floats instead of raw strings, so
-     * "0.75", "0.7500", 0.75, and 0.7500000001 all match the same option.
-     *
-     * Returns true if a match was selected, false otherwise.
-     */
     function setPurityDropdown(selectEl, rawValue) {
         const target = parseFloat(rawValue);
         if (isNaN(target)) return false;
@@ -698,24 +709,13 @@
             if (!isNaN(optVal) && Math.abs(optVal - target) < 0.0005) {
                 selectEl.val($(this).val());
                 matched = true;
-                return false; // break out of .each
+                return false;
             }
         });
 
         return matched;
     }
 
-    /**
-     * Derives the calculated Gross Wt from Base Gross Wt and writes it to the readonly column.
-     *
-     * Base Gross Wt (.net-weight) — user input, never auto-modified.
-     * Gross Wt      (.gross-weight)      — readonly, computed here.
-     *
-     * Formula:
-     *   Gold Gross Wt = Net Wt + (diamondCTS / 5) + (stoneCTS / 5)
-     *
-     * No parts: Gold Gross Wt = Net Wt.
-     */
     function recalcItemGrossWeight(itemRow) {
         if (!itemRow || !itemRow.length) return;
 
@@ -731,23 +731,13 @@
             totalStoneCTS   += parseFloat($(this).find('.part-stone-qty').val()) || 0;
         });
 
-        // Gold Gross Wt = Net Wt + (diamondCTS / 5) + (stoneCTS / 5)
         let newGross = baseGross + (totalDiamondCTS / 5) + (totalStoneCTS / 5);
-
-        // Gross Wt is readonly so .val() does not trigger any input event — no guard needed
         itemRow.find('.gross-weight').val(newGross.toFixed(4));
 
         calculateRow(itemRow);
         calculateTotals();
     }
 
-    /**
-     * Calculates all derived fields for a single item row using the computed Gross Wt.
-     *
-     * Net Wt  = gross_wt x purity
-     * Making  = making_rate x gross_wt  (Gold)
-     *         = making_rate x net_wt    (Diamond)
-     */
     function calculateRow(row) {
         const purity       = parseFloat(row.find('.purity').val())       || 0;
         const gross        = parseFloat(row.find('.gross-weight').val())  || 0;
@@ -761,13 +751,9 @@
             : parseFloat($('#diamond_rate_aed').val());
         rate = rate || 0;
 
-        // Purity Wt = purity % x Net Wt (user-entered), NOT gross wt
         const netWt  = userNetWt * purity;
         const col995 = netWt / 0.995;
-
-        // Making Value = Making Rate x Net Wt (user-entered) for both Gold and Diamond
         const makingValue = userNetWt * makingRate;
-
         const materialValue = rate * netWt;
 
         let partsTotal = 0;
@@ -775,12 +761,11 @@
             partsTotal += parseFloat($(this).find('.part-total').val()) || 0;
         });
 
-        // AFTER
-        const taxableAmount = makingValue;                          // MC only — no parts
+        const taxableAmount = makingValue;
         const vatAmount     = taxableAmount * vatPercent / 100;
         const itemTotal     = materialValue + makingValue + partsTotal + vatAmount;
 
-        row.find('.taxable-amount').val(taxableAmount.toFixed(4));  // shows making only
+        row.find('.taxable-amount').val(taxableAmount.toFixed(4));
         row.find('.vat-amount').val(vatAmount.toFixed(4));
         row.find('.item-total').val(itemTotal.toFixed(4));
         row.find('.purity-weight').val(netWt.toFixed(4));
@@ -792,7 +777,7 @@
     function calculateTotals() {
         let sumNetWt        = 0;
         let sum995          = 0;
-        let sumMakingValue  = 0;  // making only (no parts)
+        let sumMakingValue  = 0;
         let sumMaterial     = 0;
         let sumVAT          = 0;
         let totalStoneQty   = 0;
@@ -800,7 +785,7 @@
         let totalDiamondCTS = 0;
         let totalDiamondVal = 0;
         let totalStoneVal   = 0;
-        let sumItemTotal    = 0;  // Σ item_total = net amount
+        let sumItemTotal    = 0;
 
         $('#PurchaseTable tr.item-row').each(function () {
             const itemRow      = $(this);
@@ -810,12 +795,11 @@
 
             sumNetWt       += netWtVal;
             sum995         += parseFloat(itemRow.find('.col-995').val())        || 0;
-            sumMakingValue += parseFloat(itemRow.find('.making-value').val())   || 0;  // making only
+            sumMakingValue += parseFloat(itemRow.find('.making-value').val())   || 0;
             sumMaterial    += parseFloat(itemRow.find('.material-value').val()) || 0;
             sumVAT         += parseFloat(itemRow.find('.vat-amount').val())     || 0;
             sumItemTotal   += parseFloat(itemRow.find('.item-total').val())     || 0;
 
-            // Sum diamond CTS/value and stone qty/value from all parts
             itemRow.next('.parts-row').find('.part-item-row').each(function () {
                 const diaQty    = parseFloat($(this).find('.part-qty').val())        || 0;
                 const diaRate   = parseFloat($(this).find('.part-rate').val())       || 0;
@@ -833,7 +817,7 @@
             }
         });
 
-        const netTotal = sumItemTotal;  // material + making + parts + vat
+        const netTotal = sumItemTotal;
 
         $('#sum_gold_gross_weight').val(sumGoldGross.toFixed(4));
         $('#sum_diamond_cts').val(totalDiamondCTS.toFixed(4));
@@ -858,7 +842,7 @@
             $('input[name="material_weight"]').val(sum995.toFixed(4));
             $('input[name="material_purity"]').val(sumNetWt.toFixed(4));
             $('input[name="material_value"]').val(sumMaterial.toFixed(4));
-            $('input[name="making_charges"]').val(sumMakingValue.toFixed(4));  // making only
+            $('input[name="making_charges"]').val(sumMakingValue.toFixed(4));
         }
     }
 
@@ -874,7 +858,6 @@
         const goldAedOunceFinal = parseFloat($('#gold_rate_aed_ounce').val()) || 0;
         $('#gold_rate_aed').val((goldAedOunceFinal / TROY_OUNCE_TO_GRAM).toFixed(4));
 
-        // Diamond: AED/Ct entered directly — USD/Ct converts via exchange rate only, no gram division
         if (id === 'diamond_rate_usd' || id === 'exchange_rate') {
             const diaUsd = parseFloat($('#diamond_rate_usd').val()) || 0;
             $('#diamond_rate_aed').val((diaUsd * exRate).toFixed(4));
@@ -917,9 +900,6 @@
         const file = e.target.files[0];
         if (!file) return;
 
-        // FIX: collect rows whose Purity value from the sheet doesn't match
-        // any option in the Purity dropdown, so we can warn the user instead
-        // of silently importing the wrong purity.
         const unmatchedPurityRows = [];
 
         const reader = new FileReader();
@@ -946,10 +926,6 @@
                     currentItemRow.find('.item-name-input').val(row['Item Name']);
                     currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
 
-                    // FIX: use numeric-match helper instead of `.val(row['Purity'] || '0.92')`,
-                    // which failed to select the correct <option> whenever the sheet's
-                    // numeric precision (e.g. 0.75) didn't exactly string-match the
-                    // option's DB-formatted value attribute (e.g. "0.7500").
                     const purityRaw = row['Purity'] !== undefined && row['Purity'] !== ''
                         ? row['Purity']
                         : 0.92;
@@ -958,7 +934,6 @@
                         unmatchedPurityRows.push({ item: row['Item Name'], purity: purityRaw });
                     }
 
-                    // Set base gross wt — calculated gross wt will be derived by recalcItemGrossWeight
                     currentItemRow.find('.net-weight').val(parseFloat(row['Gross Wt']) || 0);
                     currentItemRow.find('.making-rate').val(row['Making Rate'] || 0);
                     currentItemRow.find('.material-type').val((row['Material'] || 'gold').toLowerCase());
@@ -981,14 +956,12 @@
                     currentPartRow.find('.part-stone-rate').val(row['Stone Rate'] || 0);
                     currentPartRow.find('.part-cert-charges').val(row['Cert. Charges'] || 0);
 
-                    currentPartRow.find('.part-qty').trigger('input');  // fires the calculation listener which reads all fields including cert charges
+                    currentPartRow.find('.part-qty').trigger('input');
                 }
             });
 
             calculateTotals();
 
-            // FIX: warn about any rows where the imported Purity had no matching
-            // dropdown option, instead of silently defaulting to the wrong purity.
             if (unmatchedPurityRows.length > 0) {
                 const list = unmatchedPurityRows
                     .map(r => `- ${r.item}: ${r.purity}`)

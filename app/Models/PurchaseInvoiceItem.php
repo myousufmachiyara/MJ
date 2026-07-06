@@ -10,6 +10,7 @@ class PurchaseInvoiceItem extends Model
         'purchase_invoice_id',
         'item_name',
         'product_id',
+        'image_path',
         'variation_id',
         'item_description',
         'net_weight',

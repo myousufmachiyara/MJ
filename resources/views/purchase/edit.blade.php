@@ -77,7 +77,6 @@
               </select>
             </div>
 
-            {{-- Gold Rates --}}
             <div class="col-12 col-md-2">
               <label>Gold Rate (USD / <b>Ounce</b>)</label>
               <input type="number" step="any" id="gold_rate_usd" name="gold_rate_usd"
@@ -97,7 +96,6 @@
               <small class="text-danger fw-bold">Used for calculations</small>
             </div>
 
-            {{-- Diamond Rates --}}
             <div class="col-12 col-md-2 mt-2">
               <label>Diamond Rate (USD) / Ct.</label>
               <input type="number" step="any" id="diamond_rate_usd" name="diamond_rate_usd"
@@ -126,7 +124,7 @@
               @endif
             </div>
 
-          </div>{{-- end header row --}}
+          </div>
 
           {{-- ===================== ITEMS TABLE ===================== --}}
           <section class="card">
@@ -160,6 +158,7 @@
                     <th rowspan="2">VAT %</th>
                     <th rowspan="2">VAT Amt</th>
                     <th rowspan="2">Gross Total</th>
+                    <th rowspan="2" width="4%">Img</th>
                     <th width="6%" rowspan="2">Action</th>
                   </tr>
                   <tr>
@@ -243,7 +242,6 @@
             </div>
           </div>
 
-          {{-- RECEIVED BY --}}
           <div class="row mb-3 d-none" id="received_by_box">
             <div class="col-md-2">
               <label>Received By</label>
@@ -251,7 +249,6 @@
             </div>
           </div>
 
-          {{-- CASH FIELDS --}}
           <div class="row mb-3 d-none" id="cash_fields">
             <div class="col-md-2">
               <label>Amount Paid (Cash)</label>
@@ -262,7 +259,6 @@
             </div>
           </div>
 
-          {{-- CHEQUE FIELDS --}}
           <div class="row mb-3 d-none" id="cheque_fields">
             <div class="col-md-2">
               <label>Bank Name</label>
@@ -290,7 +286,6 @@
             </div>
           </div>
 
-          {{-- MATERIAL + MAKING COST FIELDS --}}
           <div class="row mb-3 d-none" id="material_fields">
             <div class="col-md-2">
               <label>Raw Material Weight Given</label>
@@ -318,11 +313,13 @@
             <div class="col-md-2">
               <label>Cash/Bank Account (for payment)</label>
               <select name="making_payment_account" class="form-control select2-js">
-                <option value="">None (fully payable)</option>
-                <option value="cash">Cash in Hand</option>
-                @foreach ($banks as $bank)
-                  <option value="bank_{{ $bank->id }}">{{ $bank->name }}</option>
-                @endforeach
+                  <option value="">None (fully payable)</option>
+                  @foreach ($banks as $account)
+                      <option value="bank_{{ $account->id }}"
+                          {{ old('making_payment_account', $purchaseInvoice->making_payment_account ?? '') == 'bank_'.$account->id ? 'selected' : '' }}>
+                          {{ $account->name }}
+                      </option>
+                  @endforeach
               </select>
             </div>
             <div class="col-md-2 mt-3">
@@ -337,7 +334,6 @@
             </div>
           </div>
 
-          {{-- BANK TRANSFER FIELDS --}}
           <div class="row mb-3 d-none" id="bank_transfer_fields">
             <div class="col-md-2">
               <label>Transfer From Bank</label>
@@ -404,7 +400,7 @@
             </div>
           </div>
 
-        </div>{{-- end card-body --}}
+        </div>
 
         <footer class="card-footer text-end">
           <a href="{{ route('purchase_invoices.index') }}" class="btn btn-secondary me-2">
@@ -457,6 +453,33 @@ $(document).ready(function () {
 
     $('.select2-js').select2({ width: '100%' });
 
+    // ================= PRODUCT IMAGE =================
+    const PRODUCT_IMG_BASE = '{{ url("/product") }}';
+
+    function showItemImage(row, imageUrl, productName) {
+        const cell = row.find('.item-img-cell');
+        if (!imageUrl) {
+            cell.html('');
+            return;
+        }
+        cell.html(
+            `<img src="${imageUrl}" alt="${productName || ''}" title="${productName || ''}"
+                  style="width:42px;height:42px;object-fit:cover;border-radius:6px;
+                         cursor:pointer;border:1px solid #dee2e6;"
+                  onclick="window.open('${imageUrl}','_blank')">`
+        );
+    }
+
+    function fetchAndShowImage(row, productId) {
+        if (!productId) { row.find('.item-img-cell').html(''); return; }
+        $.ajax({
+            url: PRODUCT_IMG_BASE + '/' + productId + '/image',
+            method: 'GET',
+            success: function(data) { showItemImage(row, data.image_url || null, data.name || ''); },
+            error:   function()     { row.find('.item-img-cell').html(''); }
+        });
+    }
+
     // ===== ROW INDEX MANAGEMENT =====
     function updateRowIndexes() {
         $('#PurchaseTable tr.item-row').each(function(i) {
@@ -502,6 +525,7 @@ $(document).ready(function () {
                     <input type="text" name="items[${index}][item_name]" class="form-control item-name-input" placeholder="Product Name" value="${name}">
                     <input type="hidden" name="items[${index}][barcode_number]" value="${data.barcode_number || ''}">
                     <button type="button" class="btn btn-link p-0 toggle-product">Select Product</button>
+                    <input type="file" name="items[${index}][image]" class="form-control form-control-sm item-image-input mt-1" accept="image/*">
                 </div>
             </td>
             <td><input type="text" name="items[${index}][item_description]" class="form-control" value="${desc}" required></td>
@@ -527,13 +551,14 @@ $(document).ready(function () {
             <td><input type="number" name="items[${index}][vat_percent]" class="form-control vat-percent" step="any" value="${vatPct}"></td>
             <td><input type="number" name="items[${index}][vat_amount]" step="any" value="${data.vat_amount || 0}" class="form-control vat-amount" readonly></td>
             <td><input type="number" name="items[${index}][item_total]" step="any" value="${data.item_total || 0}" class="form-control item-total" readonly></td>
+            <td class="item-img-cell" style="text-align:center;vertical-align:middle;padding:4px;"></td>
             <td>
                 <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
                 <button type="button" class="btn btn-sm btn-primary toggle-parts"><i class="fas fa-wrench"></i></button>
             </td>
         </tr>
         <tr class="parts-row" style="display:none;background:#efefef">
-            <td colspan="16">
+            <td colspan="17">
                 <div class="parts-wrapper">
                     <table class="table table-sm table-bordered parts-table">
                         <thead>
@@ -591,6 +616,11 @@ $(document).ready(function () {
         }
 
         recalcItemGrossWeight(itemRow);
+
+        // Load product image if this item was linked to a product
+        if (itemData.product_id) {
+            fetchAndShowImage(itemRow, itemData.product_id);
+        }
     });
 
     calculateTotals();
@@ -606,7 +636,6 @@ $(document).ready(function () {
     }
     initPaymentFields();
 
-    // ===== PAYMENT METHOD ON CHANGE =====
     $('#payment_method').on('change', function() {
         const val = $(this).val();
         $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields, #cash_fields').addClass('d-none');
@@ -708,6 +737,12 @@ $(document).ready(function () {
                 }
                 variationSelect.html(opts);
             });
+
+        // Load product image — only for main item rows, not part rows
+        const itemRow = row.closest('tr.item-row');
+        if (itemRow.length) {
+            fetchAndShowImage(itemRow, productId);
+        }
     });
 
     // ================= CALCULATIONS =================
@@ -722,31 +757,6 @@ $(document).ready(function () {
         calculateTotals();
     });
 
-    /**
-     * FIX: Selects the <option> in a Purity <select> whose numeric value is
-     * closest to the given raw value (string or number), instead of relying
-     * on jQuery's .val() exact-string match.
-     *
-     * WHY THIS WAS NEEDED:
-     * The Purity <select> options render their `value` attribute straight
-     * from the `purities` DB column (e.g. "0.7500" if stored as decimal(8,4)).
-     * When importing from Excel/CSV, SheetJS auto-detects numeric cells and
-     * hands back a JS number (0.75), which jQuery's .val(0.75) stringifies to
-     * "0.75" — this does NOT exact-match an option value of "0.7500", so the
-     * select silently fails to change and keeps its default (wrong) option.
-     * Every downstream calc (purity weight, 995, material value) then used
-     * the wrong purity for imported rows.
-     *
-     * This function compares parsed floats instead of raw strings, so
-     * "0.75", "0.7500", 0.75, and 0.7500000001 all match the same option.
-     *
-     * Returns true if a match was selected, false otherwise.
-     *
-     * NOTE: this is NOT needed for the initial "load existing items" render
-     * above (buildItemRowHtml), because that comparison already uses JS's
-     * `==` operator, which numerically coerces both sides and is therefore
-     * immune to this exact issue.
-     */
     function setPurityDropdown(selectEl, rawValue) {
         const target = parseFloat(rawValue);
         if (isNaN(target)) return false;
@@ -757,7 +767,7 @@ $(document).ready(function () {
             if (!isNaN(optVal) && Math.abs(optVal - target) < 0.0005) {
                 selectEl.val($(this).val());
                 matched = true;
-                return false; // break out of .each
+                return false;
             }
         });
 
@@ -925,9 +935,6 @@ $(document).ready(function () {
         const file = e.target.files[0];
         if (!file) return;
 
-        // FIX: collect rows whose Purity value from the sheet doesn't match
-        // any option in the Purity dropdown, so we can warn the user instead
-        // of silently importing the wrong purity.
         const unmatchedPurityRows = [];
 
         const reader = new FileReader();
@@ -951,10 +958,6 @@ $(document).ready(function () {
                     currentItemRow.find('.item-name-input').val(row['Item Name']);
                     currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
 
-                    // FIX: use numeric-match helper instead of `.val(row['Purity'] || '0.92')`,
-                    // which failed to select the correct <option> whenever the sheet's
-                    // numeric precision (e.g. 0.75) didn't exactly string-match the
-                    // option's DB-formatted value attribute (e.g. "0.7500").
                     const purityRaw = row['Purity'] !== undefined && row['Purity'] !== ''
                         ? row['Purity']
                         : 0.92;
@@ -988,16 +991,9 @@ $(document).ready(function () {
 
             calculateTotals();
 
-            // FIX: warn about any rows where the imported Purity had no matching
-            // dropdown option, instead of silently defaulting to the wrong purity.
             if (unmatchedPurityRows.length > 0) {
-                const list = unmatchedPurityRows
-                    .map(r => `- ${r.item}: ${r.purity}`)
-                    .join('\n');
-                alert(
-                    'Items imported, but the following rows had a Purity value with ' +
-                    'no matching option in the Purity dropdown — please check them manually:\n\n' + list
-                );
+                const list = unmatchedPurityRows.map(r => `- ${r.item}: ${r.purity}`).join('\n');
+                alert('Items imported, but the following rows had a Purity value with no matching option in the Purity dropdown — please check them manually:\n\n' + list);
             } else {
                 alert('Items Imported Successfully!');
             }
