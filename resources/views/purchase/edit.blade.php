@@ -722,6 +722,48 @@ $(document).ready(function () {
         calculateTotals();
     });
 
+    /**
+     * FIX: Selects the <option> in a Purity <select> whose numeric value is
+     * closest to the given raw value (string or number), instead of relying
+     * on jQuery's .val() exact-string match.
+     *
+     * WHY THIS WAS NEEDED:
+     * The Purity <select> options render their `value` attribute straight
+     * from the `purities` DB column (e.g. "0.7500" if stored as decimal(8,4)).
+     * When importing from Excel/CSV, SheetJS auto-detects numeric cells and
+     * hands back a JS number (0.75), which jQuery's .val(0.75) stringifies to
+     * "0.75" — this does NOT exact-match an option value of "0.7500", so the
+     * select silently fails to change and keeps its default (wrong) option.
+     * Every downstream calc (purity weight, 995, material value) then used
+     * the wrong purity for imported rows.
+     *
+     * This function compares parsed floats instead of raw strings, so
+     * "0.75", "0.7500", 0.75, and 0.7500000001 all match the same option.
+     *
+     * Returns true if a match was selected, false otherwise.
+     *
+     * NOTE: this is NOT needed for the initial "load existing items" render
+     * above (buildItemRowHtml), because that comparison already uses JS's
+     * `==` operator, which numerically coerces both sides and is therefore
+     * immune to this exact issue.
+     */
+    function setPurityDropdown(selectEl, rawValue) {
+        const target = parseFloat(rawValue);
+        if (isNaN(target)) return false;
+
+        let matched = false;
+        selectEl.find('option').each(function () {
+            const optVal = parseFloat($(this).val());
+            if (!isNaN(optVal) && Math.abs(optVal - target) < 0.0005) {
+                selectEl.val($(this).val());
+                matched = true;
+                return false; // break out of .each
+            }
+        });
+
+        return matched;
+    }
+
     function recalcItemGrossWeight(itemRow) {
         if (!itemRow || !itemRow.length) return;
 
@@ -882,6 +924,12 @@ $(document).ready(function () {
     $('#excel_import').on('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
+
+        // FIX: collect rows whose Purity value from the sheet doesn't match
+        // any option in the Purity dropdown, so we can warn the user instead
+        // of silently importing the wrong purity.
+        const unmatchedPurityRows = [];
+
         const reader = new FileReader();
         reader.onload = function(e) {
             const data     = new Uint8Array(e.target.result);
@@ -902,7 +950,19 @@ $(document).ready(function () {
                     currentItemRow = $('#PurchaseTable tr.item-row').last();
                     currentItemRow.find('.item-name-input').val(row['Item Name']);
                     currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
-                    currentItemRow.find('.purity').val(row['Purity'] || '0.92');
+
+                    // FIX: use numeric-match helper instead of `.val(row['Purity'] || '0.92')`,
+                    // which failed to select the correct <option> whenever the sheet's
+                    // numeric precision (e.g. 0.75) didn't exactly string-match the
+                    // option's DB-formatted value attribute (e.g. "0.7500").
+                    const purityRaw = row['Purity'] !== undefined && row['Purity'] !== ''
+                        ? row['Purity']
+                        : 0.92;
+                    const purityMatched = setPurityDropdown(currentItemRow.find('.purity'), purityRaw);
+                    if (!purityMatched) {
+                        unmatchedPurityRows.push({ item: row['Item Name'], purity: purityRaw });
+                    }
+
                     currentItemRow.find('.net-weight').val(parseFloat(row['Gross Wt']) || 0);
                     currentItemRow.find('.making-rate').val(row['Making Rate'] || 0);
                     currentItemRow.find('.material-type').val((row['Material'] || 'gold').toLowerCase());
@@ -927,7 +987,21 @@ $(document).ready(function () {
             });
 
             calculateTotals();
-            alert('Items Imported Successfully!');
+
+            // FIX: warn about any rows where the imported Purity had no matching
+            // dropdown option, instead of silently defaulting to the wrong purity.
+            if (unmatchedPurityRows.length > 0) {
+                const list = unmatchedPurityRows
+                    .map(r => `- ${r.item}: ${r.purity}`)
+                    .join('\n');
+                alert(
+                    'Items imported, but the following rows had a Purity value with ' +
+                    'no matching option in the Purity dropdown — please check them manually:\n\n' + list
+                );
+            } else {
+                alert('Items Imported Successfully!');
+            }
+
             $('#excel_import').val('');
         };
         reader.readAsArrayBuffer(file);
