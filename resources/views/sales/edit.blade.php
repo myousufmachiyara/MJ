@@ -338,7 +338,6 @@
               <label>Cash/Bank Account (for collection)</label>
               <select name="making_payment_account" class="form-control select2-js">
                 <option value="">None (fully receivable)</option>
-                <option value="cash">Cash in Hand</option>
                 @foreach ($banks as $bank)
                   <option value="bank_{{ $bank->id }}">{{ $bank->name }}</option>
                 @endforeach
