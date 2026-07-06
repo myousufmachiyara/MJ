@@ -631,6 +631,162 @@ $(document).ready(function () {
     $('#barcode_scan_input').on('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); handleBarcodeScan(); } });
     $('#barcode_scan_btn').on('click', handleBarcodeScan);
 
+    // ===== SEARCH BY NAME =====
+    const NAME_SEARCH_URL = '{{ route("sale.search_by_name") }}';
+    let nameSearchTimer   = null;
+
+    function addRowFromResult(data) {
+        const firstRow = $('#SaleTable tr.item-row').first();
+        if ($('#SaleTable tr.item-row').length === 1
+            && !firstRow.find('.item-name-input').val()
+            && !firstRow.find('input[name*="[barcode_number]"]').val()) {
+            firstRow.next('.parts-row').remove();
+            firstRow.remove();
+        }
+
+        addNewRow();
+        const newRow = $('#SaleTable tr.item-row').last();
+
+        newRow.find('.item-name-input').val(data.item_name || '');
+        newRow.find('input[name*="[barcode_number]"]').val(data.barcode_number || '');
+        newRow.find('input[name*="[item_description]"]').val(data.item_description || '');
+
+        // Match purity to nearest option
+        const pur = parseFloat(data.purity);
+        let nearestOpt = null, minDiff = Infinity;
+        newRow.find('.purity option').each(function() {
+            const diff = Math.abs(parseFloat($(this).val()) - pur);
+            if (diff < minDiff) { minDiff = diff; nearestOpt = $(this).val(); }
+        });
+        if (nearestOpt) newRow.find('.purity').val(nearestOpt);
+
+        newRow.find('.base-gross-weight').val((parseFloat(data.gross_weight) || 0).toFixed(3));
+        newRow.find('.making-rate').val(data.making_rate || 0);
+        newRow.find('.material-type').val(data.material_type || 'gold');
+        newRow.find('.vat-percent').val(data.vat_percent || 0);
+
+        if (data.parts && data.parts.length > 0) {
+            const partsRow  = newRow.next('.parts-row');
+            const partsBody = partsRow.find('.parts-table tbody');
+            partsRow.show();
+            data.parts.forEach((part, j) => {
+                partsBody.append(buildPartRowHtml(newRow.data('item-index'), j, part));
+            });
+        }
+
+        recalcItemGrossWeight(newRow);
+        showScanResult('<i class="fas fa-check-circle"></i> Added: <strong>'
+            + (data.item_name || 'Item') + '</strong>', 'success');
+        newRow.addClass('table-warning');
+        setTimeout(() => newRow.removeClass('table-warning'), 2000);
+    }
+
+    function renderNameResults(results) {
+        const box = $('#name_search_results');
+        if (!results.length) {
+            box.html('<div style="padding:10px 14px;font-size:.82rem;color:#6c757d;">No results found.</div>').show();
+            return;
+        }
+
+        const sourceColors = { sale: '#0d6efd', purchase: '#198754', consignment: '#6f42c1' };
+        const sourceLabels = { sale: 'Sale', purchase: 'Purchase', consignment: 'Consignment' };
+
+        let html = '';
+        results.forEach(function(r) {
+            const color = sourceColors[r.source] || '#6c757d';
+            const label = sourceLabels[r.source] || r.source;
+            const wt    = r.gross_weight ? parseFloat(r.gross_weight).toFixed(3) + 'g' : '';
+            const bc    = r.barcode_number
+                ? `<span style="font-family:monospace;font-size:.75rem;color:#2563eb;">${r.barcode_number}</span>`
+                : '';
+            const csg   = r.consignment_no
+                ? `<span style="font-size:.72rem;color:#6c757d;"> · ${r.consignment_no}</span>`
+                : '';
+
+            html += `
+            <div class="name-result-row"
+                style="padding:9px 14px;cursor:pointer;border-bottom:1px solid #f1f3f5;font-size:.82rem;"
+                onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background=''"
+                data-idx="${html.length}">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <span style="font-weight:600;">${r.item_name || '—'}</span>
+                  ${csg}
+                  <span style="margin-left:6px;font-size:.7rem;padding:1px 7px;border-radius:20px;
+                              background:${color}22;color:${color};font-weight:500;">${label}</span>
+                </div>
+                <div style="text-align:right;flex-shrink:0;margin-left:8px;">
+                  ${bc}
+                  ${wt ? `<div style="font-size:.72rem;color:#6c757d;">${wt}</div>` : ''}
+                </div>
+              </div>
+              ${r.item_description ? `<div style="font-size:.74rem;color:#6c757d;margin-top:2px;">${r.item_description}</div>` : ''}
+            </div>`;
+        });
+
+        box.html(html).show();
+
+        // Attach click handlers after rendering
+        box.find('.name-result-row').each(function(i) {
+            $(this).on('click', function() {
+                addRowFromResult(results[i]);
+                $('#name_search_input').val('');
+                box.hide();
+            });
+        });
+    }
+
+    $('#name_search_input').on('input', function() {
+        const q = $(this).val().trim();
+        clearTimeout(nameSearchTimer);
+        if (q.length < 2) { $('#name_search_results').hide(); return; }
+
+        nameSearchTimer = setTimeout(function() {
+            $.ajax({
+                url: NAME_SEARCH_URL, method: 'GET', data: { q },
+                success: function(data) {
+                    if (data.success) renderNameResults(data.results);
+                },
+                error: function() { $('#name_search_results').hide(); }
+            });
+        }, 280); // 280ms debounce
+    });
+
+    // Hide dropdown when clicking outside
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('#name_search_input, #name_search_results').length) {
+            $('#name_search_results').hide();
+        }
+    });
+
+    // Keyboard navigation in dropdown
+    $('#name_search_input').on('keydown', function(e) {
+        const rows = $('#name_search_results .name-result-row');
+        if (!rows.length) return;
+        const active = rows.filter('.active');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!active.length) { rows.first().addClass('active').css('background','#f0f4ff'); }
+            else {
+                active.removeClass('active').css('background','');
+                const next = active.next('.name-result-row');
+                (next.length ? next : rows.first()).addClass('active').css('background','#f0f4ff');
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!active.length) { rows.last().addClass('active').css('background','#f0f4ff'); }
+            else {
+                active.removeClass('active').css('background','');
+                const prev = active.prev('.name-result-row');
+                (prev.length ? prev : rows.last()).addClass('active').css('background','#f0f4ff');
+            }
+        } else if (e.key === 'Enter' && active.length) {
+            e.preventDefault();
+            active.trigger('click');
+        } else if (e.key === 'Escape') {
+            $('#name_search_results').hide();
+        }
+    });
     // ===== ROW INDEX MANAGEMENT =====
     function updateRowIndexes() {
         $('#SaleTable tr.item-row').each(function(i) {
