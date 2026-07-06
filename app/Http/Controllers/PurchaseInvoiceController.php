@@ -1198,17 +1198,17 @@ class PurchaseInvoiceController extends Controller
         if ($totals['making'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('501001'),
+                'account_id' => $acct('510003'), // Making Charges Expense (seeder code)
                 'debit'      => round($totals['making'], 2),
                 'credit'     => 0,
                 'narration'  => 'Making charges expense — Inv# ' . $invoice->invoice_no,
             ];
         }
- 
+
         if ($totals['vat'] > 0) {
             $entries[] = [
                 'voucher_id' => $voucher->id,
-                'account_id' => $acct('207001'),
+                'account_id' => $acct('105001'), // VAT Input Tax Recoverable (seeder code)
                 'debit'      => round($totals['vat'], 2),
                 'credit'     => 0,
                 'narration'  => 'Input VAT on purchase — Inv# ' . $invoice->invoice_no,
