@@ -37,7 +37,7 @@ class PurchaseInvoiceController extends Controller
     public function create()
     {
         $vendors  = ChartOfAccounts::where('account_type', 'vendor')->get();
-        $banks    = ChartOfAccounts::where('account_type', 'bank')->where('account_type', 'cash')->get();
+        $banks = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();        
         $products = Product::with('measurementUnit')->get();
         $purities = Purity::all();
 
@@ -174,9 +174,8 @@ class PurchaseInvoiceController extends Controller
         $purchaseInvoice = PurchaseInvoice::with(['items.parts', 'attachments'])->findOrFail($id);
         $purities        = Purity::all();
         $vendors         = ChartOfAccounts::where('account_type', 'vendor')->get();
-        $banks           = ChartOfAccounts::where('account_type', 'bank')->where('account_type', 'cash')->get();
+        $banks           = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();        
         $products        = Product::with('measurementUnit')->get();
-
         $goldAedOunce = ($purchaseInvoice->gold_rate_aed ?? 0) * 31.1035;
         $diamondAedCt = $purchaseInvoice->diamond_rate_aed ?? 0;
 
