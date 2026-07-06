@@ -118,25 +118,48 @@
           </div>
 
           {{-- =================== BARCODE SCANNER =================== --}}
+          {{-- =================== BARCODE / NAME SCANNER =================== --}}
           <div class="card mb-3 border-primary shadow-sm">
             <div class="card-body py-2 bg-primary bg-opacity-10">
-              <div class="row align-items-end g-2">
+              <div class="row align-items-end g-3">
+
+                {{-- Left: Barcode scanner (unchanged) --}}
                 <div class="col-auto d-flex align-items-center">
                   <i class="fas fa-barcode fa-2x text-light me-2"></i>
-                  <strong class="text-light">Barcode Scanner</strong>
+                  <strong class="text-light">Scan / Search</strong>
                 </div>
-                <div class="col-md-5">
+
+                <div class="col-md-4">
+                  <label class="text-light small mb-1">Barcode</label>
                   <div class="input-group">
-                    <input type="text" id="barcode_scan_input" class="form-control" placeholder="Scan barcode or type &amp; press Enter…" autocomplete="off">
+                    <input type="text" id="barcode_scan_input" class="form-control"
+                          placeholder="Scan barcode or type &amp; press Enter…" autocomplete="off">
                     <button type="button" class="btn btn-primary fw-bold" id="barcode_scan_btn">
-                      <i class="fas fa-search"></i> Search
+                      <i class="fas fa-search"></i>
                     </button>
                   </div>
-                  <small class="text-light">USB/Bluetooth scanners supported. Auto-added as new row.</small>
+                  <small class="text-light">USB/Bluetooth scanners supported.</small>
                 </div>
-                <div class="col-md-5">
-                  <div id="barcode_scan_result" class="alert mb-0 py-2 px-3 d-none" role="alert" style="font-size:.9rem;"></div>
+
+                {{-- Right: Search by name --}}
+                <div class="col-md-4" style="position:relative;">
+                  <label class="text-light small mb-1">Search by Item Name</label>
+                  <input type="text" id="name_search_input" class="form-control"
+                        placeholder="Type item name…" autocomplete="off">
+                  {{-- Dropdown results --}}
+                  <div id="name_search_results"
+                      style="display:none;position:absolute;top:100%;left:0;right:0;z-index:9999;
+                              background:#fff;border:1px solid #dee2e6;border-radius:6px;
+                              box-shadow:0 4px 12px rgba(0,0,0,.15);max-height:320px;overflow-y:auto;">
+                  </div>
+                  <small class="text-light">Searches purchase, sale history &amp; consignment.</small>
                 </div>
+
+                <div class="col-md-3">
+                  <div id="barcode_scan_result" class="alert mb-0 py-2 px-3 d-none"
+                      role="alert" style="font-size:.9rem;"></div>
+                </div>
+
               </div>
             </div>
           </div>
