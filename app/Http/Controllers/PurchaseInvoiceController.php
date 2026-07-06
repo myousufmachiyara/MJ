@@ -37,7 +37,7 @@ class PurchaseInvoiceController extends Controller
     public function create()
     {
         $vendors  = ChartOfAccounts::where('account_type', 'vendor')->get();
-        $banks = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();        
+        $banks    = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();        
         $products = Product::with('measurementUnit')->get();
         $purities = Purity::all();
 
