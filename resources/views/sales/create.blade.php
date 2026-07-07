@@ -340,10 +340,10 @@
             <div class="col-md-2 mt-3">
               <label class="fw-bold text-danger">
                 Invoice VAT %
-                <small class="text-muted d-block fw-normal" style="font-size:.75rem">B2C: on total | B2B: per-item</small>
               </label>
               <input type="number" step="0.01" min="0" max="100" name="invoice_vat_percent" id="invoice_vat_percent"
                      class="form-control border-danger" value="0" placeholder="e.g. 5">
+              <small class="text-muted d-block fw-normal" style="font-size:.75rem">B2C: on total | B2B: per-item</small>
             </div>
             <div class="col-md-2 mt-3">
               <label>Invoice VAT Amt (AED)</label>
