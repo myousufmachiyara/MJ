@@ -50,7 +50,7 @@
               </select>
             </div>
 
-            <div class="col-md-3 mt-2">
+            <div class="col-md-3">
               <label>Linked Consignment <small class="text-muted">(outbound, optional)</small></label>
               <select name="consignment_id" class="form-control select2-js">
                 <option value="">-- None --</option>
@@ -952,7 +952,7 @@ $(document).ready(function () {
         };
         reader.readAsArrayBuffer(file);
     });
-    
+
     window.addNewRow = function() {
         const nextIndex = $('#SaleTable tr.item-row').length;
         const purityOptions = `@foreach($purities as $p)<option value="{{ $p->value }}">{{ $p->label }}</option>@endforeach`;
