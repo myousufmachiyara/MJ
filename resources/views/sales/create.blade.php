@@ -167,6 +167,13 @@
           <section class="card">
             <header class="card-header d-flex justify-content-between align-items-center">
               <h2 class="card-title">Invoice Items</h2>
+              <div class="">
+                <input type="file" id="excel_import" class="d-none" accept=".xlsx, .xls, .csv">
+                <button type="button" class="btn btn-success" onclick="document.getElementById('excel_import').click()">
+                    <i class="fas fa-file-excel"></i> Import Excel
+                </button>
+                <a href="{{ route('sale.download_template') }}" class="btn btn-danger"><i class="fas fa-download"></i> Download Template</a>
+              </div>
             </header>
             <div class="table-responsive">
               <table class="table table-bordered">
@@ -841,6 +848,110 @@ $(document).ready(function () {
         </tr>`;
     }
 
+    // ===== PURITY MATCHING HELPER (needed for import) =====
+    function setPurityDropdown(selectEl, rawValue) {
+        const target = parseFloat(rawValue);
+        if (isNaN(target)) return false;
+
+        let matched = false;
+        selectEl.find('option').each(function () {
+            const optVal = parseFloat($(this).val());
+            if (!isNaN(optVal) && Math.abs(optVal - target) < 0.0005) {
+                selectEl.val($(this).val());
+                matched = true;
+                return false;
+            }
+        });
+        return matched;
+    }
+
+    // ===== EXCEL IMPORT =====
+    $('#excel_import').on('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const unmatchedPurityRows = [];
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data     = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+
+            if (jsonData.length === 0) return;
+
+            // Remove the single blank starter row if present
+            let firstRow = $('#SaleTable tr.item-row').first();
+            if ($('#SaleTable tr.item-row').length === 1
+                && !firstRow.find('.item-name-input').val()
+                && !firstRow.find('input[name*="[barcode_number]"]').val()) {
+                firstRow.next('.parts-row').remove();
+                firstRow.remove();
+            }
+
+            let currentItemRow = null;
+
+            jsonData.forEach((row) => {
+                if (row['Item Name'] && row['Item Name'].toString().trim() !== "") {
+                    addNewRow();
+                    currentItemRow = $('#SaleTable tr.item-row').last();
+
+                    currentItemRow.find('.item-name-input').val(row['Item Name']);
+                    currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
+
+                    const purityRaw = row['Purity'] !== undefined && row['Purity'] !== ''
+                        ? row['Purity']
+                        : 0.92;
+                    const purityMatched = setPurityDropdown(currentItemRow.find('.purity'), purityRaw);
+                    if (!purityMatched) {
+                        unmatchedPurityRows.push({ item: row['Item Name'], purity: purityRaw });
+                    }
+
+                    currentItemRow.find('.base-gross-weight').val(parseFloat(row['Base Gross Wt']) || 0);
+                    currentItemRow.find('.making-rate').val(row['Making Rate'] || 0);
+                    currentItemRow.find('.material-type').val((row['Material'] || 'gold').toLowerCase());
+                    currentItemRow.find('.vat-percent').val(row['VAT %'] || 0);
+
+                    recalcItemGrossWeight(currentItemRow);
+                }
+
+                if (row['Part Name'] && row['Part Name'].toString().trim() !== "" && currentItemRow) {
+                    const partsRow  = currentItemRow.next('.parts-row');
+                    const partsBody = partsRow.find('.parts-table tbody');
+                    partsRow.show();
+
+                    const partIndex = partsBody.find('.part-item-row').length;
+                    partsBody.append(buildPartRowHtml(currentItemRow.data('item-index'), partIndex, {
+                        item_name:        row['Part Name'],
+                        part_description: row['Part Desc'] || '',
+                        qty:              row['Part Qty']  || 0,
+                        rate:             row['Part Rate'] || 0,
+                        stone_qty:        row['Stone Qty'] || 0,
+                        stone_rate:       row['Stone Rate'] || 0,
+                    }));
+
+                    partsBody.find('.part-item-row').last().find('.part-qty').trigger('input');
+                }
+            });
+
+            calculateTotals();
+
+            if (unmatchedPurityRows.length > 0) {
+                const list = unmatchedPurityRows
+                    .map(r => `- ${r.item}: ${r.purity}`)
+                    .join('\n');
+                alert(
+                    'Items imported, but the following rows had a Purity value with ' +
+                    'no matching option in the Purity dropdown — please check them manually:\n\n' + list
+                );
+            } else {
+                alert('Items Imported Successfully!');
+            }
+
+            $('#excel_import').val('');
+        };
+        reader.readAsArrayBuffer(file);
+    });
     window.addNewRow = function() {
         const nextIndex = $('#SaleTable tr.item-row').length;
         const purityOptions = `@foreach($purities as $p)<option value="{{ $p->value }}">{{ $p->label }}</option>@endforeach`;
