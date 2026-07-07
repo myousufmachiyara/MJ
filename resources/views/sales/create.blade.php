@@ -952,6 +952,7 @@ $(document).ready(function () {
         };
         reader.readAsArrayBuffer(file);
     });
+    
     window.addNewRow = function() {
         const nextIndex = $('#SaleTable tr.item-row').length;
         const purityOptions = `@foreach($purities as $p)<option value="{{ $p->value }}">{{ $p->label }}</option>@endforeach`;
