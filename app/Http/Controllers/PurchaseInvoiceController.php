@@ -188,7 +188,7 @@ class PurchaseInvoiceController extends Controller
                 // FIX (point 2): expose the item's own stored image (for custom/no-product items)
                 // so the edit view's JS can show it without relying solely on the product AJAX lookup.
                 'image_path'       => $item->image_path,
-                'image_url'        => $item->image_path ? asset('storage/' . $item->image_path) : null,
+                'image_url'        => $item->image_path ? asset('storage/app/public' . $item->image_path) : null,
                 'item_description' => $item->item_description,
                 'purity'           => $item->purity,
                 'net_weight'       => $item->net_weight,
