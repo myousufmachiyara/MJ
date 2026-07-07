@@ -551,11 +551,18 @@ $(document).ready(function () {
             <td><input type="number" name="items[${index}][vat_percent]" class="form-control vat-percent" step="any" value="${vatPct}"></td>
             <td><input type="number" name="items[${index}][vat_amount]" step="any" value="${data.vat_amount || 0}" class="form-control vat-amount" readonly></td>
             <td><input type="number" name="items[${index}][item_total]" step="any" value="${data.item_total || 0}" class="form-control item-total" readonly></td>
-            <td class="item-img-cell" style="text-align:center;vertical-align:middle;padding:4px;"></td>
+            <td class="item-img-cell" style="text-align:center;vertical-align:middle;padding:4px;">${
+                data.image_url
+                    ? `<img src="${data.image_url}" alt="${name || ''}" title="${name || ''}"
+                            style="width:42px;height:42px;object-fit:cover;border-radius:6px;
+                                  cursor:pointer;border:1px solid #dee2e6;"
+                            onclick="window.open('${data.image_url}','_blank')">`
+                    : ''
+            }</td>            
             <td>
-                <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
-                <button type="button" class="btn btn-sm btn-primary toggle-parts"><i class="fas fa-wrench"></i></button>
-            </td>
+              <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
+              <button type="button" class="btn btn-sm btn-primary toggle-parts"><i class="fas fa-wrench"></i></button>
+          </td>
         </tr>
         <tr class="parts-row" style="display:none;background:#efefef">
             <td colspan="17">
@@ -618,7 +625,7 @@ $(document).ready(function () {
         recalcItemGrossWeight(itemRow);
 
         // Load product image if this item was linked to a product
-        if (itemData.product_id) {
+        if (!itemData.image_url && itemData.product_id) {
             fetchAndShowImage(itemRow, itemData.product_id);
         }
     });
