@@ -38,7 +38,7 @@ class SaleInvoiceController extends Controller
     public function create()
     {
         $customers = ChartOfAccounts::where('account_type', 'customer')->get();
-        $banks     = ChartOfAccounts::where('account_type', 'bank')->get();
+        $banks     = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();
         $products  = Product::with('measurementUnit')->get();
         $purities  = Purity::all();
 
@@ -278,7 +278,7 @@ class SaleInvoiceController extends Controller
         $saleInvoice = SaleInvoice::with(['items.parts', 'attachments'])->findOrFail($id);
         $purities    = Purity::all();
         $customers   = ChartOfAccounts::where('account_type', 'customer')->get();
-        $banks       = ChartOfAccounts::where('account_type', 'bank')->get();
+        $banks       = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();
         $products    = Product::with('measurementUnit')->get();
 
         $goldAedOunce    = ($saleInvoice->gold_rate_aed    ?? 0) * 31.1035;
@@ -989,7 +989,46 @@ class SaleInvoiceController extends Controller
             // ── Partial payment fields (mirrors purchase exactly) ───────────
             'cash_amount_paid'         => 'nullable|numeric|min:0',
             'making_amount_paid'       => 'nullable|numeric|min:0',
-            'making_payment_account'   => 'nullable|string',
+            // FIX: require a valid Cash/Bank account whenever making_amount_paid > 0
+            // under material+making cost, instead of silently reaching an
+            // "Accounting imbalance" exception later (same fix as PurchaseInvoiceController).
+            'making_payment_account'   => [
+                'nullable',
+                'string',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->payment_method !== 'material+making cost') {
+                        return;
+                    }
+
+                    $paidRaw = $request->making_amount_paid;
+                    $paid    = ($paidRaw !== null && $paidRaw !== '') ? (float) $paidRaw : 0.0;
+
+                    if ($paid <= 0) {
+                        return; // fully receivable from customer — no account needed
+                    }
+
+                    if (empty($value)) {
+                        $fail('Please select a Cash/Bank account — making charges collected now is greater than 0.');
+                        return;
+                    }
+
+                    if ($value !== 'cash' && !str_starts_with($value, 'bank_')) {
+                        $fail('Invalid Cash/Bank account selected.');
+                        return;
+                    }
+
+                    if (str_starts_with($value, 'bank_')) {
+                        $accountId = (int) str_replace('bank_', '', $value);
+                        $exists = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])
+                            ->where('id', $accountId)
+                            ->exists();
+
+                        if (!$exists) {
+                            $fail('Selected Cash/Bank account is invalid.');
+                        }
+                    }
+                },
+            ],
         ]);
     }
 
@@ -1264,20 +1303,27 @@ class SaleInvoiceController extends Controller
                         $paymentAccountId = $acct('101001');
                         $paymentLabel     = 'Cash in Hand';
                     } elseif (str_starts_with((string) $request->making_payment_account, 'bank_')) {
-                        $bankId           = (int) str_replace('bank_', '', $request->making_payment_account);
-                        $paymentAccountId = $bankId;
-                        $paymentLabel     = 'Bank';
+                        $paymentAccountId = (int) str_replace('bank_', '', $request->making_payment_account);
+                        $paymentLabel     = ChartOfAccounts::find($paymentAccountId)?->name ?? 'Bank/Cash';
                     }
 
-                    if ($paymentAccountId) {
-                        $entries[] = [
-                            'voucher_id' => $voucher->id,
-                            'account_id' => $paymentAccountId,
-                            'debit'      => $makingPaid,
-                            'credit'     => 0,
-                            'narration'  => $paymentLabel . ' received for making charges from customer — Inv# ' . $invoice->invoice_no,
-                        ];
+                    // FIX: validateInvoice() now guarantees a valid account exists
+                    // whenever $makingPaid > 0, so this should never be null here.
+                    // Kept as a hard safety net instead of silently dropping the
+                    // entry (which previously caused a debit/credit imbalance).
+                    if (!$paymentAccountId) {
+                        throw new \Exception(
+                            'Cash/Bank account for making charges collected could not be resolved — Inv# ' . $invoice->invoice_no
+                        );
                     }
+
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $paymentAccountId,
+                        'debit'      => $makingPaid,
+                        'credit'     => 0,
+                        'narration'  => $paymentLabel . ' received for making charges from customer — Inv# ' . $invoice->invoice_no,
+                    ];
                 }
                 break;
 

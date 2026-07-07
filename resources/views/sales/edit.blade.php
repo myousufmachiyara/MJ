@@ -68,7 +68,7 @@
 
             <div class="col-md-3 mt-2">
               <label>Linked Consignment <small class="text-muted">(outbound, optional)</small></label>
-              <select name="consignment_id" class="form-control select2-js">
+              <select name="consignment_id" id="consignment_id" class="form-control select2-js">
                 <option value="">-- None --</option>
                 @foreach($outboundConsignments as $csg)
                   <option value="{{ $csg->id }}" {{ $saleInvoice->consignment_id == $csg->id ? 'selected' : '' }}>
@@ -76,6 +76,9 @@
                   </option>
                 @endforeach
               </select>
+              <button type="button" id="filter_consignment_items_btn" class="btn btn-sm btn-outline-primary mt-1 d-none">
+                <i class="fas fa-filter"></i> Select Sold Items
+              </button>
             </div>
 
             <div class="col-12 col-md-2">
@@ -424,6 +427,50 @@
         </footer>
       </section>
     </form>
+    {{-- ===================== CONSIGNMENT ITEMS MODAL ===================== --}}
+    <div class="modal fade" id="consignmentItemsModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">
+              Select Sold Items <span id="modal_consignment_no" class="text-primary"></span>
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="consignment_items_loading" class="text-center text-muted py-4">
+              <i class="fas fa-spinner fa-spin"></i> Loading items…
+            </div>
+            <div id="consignment_items_empty" class="text-center text-muted py-4 d-none">
+              <i class="fas fa-inbox fa-2x d-block mb-2 opacity-25"></i>
+              No pending (in-stock) items found for this consignment.
+            </div>
+            <table class="table table-sm table-bordered d-none" id="consignment_items_table">
+              <thead class="table-light">
+                <tr>
+                  <th width="4%"><input type="checkbox" id="csg_select_all"></th>
+                  <th>Barcode</th>
+                  <th>Item Name</th>
+                  <th>Description</th>
+                  <th class="text-center">Purity</th>
+                  <th class="text-center">Gross Wt</th>
+                  <th class="text-center">Making Rate</th>
+                  <th class="text-center">Material</th>
+                  <th class="text-center">Agreed Val</th>
+                </tr>
+              </thead>
+              <tbody id="consignment_items_tbody"></tbody>
+            </table>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="csg_select_btn">
+              <i class="fas fa-check"></i> Select &amp; Add to Invoice
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -684,6 +731,163 @@ $(document).ready(function () {
             dropdown.remove();
         }
     });
+    // ===== CONSIGNMENT ITEMS MODAL (outbound → sale settlement) =====
+    const CONSIGNMENT_ITEMS_URL_BASE = '{{ url("/consignments") }}';
+    let csgModalItems = [];
+
+    function showModal(id) {
+        const el = document.getElementById(id);
+        if (window.bootstrap && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        } else if ($.fn.modal) {
+            $(el).modal('show');
+        }
+    }
+    function hideModal(id) {
+        const el = document.getElementById(id);
+        if (window.bootstrap && bootstrap.Modal) {
+            const inst = bootstrap.Modal.getInstance(el);
+            if (inst) inst.hide();
+        } else if ($.fn.modal) {
+            $(el).modal('hide');
+        }
+    }
+
+    function toggleFilterBtn() {
+        const val = $('#consignment_id').val();
+        $('#filter_consignment_items_btn').toggleClass('d-none', !val);
+    }
+    $('#consignment_id').on('change', toggleFilterBtn);
+    toggleFilterBtn(); // show button immediately if a consignment is already linked (edit mode)
+
+    $('#filter_consignment_items_btn').on('click', function() {
+        const consignmentId = $('#consignment_id').val();
+        if (!consignmentId) return;
+
+        $('#consignment_items_table').addClass('d-none');
+        $('#consignment_items_empty').addClass('d-none');
+        $('#consignment_items_loading').removeClass('d-none');
+        $('#consignment_items_tbody').empty();
+        $('#modal_consignment_no').text('');
+        csgModalItems = [];
+
+        showModal('consignmentItemsModal');
+
+        $.ajax({
+            url: CONSIGNMENT_ITEMS_URL_BASE + '/' + consignmentId + '/items-for-sale',
+            method: 'GET',
+            success: function(data) {
+                $('#consignment_items_loading').addClass('d-none');
+
+                if (!data.success) {
+                    alert(data.message || 'Failed to load consignment items.');
+                    hideModal('consignmentItemsModal');
+                    return;
+                }
+
+                $('#modal_consignment_no').text(data.consignment_no ? '(' + data.consignment_no + ')' : '');
+
+                if (!data.items.length) {
+                    $('#consignment_items_empty').removeClass('d-none');
+                    return;
+                }
+
+                csgModalItems = data.items;
+                const tbody = $('#consignment_items_tbody');
+
+                data.items.forEach(function(item, idx) {
+                    tbody.append(`
+                        <tr>
+                            <td><input type="checkbox" class="csg-item-check" data-idx="${idx}"></td>
+                            <td><code style="font-size:.75rem">${item.source_barcode || '-'}</code></td>
+                            <td>${item.item_name || '-'}</td>
+                            <td class="small text-muted">${item.item_description || '-'}</td>
+                            <td class="text-center">${parseFloat(item.purity || 0).toFixed(3)}</td>
+                            <td class="text-center">${parseFloat(item.gross_weight || 0).toFixed(3)}g</td>
+                            <td class="text-center">${parseFloat(item.making_rate || 0).toFixed(2)}</td>
+                            <td class="text-center">${(item.material_type || '').toUpperCase()}</td>
+                            <td class="text-center fw-bold">${parseFloat(item.agreed_value || 0).toFixed(2)}</td>
+                        </tr>
+                    `);
+                });
+
+                $('#consignment_items_table').removeClass('d-none');
+            },
+            error: function(xhr) {
+                $('#consignment_items_loading').addClass('d-none');
+                alert(xhr.responseJSON ? xhr.responseJSON.message : 'Failed to load consignment items.');
+                hideModal('consignmentItemsModal');
+            }
+        });
+    });
+
+    $('#csg_select_all').on('change', function() {
+        $('.csg-item-check').prop('checked', $(this).is(':checked'));
+    });
+
+    $('#csg_select_btn').on('click', function() {
+        const selectedIdx = [];
+        $('.csg-item-check:checked').each(function() {
+            selectedIdx.push(parseInt($(this).data('idx'), 10));
+        });
+
+        if (!selectedIdx.length) {
+            alert('Please select at least one item.');
+            return;
+        }
+
+        selectedIdx.forEach(function(idx) {
+            const item = csgModalItems[idx];
+            if (item) addItemFromConsignment(item);
+        });
+
+        hideModal('consignmentItemsModal');
+    });
+
+    // NOTE: this edit page defines addNewRow() (defined later, below) which appends
+    // a blank row via buildItemRowHtml(). We call it first, then fill the fields —
+    // identical pattern to how the barcode scanner adds rows on this same page.
+    function addItemFromConsignment(item) {
+        addNewRow();
+        const newRow = $('#SaleTable tr.item-row').last();
+
+        newRow.find('.item-name-input').val(item.item_name || '');
+
+        // IMPORTANT: source_barcode is the original MJ-/MJT- barcode. This is what
+        // ConsignmentController::settleItems() matches against to flip this
+        // consignment item to 'sold' once the invoice is saved/updated.
+        newRow.find('input[name*="[barcode_number]"]').val(item.source_barcode || '');
+
+        newRow.find('input[name*="[item_description]"]').val(item.item_description || '');
+
+        const pur = parseFloat(item.purity);
+        let nearestOpt = null, minDiff = Infinity;
+        newRow.find('.purity option').each(function() {
+            const diff = Math.abs(parseFloat($(this).val()) - pur);
+            if (diff < minDiff) { minDiff = diff; nearestOpt = $(this).val(); }
+        });
+        if (nearestOpt) newRow.find('.purity').val(nearestOpt);
+
+        newRow.find('.base-gross-weight').val((parseFloat(item.gross_weight) || 0).toFixed(3));
+        newRow.find('.making-rate').val(item.making_rate || 0);
+        newRow.find('.material-type').val(item.material_type || 'gold');
+        newRow.find('.vat-percent').val(item.vat_percent || 0);
+
+        if (item.parts && item.parts.length > 0) {
+            const partsRow = newRow.next('.parts-row');
+            partsRow.show();
+            item.parts.forEach((part, j) => {
+                partsRow.find('.parts-table tbody').append(
+                    buildPartRowHtml(newRow.data('item-index'), j, part)
+                );
+            });
+        }
+
+        recalcItemGrossWeight(newRow);
+
+        newRow.addClass('table-warning');
+        setTimeout(() => newRow.removeClass('table-warning'), 2000);
+    }
     // ===== ROW INDEX MANAGEMENT =====
     function updateRowIndexes() {
         $('#SaleTable tr.item-row').each(function(i) {
