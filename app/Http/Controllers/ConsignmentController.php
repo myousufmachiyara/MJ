@@ -1034,4 +1034,53 @@ class ConsignmentController extends Controller
             $itemPosition++;
         }
     }
+
+    // =========================================================================
+    // ITEMS FOR SALE INVOICE — outbound consignment items still in_stock
+    // Used by the "Select Sold Items" modal on the Sale Invoice create page.
+    // =========================================================================
+
+    public function itemsForSale($id)
+    {
+        $consignment = Consignment::with(['items' => function ($q) {
+            $q->where('item_status', 'in_stock')->with('parts');
+        }])->findOrFail($id);
+
+        if ($consignment->direction !== 'outbound') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only outbound consignments can be settled via a Sale Invoice.',
+            ], 422);
+        }
+
+        $items = $consignment->items->map(function ($item) {
+            return [
+                'id'               => $item->id,
+                'source_barcode'   => $item->source_barcode,
+                'item_name'        => $item->item_name,
+                'item_description' => $item->item_description,
+                'purity'           => $item->purity,
+                'gross_weight'     => $item->gross_weight,
+                'making_rate'      => $item->making_rate,
+                'material_type'    => $item->material_type,
+                'vat_percent'      => $item->vat_percent,
+                'agreed_value'     => $item->agreed_value,
+                'parts'            => $item->parts->map(fn($p) => [
+                    'item_name'        => $p->item_name,
+                    'part_description' => $p->part_description,
+                    'qty'              => $p->qty,
+                    'rate'             => $p->rate,
+                    'stone_qty'        => $p->stone_qty,
+                    'stone_rate'       => $p->stone_rate,
+                    'total'            => $p->total,
+                ])->values(),
+            ];
+        })->values();
+
+        return response()->json([
+            'success'        => true,
+            'consignment_no' => $consignment->consignment_no,
+            'items'          => $items,
+        ]);
+    }
 }

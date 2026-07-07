@@ -53,7 +53,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/sale-invoices/scan-barcode',      [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
     Route::get('/sale-invoices/search-by-name',    [SaleInvoiceController::class, 'searchByName'])->name('sale.search_by_name');
     Route::get('sale-invoices/download-template', [App\Http\Controllers\SaleInvoiceController::class, 'downloadTemplate'])->name('sale.download_template');
-    
+
     // ── Sale Return Helper (AJAX — must be before the modules loop) ───────────
     Route::get('/sale-return/{invoiceId}/items', [SaleReturnController::class, 'getInvoiceItems'])->name('sale_return.invoice_items');
 
@@ -123,7 +123,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get ('consignments/scan-barcode',      [ConsignmentController::class, 'scanBarcode'])        ->name('consignments.scan_barcode');
     Route::get ('consignments/scan-barcode-form', [ConsignmentController::class, 'scanBarcodeForForm']) ->name('consignments.scan_barcode_form');
     Route::get ('consignments/download-template', [ConsignmentController::class, 'downloadTemplate'])   ->name('consignments.download_template');
-
+    Route::get ('consignments/{id}/items-for-sale', [App\Http\Controllers\ConsignmentController::class, 'itemsForSale'])->name('consignments.items_for_sale');
+    
     // Static resource routes
     Route::get ('consignments',        [ConsignmentController::class, 'index']) ->name('consignments.index');
     Route::get ('consignments/create', [ConsignmentController::class, 'create'])->name('consignments.create');
