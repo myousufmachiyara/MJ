@@ -122,20 +122,36 @@ class DashboardController extends Controller
             }
 
             // ── Consignment overview ──────────────────────────────────────────
-            $csgInStockCount  = (int)   ConsignmentItem::where('item_status', 'in_stock')->count();
-            $csgInStockValue  = (float) ConsignmentItem::where('item_status', 'in_stock')->sum('agreed_value');
-            $csgSoldCount     = (int)   ConsignmentItem::where('item_status', 'sold')->count();
-            $csgSoldValue     = (float) ConsignmentItem::where('item_status', 'sold')->sum('agreed_value');
-            $csgReturnedCount = (int)   ConsignmentItem::where('item_status', 'returned')->count();
+            $csgInStockCount  = (int)   ConsignmentItem::where('item_status', 'in_stock')
+                ->whereHas('consignment', fn($q) => $q->whereNull('deleted_at'))
+                ->count();
 
-            $activeConsignments = (int) Consignment::whereIn('status', ['active', 'partially_settled'])->count();
+            $csgInStockValue  = (float) ConsignmentItem::where('item_status', 'in_stock')
+                ->whereHas('consignment', fn($q) => $q->whereNull('deleted_at'))
+                ->sum('agreed_value');
+
+            $csgSoldCount     = (int)   ConsignmentItem::where('item_status', 'sold')
+                ->whereHas('consignment', fn($q) => $q->whereNull('deleted_at'))
+                ->count();
+
+            $csgSoldValue     = (float) ConsignmentItem::where('item_status', 'sold')
+                ->whereHas('consignment', fn($q) => $q->whereNull('deleted_at'))
+                ->sum('agreed_value');
+
+            $csgReturnedCount = (int)   ConsignmentItem::where('item_status', 'returned')
+                ->whereHas('consignment', fn($q) => $q->whereNull('deleted_at'))
+                ->count();
+
+            $activeConsignments = (int) Consignment::whereIn('status', ['active', 'partially_settled'])
+                ->whereNull('deleted_at')
+                ->count();
 
             $csgInboundCount = (int) ConsignmentItem::where('item_status', 'in_stock')
-                ->whereHas('consignment', fn($q) => $q->where('direction', 'inbound'))
+                ->whereHas('consignment', fn($q) => $q->where('direction', 'inbound')->whereNull('deleted_at'))
                 ->count();
 
             $csgOutboundCount = (int) ConsignmentItem::where('item_status', 'in_stock')
-                ->whereHas('consignment', fn($q) => $q->where('direction', 'outbound'))
+                ->whereHas('consignment', fn($q) => $q->where('direction', 'outbound')->whereNull('deleted_at'))
                 ->count();
 
             // ── Monthly profit ────────────────────────────────────────────────
