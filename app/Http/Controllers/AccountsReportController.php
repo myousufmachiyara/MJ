@@ -201,8 +201,53 @@ class AccountsReportController extends Controller
 
     private function generalLedger(?int $accountId, string $from, string $to): Collection
     {
-        if (!$accountId) return collect();
+        try {
+            if ($accountId) {
+                return $this->buildAccountLedger($accountId, $from, $to);
+            }
 
+            // FIX: account selection is no longer required. When no account is
+            // picked, show a combined ledger — every account that has an opening
+            // balance or activity in the period gets its own Opening → Lines →
+            // Closing block, stacked together — instead of returning nothing.
+            $result = collect();
+
+            foreach (ChartOfAccounts::orderBy('account_code')->get() as $account) {
+                $block = $this->buildAccountLedger($account->id, $from, $to);
+                if ($block->isEmpty()) {
+                    continue;
+                }
+
+                // buildAccountLedger always returns at least an opening + closing
+                // row (2 rows) even with zero activity. Skip accounts that are
+                // genuinely inactive: no transaction lines AND zero balance,
+                // so the combined view isn't cluttered with empty accounts.
+                $hasLines    = $block->count() > 2;
+                $openingZero = $this->balanceIsZero($block->first()['balance'] ?? '0.00');
+                $closingZero = $this->balanceIsZero($block->last()['balance']  ?? '0.00');
+
+                if (!$hasLines && $openingZero && $closingZero) {
+                    continue;
+                }
+
+                $result = $result->concat($block);
+            }
+
+            return $result;
+
+        } catch (\Throwable $e) {
+            Log::error('AccountsReport::generalLedger — ' . $e->getMessage());
+            return collect();
+        }
+    }
+
+    private function balanceIsZero(string $formatted): bool
+    {
+        $clean = str_replace(['(', ')', ','], '', $formatted);
+        return abs((float) $clean) < 0.005;
+    }
+    private function buildAccountLedger(int $accountId, string $from, string $to): Collection
+    {
         try {
             $account = ChartOfAccounts::find($accountId);
             if (!$account) return collect();
@@ -253,11 +298,10 @@ class AccountsReportController extends Controller
             return $result;
 
         } catch (\Throwable $e) {
-            Log::error('AccountsReport::generalLedger — ' . $e->getMessage());
+            Log::error('AccountsReport::buildAccountLedger — ' . $e->getMessage());
             return collect();
         }
     }
-
     // =========================================================================
     // 2. PARTY LEDGER
     // =========================================================================
