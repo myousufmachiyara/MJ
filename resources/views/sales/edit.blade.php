@@ -140,24 +140,40 @@
 
           </div>
 
-          {{-- =================== BARCODE SCANNER =================== --}}
+          {{-- =================== BARCODE / NAME SCANNER =================== --}}
           <div class="card mb-3 border-primary shadow-sm">
             <div class="card-body py-2 bg-primary bg-opacity-10">
-              <div class="row align-items-end g-2">
+              <div class="row align-items-end g-3">
                 <div class="col-auto d-flex align-items-center">
                   <i class="fas fa-barcode fa-2x text-light me-2"></i>
-                  <strong class="text-light">Barcode Scanner</strong>
+                  <strong class="text-light">Scan / Search</strong>
                 </div>
-                <div class="col-md-5">
+
+                <div class="col-md-4">
+                  <label class="text-light small mb-1">Barcode</label>
                   <div class="input-group">
                     <input type="text" id="barcode_scan_input" class="form-control" placeholder="Scan barcode or type &amp; press Enter…" autocomplete="off">
                     <button type="button" class="btn btn-primary fw-bold" id="barcode_scan_btn">
-                      <i class="fas fa-search"></i> Search
+                      <i class="fas fa-search"></i>
                     </button>
                   </div>
                   <small class="text-light">USB/Bluetooth scanners supported.</small>
                 </div>
-                <div class="col-md-5">
+
+                {{-- NEW: dedicated "Search by Item Name" box — same as create blade --}}
+                <div class="col-md-4" style="position:relative;">
+                  <label class="text-light small mb-1">Search by Item Name</label>
+                  <input type="text" id="name_search_input" class="form-control"
+                        placeholder="Type item name…" autocomplete="off">
+                  <div id="name_search_results"
+                      style="display:none;position:absolute;top:100%;left:0;right:0;z-index:9999;
+                              background:#fff;border:1px solid #dee2e6;border-radius:6px;
+                              box-shadow:0 4px 12px rgba(0,0,0,.15);max-height:320px;overflow-y:auto;">
+                  </div>
+                  <small class="text-light">Searches purchase, sale history &amp; consignment.</small>
+                </div>
+
+                <div class="col-md-3">
                   <div id="barcode_scan_result" class="alert mb-0 py-2 px-3 d-none" role="alert" style="font-size:.9rem;"></div>
                 </div>
               </div>
@@ -611,6 +627,151 @@ $(document).ready(function () {
     const NAME_SEARCH_URL = '{{ route("sale.search_by_name") }}';
     let nameSearchTimer   = null;
 
+    // ===== SEARCH BY ITEM NAME — dedicated search box (same as create blade) =====
+    // This is separate from the inline per-row autocomplete below: it always
+    // ADDS A NEW ROW from the picked result, matching create.blade.php's UX.
+    function addRowFromResult(data) {
+        addNewRow();
+        const newRow = $('#SaleTable tr.item-row').last();
+
+        newRow.find('.item-name-input').val(data.item_name || '');
+        newRow.find('input[name*="[barcode_number]"]').val(data.barcode_number || '');
+        newRow.find('input[name*="[item_description]"]').val(data.item_description || '');
+
+        const pur = parseFloat(data.purity);
+        let nearestOpt = null, minDiff = Infinity;
+        newRow.find('.purity option').each(function() {
+            const diff = Math.abs(parseFloat($(this).val()) - pur);
+            if (diff < minDiff) { minDiff = diff; nearestOpt = $(this).val(); }
+        });
+        if (nearestOpt) newRow.find('.purity').val(nearestOpt);
+
+        newRow.find('.base-gross-weight').val((parseFloat(data.gross_weight) || 0).toFixed(3));
+        newRow.find('.making-rate').val(data.making_rate || 0);
+        newRow.find('.material-type').val(data.material_type || 'gold');
+        newRow.find('.vat-percent').val(data.vat_percent || 0);
+
+        if (data.parts && data.parts.length > 0) {
+            const partsRow  = newRow.next('.parts-row');
+            const partsBody = partsRow.find('.parts-table tbody');
+            partsRow.show();
+            data.parts.forEach((part, j) => {
+                partsBody.append(buildPartRowHtml(newRow.data('item-index'), j, part));
+            });
+        }
+
+        recalcItemGrossWeight(newRow);
+        showScanResult('<i class="fas fa-check-circle"></i> Added: <strong>'
+            + (data.item_name || 'Item') + '</strong>', 'success');
+        newRow.addClass('table-warning');
+        setTimeout(() => newRow.removeClass('table-warning'), 2000);
+    }
+
+    function renderDedicatedNameResults(results) {
+        const box = $('#name_search_results');
+        if (!results.length) {
+            box.html('<div style="padding:10px 14px;font-size:.82rem;color:#6c757d;">No results found.</div>').show();
+            return;
+        }
+
+        const sourceColors = { sale: '#0d6efd', purchase: '#198754', consignment: '#6f42c1' };
+        const sourceLabels = { sale: 'Sale', purchase: 'Purchase', consignment: 'Consignment' };
+
+        let html = '';
+        results.forEach(function(r) {
+            const color = sourceColors[r.source] || '#6c757d';
+            const label = sourceLabels[r.source] || r.source;
+            const wt    = r.gross_weight ? parseFloat(r.gross_weight).toFixed(3) + 'g' : '';
+            const bc    = r.barcode_number
+                ? `<span style="font-family:monospace;font-size:.75rem;color:#2563eb;">${r.barcode_number}</span>`
+                : '';
+            const csg   = r.consignment_no
+                ? `<span style="font-size:.72rem;color:#6c757d;"> · ${r.consignment_no}</span>`
+                : '';
+
+            html += `
+            <div class="dedicated-name-result-row"
+                style="padding:9px 14px;cursor:pointer;border-bottom:1px solid #f1f3f5;font-size:.82rem;"
+                onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background=''"
+                data-idx="${html.length}">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <span style="font-weight:600;">${r.item_name || '—'}</span>
+                  ${csg}
+                  <span style="margin-left:6px;font-size:.7rem;padding:1px 7px;border-radius:20px;
+                              background:${color}22;color:${color};font-weight:500;">${label}</span>
+                </div>
+                <div style="text-align:right;flex-shrink:0;margin-left:8px;">
+                  ${bc}
+                  ${wt ? `<div style="font-size:.72rem;color:#6c757d;">${wt}</div>` : ''}
+                </div>
+              </div>
+              ${r.item_description ? `<div style="font-size:.74rem;color:#6c757d;margin-top:2px;">${r.item_description}</div>` : ''}
+            </div>`;
+        });
+
+        box.html(html).show();
+
+        box.find('.dedicated-name-result-row').each(function(i) {
+            $(this).on('click', function() {
+                addRowFromResult(results[i]);
+                $('#name_search_input').val('');
+                box.hide();
+            });
+        });
+    }
+
+    let dedicatedNameSearchTimer = null;
+    $('#name_search_input').on('input', function() {
+        const q = $(this).val().trim();
+        clearTimeout(dedicatedNameSearchTimer);
+        if (q.length < 2) { $('#name_search_results').hide(); return; }
+
+        dedicatedNameSearchTimer = setTimeout(function() {
+            $.ajax({
+                url: NAME_SEARCH_URL, method: 'GET', data: { q },
+                success: function(data) {
+                    if (data.success) renderDedicatedNameResults(data.results);
+                },
+                error: function() { $('#name_search_results').hide(); }
+            });
+        }, 280);
+    });
+
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('#name_search_input, #name_search_results').length) {
+            $('#name_search_results').hide();
+        }
+    });
+
+    $('#name_search_input').on('keydown', function(e) {
+        const rows = $('#name_search_results .dedicated-name-result-row');
+        if (!rows.length) return;
+        const active = rows.filter('.active');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!active.length) { rows.first().addClass('active').css('background','#f0f4ff'); }
+            else {
+                active.removeClass('active').css('background','');
+                const next = active.next('.dedicated-name-result-row');
+                (next.length ? next : rows.first()).addClass('active').css('background','#f0f4ff');
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!active.length) { rows.last().addClass('active').css('background','#f0f4ff'); }
+            else {
+                active.removeClass('active').css('background','');
+                const prev = active.prev('.dedicated-name-result-row');
+                (prev.length ? prev : rows.last()).addClass('active').css('background','#f0f4ff');
+            }
+        } else if (e.key === 'Enter' && active.length) {
+            e.preventDefault();
+            active.trigger('click');
+        } else if (e.key === 'Escape') {
+            $('#name_search_results').hide();
+        }
+    });
+    
     function renderNameDropdown(inputEl, results) {
         $('.name-search-dropdown').remove();
         if (!results.length) return;
