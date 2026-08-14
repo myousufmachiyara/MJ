@@ -129,6 +129,7 @@ class PurchaseInvoiceController extends Controller
                 'material_received_by' => $request->material_received_by,
                 'material_given_by'    => $request->material_given_by,
                 'cash_amount_paid'     => $request->cash_amount_paid,
+                'making_amount_collected' => $request->making_amount_paid ?? 0,
                 'created_by'           => auth()->id(),
             ]);
 
@@ -299,6 +300,7 @@ class PurchaseInvoiceController extends Controller
                 'material_received_by' => $request->material_received_by,
                 'material_given_by'    => $request->material_given_by,
                 'cash_amount_paid'     => $request->cash_amount_paid,
+                'making_amount_collected' => $request->making_amount_paid ?? 0,
 
             ]);
 
@@ -1073,6 +1075,17 @@ class PurchaseInvoiceController extends Controller
                 'transfer_amount'    => null,
             ]);
         }
+
+        // FIX (Material Only): server-side hardening — 'material' NEVER allows
+        // a cash/bank payment, even if the JS-hidden fields were somehow
+        // submitted. This is what keeps making_amount_collected persisted as
+        // 0 for this method.
+        if ($request->payment_method === 'material') {
+            $request->merge([
+                'making_amount_paid'     => 0,
+                'making_payment_account' => null,
+            ]);
+        }
     }
 
     private function validateInvoice(Request $request): void
@@ -1084,7 +1097,7 @@ class PurchaseInvoiceController extends Controller
             'currency'               => 'required|in:AED,USD',
             'exchange_rate'          => 'nullable|required_if:currency,USD|numeric|min:0',
             'net_amount'             => 'required|numeric|min:0',
-            'payment_method'         => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
+            'payment_method'         => 'required|in:credit,cash,cheque,bank_transfer,material+making cost,material',
             'payment_term'           => 'nullable|string',
             'gold_rate_usd'          => 'nullable|numeric|min:0',
             'gold_rate_aed_ounce'    => 'nullable|numeric|min:0',
@@ -1112,8 +1125,8 @@ class PurchaseInvoiceController extends Controller
             'items.*.making_rate'    => 'required|numeric|min:0',
             'items.*.material_type'  => 'required|in:gold,diamond',
             'items.*.vat_percent'    => 'required|numeric|min:0',
-            'material_given_by'      => 'nullable|required_if:payment_method,material+making cost|string',
-            'material_received_by'   => 'nullable|required_if:payment_method,material+making cost|string',
+            'material_given_by'      => ['nullable', 'string', 'required_if:payment_method,material+making cost', 'required_if:payment_method,material'],
+            'material_received_by'   => ['nullable', 'string', 'required_if:payment_method,material+making cost', 'required_if:payment_method,material'],
             'cash_amount_paid'       => 'nullable|numeric|min:0',
             'making_amount_paid'     => 'nullable|numeric|min:0',
             // FIX (point 1): require a valid Cash/Bank account whenever
@@ -1159,7 +1172,7 @@ class PurchaseInvoiceController extends Controller
         ]);
     }
 
-    protected function createPurchaseAccountingEntries(PurchaseInvoice $invoice, array $totals, Request $request): Voucher
+    protected function createPurchaseAccountingEntries(PurchaseInvoice $invoice, array $totals, Request $request): Voucher  
     {
         $acct = function (string $code) use ($invoice): int {
             $account = ChartOfAccounts::where('account_code', $code)->first();
@@ -1431,6 +1444,38 @@ class PurchaseInvoiceController extends Controller
                         'debit'      => 0,
                         'credit'     => $makingPaid,
                         'narration'  => $paymentLabel . ' paid for making charges — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+                break;
+
+            case 'material':
+                // NEW: Vendor gives ONLY raw material — no cash is ever paid.
+                //   CR Gold/Diamond Inventory — material exchanged back with vendor
+                //   CR Vendor AP              — full remainder (MC + parts + VAT)
+                // If material value exactly covers the invoice total, the
+                // remainder is 0 and nothing is owed to the vendor.
+                $materialCreditOnly = round($totals['gold_material'] + $totals['diamond_material'], 2);
+
+                if ($materialCreditOnly > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $acct('104001'),
+                        'debit'      => 0,
+                        'credit'     => $materialCreditOnly,
+                        'narration'  => 'Raw material given to vendor as full material payment'
+                                        . ' (' . ($invoice->material_given_by ?? 'us') . ')'
+                                        . ' — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+
+                $remainingMaterialOnly = round($totalDebit - $materialCreditOnly, 2);
+                if ($remainingMaterialOnly > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->vendor_id,
+                        'debit'      => 0,
+                        'credit'     => $remainingMaterialOnly,
+                        'narration'  => 'Balance payable to vendor (material value below invoice total) — Inv# ' . $invoice->invoice_no,
                     ];
                 }
                 break;

@@ -976,6 +976,18 @@ class SaleInvoiceController extends Controller
                 'transfer_amount'    => null,
             ]);
         }
+
+        // FIX (material ): server-side hardening — even if the JS-hidden
+        // collection fields were somehow submitted (e.g. tampered request),
+        // 'material ' NEVER allows a cash/bank collection. This is what
+        // makes making_amount_collected correctly persist as 0 for this
+        // method, keeping it consistent with the making_amount_collected fix.
+        if ($request->payment_method === 'material') {
+            $request->merge([
+                'making_amount_paid'     => 0,
+                'making_payment_account' => null,
+            ]);
+        }
     }
 
     private function validateInvoice(Request $request): void
@@ -989,7 +1001,7 @@ class SaleInvoiceController extends Controller
             'exchange_rate'            => 'nullable|required_if:currency,USD|numeric|min:0',
             'net_amount'               => 'required|numeric|min:0',
             'invoice_vat_percent'      => 'nullable|numeric|min:0|max:100',
-            'payment_method'           => 'required|in:credit,cash,cheque,bank_transfer,material+making cost',
+            'payment_method'           => 'required|in:credit,cash,cheque,bank_transfer,material+making cost,material',
             'payment_term'             => 'nullable|string',
             'gold_rate_usd'            => 'nullable|numeric|min:0',
             'gold_rate_aed_ounce'      => 'nullable|numeric|min:0',
@@ -1017,8 +1029,8 @@ class SaleInvoiceController extends Controller
             'items.*.making_rate'      => 'required|numeric|min:0',
             'items.*.material_type'    => 'required|in:gold,diamond',
             'items.*.vat_percent'      => 'required|numeric|min:0',
-            'material_given_by'        => 'nullable|required_if:payment_method,material+making cost|string',
-            'material_received_by'     => 'nullable|required_if:payment_method,material+making cost|string',
+            'material_given_by'        => ['nullable', 'string', 'required_if:payment_method,material+making cost', 'required_if:payment_method,material'],
+            'material_received_by'     => ['nullable', 'string', 'required_if:payment_method,material+making cost', 'required_if:payment_method,material'],
             'cash_amount_paid'         => 'nullable|numeric|min:0',
             'making_amount_paid'       => 'nullable|numeric|min:0',
             'making_payment_account'   => [
@@ -1076,6 +1088,14 @@ class SaleInvoiceController extends Controller
 
         $isMaterial = str_contains($invoice->payment_method, 'material');
 
+        // FIX (Material Only): distinct remarks label so vouchers clearly show
+        // which material-based flow generated them.
+        $remarksSuffix = match ($invoice->payment_method) {
+            'material+making cost'  => ' [Metal Receipt + Currency Collection]',
+            'material'              => ' [Metal Receipt Only — No Cash Collected]',
+            default                 => '',
+        };
+
         $voucher = Voucher::create([
             'voucher_no'     => Voucher::generateVoucherNo('sale'),
             'voucher_type'   => 'sale',
@@ -1085,8 +1105,7 @@ class SaleInvoiceController extends Controller
             'ac_dr_sid'      => null,
             'ac_cr_sid'      => null,
             'amount'         => null,
-            'remarks'        => 'Sale Invoice #' . $invoice->invoice_no
-                                . ($isMaterial ? ' [Metal Receipt + Currency Collection]' : ''),
+            'remarks'        => 'Sale Invoice #' . $invoice->invoice_no . $remarksSuffix,
             'created_by'     => auth()->id(),
         ]);
 
@@ -1324,6 +1343,41 @@ class SaleInvoiceController extends Controller
                         'debit'      => $makingPaid,
                         'credit'     => 0,
                         'narration'  => $paymentLabel . ' received for making charges from customer — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+                break;
+            case 'material':
+                // Customer gives ONLY raw material — no cash/bank collection
+                // is ever allowed under this method (enforced server-side in
+                // clearIrrelevantPaymentFields(), which forces
+                // making_amount_paid = 0 regardless of what's submitted).
+                //   DR Gold/Diamond Inventory — material value received
+                //   DR Customer AR             — full remainder (MC + parts + VAT)
+                // If material value exactly covers the invoice total, the
+                // remainder is 0 and nothing is owed — the invoice is fully
+                // settled by metal alone.
+                $materialDebitOnly = round($totals['gold_material'] + $totals['diamond_material'], 2);
+
+                if ($materialDebitOnly > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $acct('104001'),
+                        'debit'      => $materialDebitOnly,
+                        'credit'     => 0,
+                        'narration'  => 'Gold received from customer as full material payment'
+                                        . ' (' . ($invoice->material_received_by ?? 'customer') . ')'
+                                        . ' — Inv# ' . $invoice->invoice_no,
+                    ];
+                }
+
+                $remainingMaterialOnly = round($totalCredit - $materialDebitOnly, 2);
+                if ($remainingMaterialOnly > 0) {
+                    $entries[] = [
+                        'voucher_id' => $voucher->id,
+                        'account_id' => $invoice->customer_id,
+                        'debit'      => $remainingMaterialOnly,
+                        'credit'     => 0,
+                        'narration'  => 'Balance receivable from customer (material value below invoice total) — Inv# ' . $invoice->invoice_no,
                     ];
                 }
                 break;

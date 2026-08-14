@@ -366,6 +366,7 @@
                 <option value="bank_transfer">Bank Transfer</option>
                 <option value="cheque">Cheque</option>
                 <option value="material+making cost">Material + Making Cost</option>
+                <option value="material">Material Only</option>
               </select>
             </div>
             <div class="col-md-2">
@@ -431,12 +432,12 @@
               <label>Making Charges (Calculated)</label>
               <input type="number" step="any" name="making_charges" id="making_charges_display" class="form-control" readonly>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-2 making-collection-field">
               <label>Making Charges Collected Now</label>
               <input type="number" step="any" name="making_amount_paid" id="making_amount_paid" class="form-control" value="0">
               <small class="text-muted">0 = fully receivable from customer</small>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-2 making-collection-field">
               <label>Cash/Bank Account (for collection)</label>
               <select name="making_payment_account" class="form-control select2-js">
                 <option value="">None (fully receivable)</option>
@@ -1459,7 +1460,8 @@ $(document).ready(function () {
         $('#invoice_vat_amount_display').val(invVatAmt.toFixed(2));
         $('#grand_total_display').val((Math.round((netAed + invVatAmt) * 100) / 100).toFixed(2));
 
-        if ($('#payment_method').val() === 'material+making cost') {
+        const pm = $('#payment_method').val();
+        if (pm === 'material+making cost' || pm === 'material') {
             $('input[name="material_weight"]').val(sum995.toFixed(4));
             $('input[name="material_purity"]').val(sumPurityWeight.toFixed(4));
             $('input[name="material_value_input"]').val(sumMaterial.toFixed(4));
@@ -1483,13 +1485,29 @@ $(document).ready(function () {
 
     // ===== PAYMENT METHOD =====
     $('#payment_method').on('change', function() {
-        const val = $(this).val();
-        $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields, #cash_fields').addClass('d-none');
-        if (val === 'cheque')                    $('#cheque_fields, #received_by_box').removeClass('d-none');
-        else if (val === 'cash')                 $('#received_by_box, #cash_fields').removeClass('d-none');
-        else if (val === 'bank_transfer')        $('#bank_transfer_fields').removeClass('d-none');
-        else if (val === 'material+making cost') $('#material_fields').removeClass('d-none');
-        calculateTotals();
+      const val = $(this).val();
+      $('#cheque_fields, #material_fields, #received_by_box, #bank_transfer_fields, #cash_fields').addClass('d-none');
+
+      if (val === 'cheque')             $('#cheque_fields, #received_by_box').removeClass('d-none');
+      else if (val === 'cash')          $('#received_by_box, #cash_fields').removeClass('d-none');
+      else if (val === 'bank_transfer') $('#bank_transfer_fields').removeClass('d-none');
+      else if (val === 'material+making cost' || val === 'material') {
+          $('#material_fields').removeClass('d-none');
+
+          // FIX (Material): "material" means the customer gives
+          // ONLY metal — no cash/bank collection is ever allowed under this
+          // method, so the collection sub-fields are hidden and forcibly
+          // zeroed/cleared. This keeps making_amount_collected persisted as
+          // 0 for this method, same as the making_amount_collected fix.
+          if (val === 'material') {
+              $('.making-collection-field').addClass('d-none');
+              $('#making_amount_paid').val(0);
+              $('select[name="making_payment_account"]').val('').trigger('change');
+          } else {
+              $('.making-collection-field').removeClass('d-none');
+          }
+      }
+      calculateTotals();
     });
 
     // ===== PARTS CALCULATION =====
