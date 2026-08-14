@@ -51,7 +51,7 @@
                 <option value="1" {{ $saleInvoice->is_taxable ? 'selected' : '' }}>Taxable (SAL-TAX)</option>
                 <option value="0" {{ !$saleInvoice->is_taxable ? 'selected' : '' }}>Non-Taxable (SAL)</option>
               </select>
-              <small class="text-muted">Invoice number is locked after creation</small>
+              <small class="text-muted">Changing type re-assigns the invoice number to the correct series (SAL- / SAL-TAX-)</small>
             </div>
 
             <div class="col-md-2">
@@ -350,7 +350,8 @@
             </div>
             <div class="col-md-2">
               <label>Making Charges Collected Now</label>
-              <input type="number" step="any" name="making_amount_paid" id="making_amount_paid" class="form-control" value="0">
+              <input type="number" step="any" name="making_amount_paid" id="making_amount_paid" class="form-control"
+                     value="{{ old('making_amount_paid', $saleInvoice->making_amount_collected ?? 0) }}">
               <small class="text-muted">0 = fully receivable from customer</small>
             </div>
             <div class="col-md-2">
@@ -668,38 +669,45 @@ $(document).ready(function () {
     }
 
     function renderDedicatedNameResults(results) {
-        const box = $('#name_search_results');
-        if (!results.length) {
-            box.html('<div style="padding:10px 14px;font-size:.82rem;color:#6c757d;">No results found.</div>').show();
-            return;
-        }
+      const box = $('#name_search_results');
+      if (!results.length) {
+          box.html('<div style="padding:10px 14px;font-size:.82rem;color:#6c757d;">No results found.</div>').show();
+          return;
+      }
 
-        const sourceColors = { sale: '#0d6efd', purchase: '#198754', consignment: '#6f42c1' };
-        const sourceLabels = { sale: 'Sale', purchase: 'Purchase', consignment: 'Consignment' };
+      const sourceColors = { sale: '#0d6efd', purchase: '#198754', consignment: '#6f42c1' };
+      const sourceLabels = { sale: 'Sale', purchase: 'Purchase', consignment: 'Consignment' };
 
-        let html = '';
-        results.forEach(function(r) {
-            const color = sourceColors[r.source] || '#6c757d';
-            const label = sourceLabels[r.source] || r.source;
-            const wt    = r.gross_weight ? parseFloat(r.gross_weight).toFixed(3) + 'g' : '';
-            const bc    = r.barcode_number
-                ? `<span style="font-family:monospace;font-size:.75rem;color:#2563eb;">${r.barcode_number}</span>`
-                : '';
-            const csg   = r.consignment_no
-                ? `<span style="font-size:.72rem;color:#6c757d;"> · ${r.consignment_no}</span>`
-                : '';
+      let html = '';
+      results.forEach(function(r, i) {
+          const color = sourceColors[r.source] || '#6c757d';
+          const label = sourceLabels[r.source] || r.source;
+          const wt    = r.gross_weight ? parseFloat(r.gross_weight).toFixed(3) + 'g' : '';
+          const bc    = r.barcode_number
+              ? `<span style="font-family:monospace;font-size:.75rem;color:#2563eb;">${r.barcode_number}</span>`
+              : '';
+          const csg   = r.consignment_no
+              ? `<span style="font-size:.72rem;color:#6c757d;"> · ${r.consignment_no}</span>`
+              : '';
+          const purityBadge = r.material_type
+              ? `<span style="margin-left:4px;font-size:.68rem;padding:1px 6px;border-radius:20px;background:#f1f3f5;color:#495057;">${r.material_type}${r.purity ? ' · ' + r.purity : ''}</span>`
+              : '';
+          const partyLine = (r.party_name || r.invoice_no || r.invoice_date)
+              ? `<small class="text-muted d-block" style="font-size:.7rem;">${[r.party_name, r.invoice_no, r.invoice_date].filter(Boolean).join(' · ')}</small>`
+              : '';
 
-            html += `
-            <div class="dedicated-name-result-row"
-                style="padding:9px 14px;cursor:pointer;border-bottom:1px solid #f1f3f5;font-size:.82rem;"
-                onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background=''"
-                data-idx="${html.length}">
+          html += `
+          <div class="dedicated-name-result-row" data-idx="${i}"
+              style="padding:9px 14px;border-bottom:1px solid #f1f3f5;font-size:.82rem;">
+            <div class="dedicated-name-result-select text-dark" style="cursor:pointer;"
+                  onmouseover="this.style.background='#f8f9fa'" onmouseout="this.style.background=''">
               <div class="d-flex justify-content-between align-items-start">
                 <div>
                   <span style="font-weight:600;">${r.item_name || '—'}</span>
                   ${csg}
                   <span style="margin-left:6px;font-size:.7rem;padding:1px 7px;border-radius:20px;
                               background:${color}22;color:${color};font-weight:500;">${label}</span>
+                  ${purityBadge}
                 </div>
                 <div style="text-align:right;flex-shrink:0;margin-left:8px;">
                   ${bc}
@@ -707,18 +715,65 @@ $(document).ready(function () {
                 </div>
               </div>
               ${r.item_description ? `<div style="font-size:.74rem;color:#6c757d;margin-top:2px;">${r.item_description}</div>` : ''}
-            </div>`;
-        });
+              ${partyLine}
+            </div>
+            <div class="d-flex justify-content-end mt-1">
+              <button type="button" class="btn btn-link btn-sm p-0 dedicated-expand-toggle" data-idx="${i}" style="font-size:.72rem;">Details ▾</button>
+            </div>
+            <div class="result-detail d-none mt-2 p-2 text-dark" id="dedicated_result_detail_${i}" style="background:#f8f9fa;border-radius:6px;font-size:.75rem;"></div>
+          </div>`;
+      });
 
-        box.html(html).show();
+      box.html(html).show();
 
-        box.find('.dedicated-name-result-row').each(function(i) {
-            $(this).on('click', function() {
-                addRowFromResult(results[i]);
-                $('#name_search_input').val('');
-                box.hide();
-            });
-        });
+      box.find('.dedicated-name-result-select').each(function(i) {
+          $(this).on('click', function() {
+              addRowFromResult(results[i]);
+              $('#name_search_input').val('');
+              box.hide();
+          });
+      });
+
+      box.find('.dedicated-expand-toggle').on('click', function(e) {
+          e.stopPropagation();
+          const idx    = $(this).data('idx');
+          const r      = results[idx];
+          const $panel = $('#dedicated_result_detail_' + idx);
+
+          if (!$panel.hasClass('d-none')) { $panel.addClass('d-none'); return; }
+
+          if (!$panel.data('built')) {
+              let partsHtml = '';
+              if (r.parts && r.parts.length) {
+                  partsHtml = '<div class="mt-1"><strong>Parts:</strong><ul class="mb-0 ps-3">' +
+                      r.parts.map(p => `<li>${p.item_name || 'Part'} — Ct: ${p.qty || 0}, Rate: ${p.rate || 0}, Stone: ${p.stone_qty || 0}@${p.stone_rate || 0}, Total: ${p.total || 0}</li>`).join('') +
+                      '</ul></div>';
+              }
+              $panel.html(`
+                  <div><strong>Making Rate:</strong> ${parseFloat(r.making_rate || 0).toFixed(2)}</div>
+                  <div><strong>Material Value:</strong> ${parseFloat(r.material_value || 0).toFixed(2)}</div>
+                  <div><strong>VAT %:</strong> ${r.vat_percent || 0}</div>
+                  ${partsHtml}
+                  <div class="result-img mt-1"></div>
+              `);
+              $panel.data('built', true);
+
+              if (r.product_id) {
+                  $.ajax({
+                      url: '{{ url("/product") }}/' + r.product_id + '/image',
+                      method: 'GET',
+                      success: function(data) {
+                          if (data.image_url) {
+                              $panel.find('.result-img').html(`<img src="${data.image_url}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;">`);
+                          }
+                      }
+                  });
+              }
+          }
+
+          box.find('.result-detail').not($panel).addClass('d-none');
+          $panel.removeClass('d-none');
+      });
     }
 
     let dedicatedNameSearchTimer = null;

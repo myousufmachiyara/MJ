@@ -174,16 +174,8 @@ class SaleInvoiceController extends Controller
         try {
             DB::beginTransaction();
 
-            $isTaxable   = $request->boolean('is_taxable');
-            $prefix      = $isTaxable ? 'SAL-TAX-' : 'SAL-';
-            $lastInvoice = SaleInvoice::withTrashed()
-                ->where('invoice_no', 'REGEXP', '^' . preg_quote($prefix) . '[0-9]+$')
-                ->orderBy('id', 'desc')
-                ->first();
-            $nextNumber = $lastInvoice
-                ? ((int) substr($lastInvoice->invoice_no, strlen($prefix))) + 1
-                : 1;
-            $invoiceNo = $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+            $isTaxable = $request->boolean('is_taxable');
+            $invoiceNo = $this->generateInvoiceNo($isTaxable);
 
             $invoice = SaleInvoice::create([
                 'invoice_no'               => $invoiceNo,
@@ -208,7 +200,13 @@ class SaleInvoiceController extends Controller
                 'grand_total'              => 0,
                 'payment_method'           => $request->payment_method,
                 'payment_term'             => $request->payment_term,
-                'cash_amount_paid'         => $request->cash_amount_paid,   // ← partial cash
+                'cash_amount_paid'         => $request->cash_amount_paid,
+                // FIX (Making Charges Collected Now): persist what was actually
+                // collected so edit() can prefill it. Previously this value only
+                // ever lived in the request, was used once to build the voucher,
+                // then discarded — so the edit blade always showed 0 regardless
+                // of what was collected on a prior save.
+                'making_amount_collected'  => $request->making_amount_paid ?? 0,
                 'bank_name'                => $request->bank_name,
                 'cheque_no'                => $request->cheque_no,
                 'cheque_date'              => $request->cheque_date,
@@ -237,7 +235,7 @@ class SaleInvoiceController extends Controller
                 'net_amount_aed' => $calculatedNetAed,
             ]);
 
-            $invoiceVatPct    = (float) ($request->invoice_vat_percent ?? 0);
+            $invoiceVatPct    = $isTaxable ? (float) ($request->invoice_vat_percent ?? 0) : 0.0;
             $invoiceVatAmount = round($calculatedNetAed * $invoiceVatPct / 100, 2);
             $grandTotal       = round($calculatedNetAed + $invoiceVatAmount, 2);
 
@@ -357,8 +355,16 @@ class SaleInvoiceController extends Controller
         try {
             DB::beginTransaction();
 
+            $newIsTaxable = $request->boolean('is_taxable');
+            $invoiceNo    = $invoice->invoice_no;
+
+            if ($newIsTaxable !== (bool) $invoice->is_taxable) {
+                $invoiceNo = $this->generateInvoiceNo($newIsTaxable);
+            }
+
             $invoice->update([
-                'is_taxable'               => $request->boolean('is_taxable'),
+                'invoice_no'               => $invoiceNo,
+                'is_taxable'               => $newIsTaxable,
                 'customer_id'              => $request->customer_id,
                 'consignment_id'           => $request->consignment_id ?: null,
                 'invoice_date'             => $request->invoice_date,
@@ -374,7 +380,14 @@ class SaleInvoiceController extends Controller
                 'purchase_making_rate_aed' => $request->purchase_making_rate_aed,
                 'payment_method'           => $request->payment_method,
                 'payment_term'             => $request->payment_term,
-                'cash_amount_paid'         => $request->cash_amount_paid,   // ← partial cash
+                'cash_amount_paid'         => $request->cash_amount_paid,
+                // FIX (Making Charges Collected Now): same persistence as store().
+                // Whatever the user typed into "Making Charges Collected Now" on
+                // THIS save is what edit() will prefill next time — so re-opening
+                // this invoice always reflects what was actually collected last,
+                // instead of resetting to 0 and risking double-counting the
+                // outstanding balance on the next accounting-entry regeneration.
+                'making_amount_collected'  => $request->making_amount_paid ?? 0,
                 'bank_name'                => $request->bank_name,
                 'cheque_no'                => $request->cheque_no,
                 'cheque_date'              => $request->cheque_date,
@@ -407,7 +420,7 @@ class SaleInvoiceController extends Controller
                 'net_amount_aed' => $calculatedNetAed,
             ]);
 
-            $invoiceVatPct    = (float) ($request->invoice_vat_percent ?? 0);
+            $invoiceVatPct    = $newIsTaxable ? (float) ($request->invoice_vat_percent ?? 0) : 0.0;
             $invoiceVatAmount = round($calculatedNetAed * $invoiceVatPct / 100, 2);
             $grandTotal       = round($calculatedNetAed + $invoiceVatAmount, 2);
 
@@ -784,6 +797,26 @@ class SaleInvoiceController extends Controller
     // PRIVATE HELPERS
     // =========================================================================
 
+    private function generateInvoiceNo(bool $isTaxable): string
+    {
+        $prefix = $isTaxable ? 'SAL-TAX-' : 'SAL-';
+
+        $last = SaleInvoice::withTrashed()
+            ->whereRaw(
+                'invoice_no REGEXP ?',
+                ['^' . preg_quote($prefix, '/') . '[0-9]+$']
+            )
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->first();
+
+        $next = $last
+            ? ((int) str_replace($prefix, '', $last->invoice_no)) + 1
+            : 1;
+
+        return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
+    }
+
     private function createItems(
         SaleInvoice $invoice,
         array $items,
@@ -811,7 +844,7 @@ class SaleInvoiceController extends Controller
             $grossWeight = (float) ($itemData['gross_weight'] ?? 0);
             $purity      = (float) ($itemData['purity']       ?? 0);
             $makingRate  = (float) ($itemData['making_rate']  ?? 0);
-            $vatPercent  = (float) ($itemData['vat_percent']  ?? 0);
+            $vatPercent  = $invoice->is_taxable ? (float) ($itemData['vat_percent'] ?? 0) : 0.0;
             $matType     = $itemData['material_type'] ?? 'gold';
 
             $purityWeight  = $grossWeight * $purity;
@@ -986,12 +1019,8 @@ class SaleInvoiceController extends Controller
             'items.*.vat_percent'      => 'required|numeric|min:0',
             'material_given_by'        => 'nullable|required_if:payment_method,material+making cost|string',
             'material_received_by'     => 'nullable|required_if:payment_method,material+making cost|string',
-            // ── Partial payment fields (mirrors purchase exactly) ───────────
             'cash_amount_paid'         => 'nullable|numeric|min:0',
             'making_amount_paid'       => 'nullable|numeric|min:0',
-            // FIX: require a valid Cash/Bank account whenever making_amount_paid > 0
-            // under material+making cost, instead of silently reaching an
-            // "Accounting imbalance" exception later (same fix as PurchaseInvoiceController).
             'making_payment_account'   => [
                 'nullable',
                 'string',
@@ -1004,7 +1033,7 @@ class SaleInvoiceController extends Controller
                     $paid    = ($paidRaw !== null && $paidRaw !== '') ? (float) $paidRaw : 0.0;
 
                     if ($paid <= 0) {
-                        return; // fully receivable from customer — no account needed
+                        return;
                     }
 
                     if (empty($value)) {
@@ -1031,20 +1060,6 @@ class SaleInvoiceController extends Controller
             ],
         ]);
     }
-
-    // =========================================================================
-    // createSaleAccountingEntries
-    //
-    // DEBIT side mirrors purchase CREDIT side exactly:
-    //   credit        → full amount DR Customer AR
-    //   cash          → cash_amount_paid (or full) DR Cash; remainder DR Customer AR
-    //   cheque        → cheque_amount (or full) DR Bank; remainder DR Customer AR
-    //   bank_transfer → transfer_amount (or full) DR Bank; remainder DR Customer AR
-    //   material+making → DR Gold Inventory (material); DR Customer AR (currency remainder)
-    //                      if making_amount_paid > 0 → also DR Cash/Bank, reduce Customer AR
-    //
-    // CREDIT side = revenue accounts (unchanged)
-    // =========================================================================
 
     protected function createSaleAccountingEntries(SaleInvoice $invoice, array $totals, Request $request): Voucher
     {
@@ -1077,7 +1092,6 @@ class SaleInvoiceController extends Controller
 
         $entries = [];
 
-        // ── CREDIT entries (revenue) ──────────────────────────────────────────
         $goldRev    = round($totals['gold_material']    + $totals['gold_parts'],    2);
         $diamondRev = round($totals['diamond_material'] + $totals['diamond_parts'], 2);
 
@@ -1140,11 +1154,9 @@ class SaleInvoiceController extends Controller
             );
         }
 
-        // ── DEBIT entries (collection side — mirrors purchase credit logic) ───
         switch ($invoice->payment_method) {
 
             case 'credit':
-                // Full invoice amount receivable — nothing collected yet
                 $entries[] = [
                     'voucher_id' => $voucher->id,
                     'account_id' => $invoice->customer_id,
@@ -1155,7 +1167,6 @@ class SaleInvoiceController extends Controller
                 break;
 
             case 'cash':
-                // cash_amount_paid = amount collected now; remainder → Customer AR
                 $collected = $request->cash_amount_paid !== null && $request->cash_amount_paid !== ''
                     ? round((float) $request->cash_amount_paid, 2)
                     : $totalCredit;
@@ -1256,12 +1267,8 @@ class SaleInvoiceController extends Controller
                 break;
 
             case 'material+making cost':
-                // Customer brings their own gold as partial payment.
-                // DR Gold Inventory  (material value received — asset increases)
-                // DR Customer AR     (currency portion still owed: MC + parts + VAT)
-                // If making_amount_paid > 0 → collect that now via Cash/Bank
                 $materialDebit = round($totals['gold_material'] + $totals['diamond_material'], 2);
-                $currencyTotal = round($totalCredit - $materialDebit, 2); // MC + parts + VAT
+                $currencyTotal = round($totalCredit - $materialDebit, 2);
 
                 $makingPaidRaw = $request->making_amount_paid;
                 $makingPaid    = ($makingPaidRaw !== null && $makingPaidRaw !== '')
@@ -1282,7 +1289,6 @@ class SaleInvoiceController extends Controller
                     ];
                 }
 
-                // Currency still owed (after deducting any making paid now)
                 $currencyRemaining = round($currencyTotal - $makingPaid, 2);
                 if ($currencyRemaining > 0) {
                     $entries[] = [
@@ -1294,7 +1300,6 @@ class SaleInvoiceController extends Controller
                     ];
                 }
 
-                // Collect making charges now if paid immediately
                 if ($makingPaid > 0) {
                     $paymentAccountId = null;
                     $paymentLabel     = '';
@@ -1307,10 +1312,6 @@ class SaleInvoiceController extends Controller
                         $paymentLabel     = ChartOfAccounts::find($paymentAccountId)?->name ?? 'Bank/Cash';
                     }
 
-                    // FIX: validateInvoice() now guarantees a valid account exists
-                    // whenever $makingPaid > 0, so this should never be null here.
-                    // Kept as a hard safety net instead of silently dropping the
-                    // entry (which previously caused a debit/credit imbalance).
                     if (!$paymentAccountId) {
                         throw new \Exception(
                             'Cash/Bank account for making charges collected could not be resolved — Inv# ' . $invoice->invoice_no
@@ -1335,7 +1336,6 @@ class SaleInvoiceController extends Controller
             AccountingEntry::create($entry);
         }
 
-        // ── Balance check ─────────────────────────────────────────────────────
         $sumDebits  = round(collect($entries)->sum('debit'),  2);
         $sumCredits = round(collect($entries)->sum('credit'), 2);
 
@@ -1601,16 +1601,14 @@ class SaleInvoiceController extends Controller
 
         $results = collect();
 
-        // 1️⃣ Sale invoice items
-        SaleInvoiceItem::with('parts')
+        SaleInvoiceItem::with(['parts', 'saleInvoice.customer'])
             ->where('item_name', 'like', "%{$query}%")
             ->latest()
             ->limit(10)
             ->get()
             ->each(fn($item) => $results->push($this->formatNameSearchResult($item, 'sale')));
 
-        // 2️⃣ Consignment items (in stock only)
-        \App\Models\ConsignmentItem::with(['parts', 'consignment'])
+        \App\Models\ConsignmentItem::with(['parts', 'consignment.partner'])
             ->where('item_name', 'like', "%{$query}%")
             ->where('item_status', 'in_stock')
             ->limit(10)
@@ -1619,15 +1617,13 @@ class SaleInvoiceController extends Controller
                 $this->formatNameSearchResult($item, 'consignment', $item->consignment->consignment_no ?? null)
             ));
 
-        // 3️⃣ Purchase invoice items
-        \App\Models\PurchaseInvoiceItem::with('parts')
+        \App\Models\PurchaseInvoiceItem::with(['parts', 'purchaseInvoice.vendor'])
             ->where('item_name', 'like', "%{$query}%")
             ->latest()
             ->limit(10)
             ->get()
             ->each(fn($item) => $results->push($this->formatNameSearchResult($item, 'purchase')));
 
-        // De-dup by barcode (fallback to name) and cap the list
         $results = $results
             ->unique(fn($r) => $r['barcode_number'] ?: $r['item_name'] . '|' . $r['source'])
             ->take(15)
@@ -1638,6 +1634,39 @@ class SaleInvoiceController extends Controller
 
     private function formatNameSearchResult($item, string $source, ?string $consignmentNo = null): array
     {
+        $invoiceNo   = null;
+        $invoiceDate = null;
+        $partyName   = null;
+
+        switch ($source) {
+            case 'sale':
+                $inv         = $item->saleInvoice;
+                $invoiceNo   = $inv->invoice_no ?? null;
+                $invoiceDate = $inv && $inv->invoice_date
+                    ? \Carbon\Carbon::parse($inv->invoice_date)->format('d-M-Y')
+                    : null;
+                $partyName   = $inv->customer->name ?? null;
+                break;
+
+            case 'purchase':
+                $inv         = $item->purchaseInvoice;
+                $invoiceNo   = $inv->invoice_no ?? null;
+                $invoiceDate = $inv && $inv->invoice_date
+                    ? \Carbon\Carbon::parse($inv->invoice_date)->format('d-M-Y')
+                    : null;
+                $partyName   = $inv->vendor->name ?? null;
+                break;
+
+            case 'consignment':
+                $csg         = $item->consignment;
+                $invoiceNo   = $csg->consignment_no ?? $consignmentNo;
+                $invoiceDate = $csg && $csg->start_date
+                    ? \Carbon\Carbon::parse($csg->start_date)->format('d-M-Y')
+                    : null;
+                $partyName   = $csg->partner->name ?? null;
+                break;
+        }
+
         return [
             'source'           => $source,
             'consignment_no'   => $consignmentNo,
@@ -1648,7 +1677,12 @@ class SaleInvoiceController extends Controller
             'gross_weight'     => $item->gross_weight,
             'making_rate'      => $item->making_rate,
             'material_type'    => $item->material_type,
+            'material_value'   => (float) ($item->material_value ?? 0),
             'vat_percent'      => $item->vat_percent,
+            'invoice_no'       => $invoiceNo,
+            'invoice_date'     => $invoiceDate,
+            'party_name'       => $partyName,
+            'product_id'       => $item->product_id ?? null,
             'parts'            => $item->parts->map(fn($p) => [
                 'item_name'        => $p->item_name,
                 'part_description' => $p->part_description,

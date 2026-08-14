@@ -44,6 +44,7 @@ class SaleInvoice extends Model
         'material_purity',
         'material_value',
         'making_charges',
+        'making_amount_collected',
         'material_received_by',
         'material_given_by',
         // Rates
@@ -75,6 +76,7 @@ class SaleInvoice extends Model
         'material_purity'          => 'float',
         'material_value'           => 'float',
         'making_charges'           => 'float',
+        'making_amount_collected'  => 'float',
         'gold_rate_usd'            => 'float',
         'gold_rate_aed_ounce'      => 'float',
         'gold_rate_aed'            => 'float',

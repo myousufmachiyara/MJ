@@ -62,7 +62,7 @@
                 <option value="1" {{ $purchaseInvoice->is_taxable ? 'selected' : '' }}>Taxable (PUR-TAX)</option>
                 <option value="0" {{ !$purchaseInvoice->is_taxable ? 'selected' : '' }}>Non-Taxable (PUR)</option>
               </select>
-              <small class="text-muted">Invoice number is locked after creation</small>
+              <small class="text-muted">Changing type re-assigns the invoice number to the correct series (PUR- / PUR-TAX-)</small>
             </div>
 
             <div class="col-md-2">

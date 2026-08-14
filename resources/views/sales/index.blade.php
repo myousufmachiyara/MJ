@@ -21,8 +21,19 @@
           <div class="alert alert-danger">{{ session('error') }}</div>
         @endif
 
+        {{-- Search box — filters the table below via DataTables --}}
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <div class="input-group">
+              <span class="input-group-text"><i class="fas fa-search"></i></span>
+              <input type="text" id="saleInvoiceSearch" class="form-control"
+                     placeholder="Search invoice no, customer, type, payment…">
+            </div>
+          </div>
+        </div>
+
         <div class="table-responsive">
-          <table class="table table-bordered table-striped datatable">
+          <table class="table table-bordered table-striped datatable" id="saleInvoicesTable">
             <thead>
               <tr>
                 <th>#</th>
@@ -122,4 +133,22 @@
     </section>
   </div>
 </div>
+
+<script>
+$(function () {
+    // Reuse the existing DataTables instance if layouts.app already initialized
+    // one for `.datatable` tables; otherwise initialize it here. Either way,
+    // this never double-initializes (jQuery DataTables throws if you do).
+    var $table = $('#saleInvoicesTable');
+    var dt = $.fn.DataTable.isDataTable($table) ? $table.DataTable() : $table.DataTable();
+
+    // Hide the plugin's own default search box (if present) since we're
+    // using our own input above the table — keeps only one search field visible.
+    $table.closest('.dataTables_wrapper').find('.dataTables_filter').hide();
+
+    $('#saleInvoiceSearch').on('keyup', function () {
+        dt.search(this.value).draw();
+    });
+});
+</script>
 @endsection

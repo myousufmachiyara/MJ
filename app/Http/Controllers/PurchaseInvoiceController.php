@@ -251,8 +251,26 @@ class PurchaseInvoiceController extends Controller
         try {
             DB::beginTransaction();
 
+            // FIX (point 3): if the invoice TYPE (Tax/Non-Tax) changed on this
+            // update, the invoice number must move to the correct series too.
+            // Previously, changing is_taxable saved the new type but kept the
+            // OLD invoice_no — e.g. a PUR-TAX-00007 invoice flipped to
+            // Non-Tax stayed "PUR-TAX-00007" while is_taxable=false, which is
+            // wrong both for the numbering sequence itself and for anything
+            // downstream that reads invoice_no (voucher remarks text, new
+            // item barcode prefixes via generateBarcodeNumber()).
+            // generateInvoiceNo() already runs inside this same transaction
+            // with lockForUpdate(), so this is race-safe exactly like store().
+            $newIsTaxable = $request->boolean('is_taxable');
+            $invoiceNo    = $invoice->invoice_no;
+
+            if ($newIsTaxable !== (bool) $invoice->is_taxable) {
+                $invoiceNo = $this->generateInvoiceNo($newIsTaxable);
+            }
+
             $invoice->update([
-                'is_taxable'           => $request->boolean('is_taxable'),
+                'invoice_no'           => $invoiceNo,
+                'is_taxable'           => $newIsTaxable,
                 'vendor_id'            => $request->vendor_id,
                 'invoice_date'         => $request->invoice_date,
                 'remarks'              => $request->remarks,

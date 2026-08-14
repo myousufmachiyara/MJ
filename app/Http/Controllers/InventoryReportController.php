@@ -11,6 +11,7 @@ use App\Models\Consignment;
 use App\Models\ConsignmentItem;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class InventoryReportController extends Controller
 {
@@ -265,7 +266,7 @@ class InventoryReportController extends Controller
     // so the gold_inhand_gross correctly shows 65gm not 100gm when 35gm was sold.
     // =========================================================================
 
-    private function buildWeightSummary(string $from, string $to): array
+    private function buildWeightSummary(string $from, string $to): array    
     {
         try {
             $purchaseItems = PurchaseInvoiceItem::whereHas('purchaseInvoice', function ($q) use ($from, $to) {
@@ -285,6 +286,42 @@ class InventoryReportController extends Controller
             $diaP  = $purchaseItems->where('material_type', 'diamond');
             $diaS  = $saleItems->where('material_type', 'diamond');
             $diaH  = $inHandItems->where('material_type', 'Diamond');
+
+            // FIX: diamonds are almost always recorded as PARTS on a gold item
+            // (Diamond Ct./Rate, Stone Ct./Rate rows), not as standalone items
+            // with material_type='diamond'. That value is already included in
+            // each gold item's item_total (hence the bottom-line totals were
+            // correct), but this breakdown never looked at the parts tables —
+            // so it always showed 0 even when real diamond value existed.
+            $purchaseDiamondParts = DB::table('purchase_invoice_item_parts as p')
+                ->join('purchase_invoice_items as i', 'i.id', '=', 'p.purchase_invoice_item_id')
+                ->join('purchase_invoices as inv', 'inv.id', '=', 'i.purchase_invoice_id')
+                ->whereBetween('inv.invoice_date', [$from, $to])
+                ->whereNull('inv.deleted_at')
+                ->selectRaw('
+                    COALESCE(SUM(p.qty), 0)                                        as total_qty,
+                    COALESCE(SUM(p.qty * p.rate + COALESCE(p.stone_qty,0) * COALESCE(p.stone_rate,0)), 0) as total_value,
+                    COUNT(*)                                                       as cnt
+                ')
+                ->first();
+
+            $saleDiamondParts = DB::table('sale_invoice_item_parts as p')
+                ->join('sale_invoice_items as i', 'i.id', '=', 'p.sale_invoice_item_id')
+                ->join('sale_invoices as inv', 'inv.id', '=', 'i.sale_invoice_id')
+                ->whereBetween('inv.invoice_date', [$from, $to])
+                ->whereNull('inv.deleted_at')
+                ->selectRaw('
+                    COALESCE(SUM(p.qty), 0)                                        as total_qty,
+                    COALESCE(SUM(p.qty * p.rate + COALESCE(p.stone_qty,0) * COALESCE(p.stone_rate,0)), 0) as total_value,
+                    COUNT(*)                                                       as cnt
+                ')
+                ->first();
+
+            // In-hand for parts has no barcode-level partial tracking (unlike top-level
+            // items), so this is a simple net (purchased − sold), floored at 0 — an
+            // approximation, but far more accurate than showing 0.
+            $diamondPartsInHandQty = max(0.0, (float) $purchaseDiamondParts->total_qty   - (float) $saleDiamondParts->total_qty);
+            $diamondPartsInHandVal = max(0.0, (float) $purchaseDiamondParts->total_value - (float) $saleDiamondParts->total_value);
 
             return [
                 // Purchased — always full purchased quantities
@@ -308,19 +345,21 @@ class InventoryReportController extends Controller
                 'gold_inhand_value'      => $goldH->sum('material_value'),
                 'gold_inhand_count'      => $goldH->count(),
 
-                'diamond_purchased_gross'  => $diaP->sum('gross_weight'),
+                // FIX: now includes diamond PARTS (qty=carats as "gross", qty*rate + stone value)
+                // in addition to any standalone material_type='diamond' items.
+                'diamond_purchased_gross'  => $diaP->sum('gross_weight') + (float) $purchaseDiamondParts->total_qty,
                 'diamond_purchased_purity' => $diaP->sum('purity_weight'),
-                'diamond_purchased_value'  => $diaP->sum('material_value'),
-                'diamond_purchased_count'  => $diaP->count(),
+                'diamond_purchased_value'  => $diaP->sum('material_value') + (float) $purchaseDiamondParts->total_value,
+                'diamond_purchased_count'  => $diaP->count() + (int) $purchaseDiamondParts->cnt,
 
-                'diamond_sold_gross'       => $diaS->sum('gross_weight'),
+                'diamond_sold_gross'       => $diaS->sum('gross_weight') + (float) $saleDiamondParts->total_qty,
                 'diamond_sold_purity'      => $diaS->sum('purity_weight'),
-                'diamond_sold_value'       => $diaS->sum('material_value'),
-                'diamond_sold_count'       => $diaS->count(),
+                'diamond_sold_value'       => $diaS->sum('material_value') + (float) $saleDiamondParts->total_value,
+                'diamond_sold_count'       => $diaS->count() + (int) $saleDiamondParts->cnt,
 
-                'diamond_inhand_gross'     => $diaH->sum('gross_weight'),
+                'diamond_inhand_gross'     => $diaH->sum('gross_weight') + $diamondPartsInHandQty,
                 'diamond_inhand_purity'    => $diaH->sum('purity_weight'),
-                'diamond_inhand_value'     => $diaH->sum('material_value'),
+                'diamond_inhand_value'     => $diaH->sum('material_value') + $diamondPartsInHandVal,
                 'diamond_inhand_count'     => $diaH->count(),
 
                 'total_purchased_value'    => $purchaseItems->sum('item_total'),
