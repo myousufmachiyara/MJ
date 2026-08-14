@@ -78,6 +78,18 @@
         @endif
 
         <div class="table-responsive">
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" id="voucher_search" class="form-control"
+                      placeholder="Search voucher #, account, source doc, remarks…">
+              </div>
+            </div>
+            <div class="col-md-8 d-flex align-items-center">
+              <small class="text-muted" id="voucher_search_count"></small>
+            </div>
+          </div>
           <table class="table table-bordered table-striped mb-0" id="voucher-datatable">
             <thead>
               <tr>
@@ -546,5 +558,61 @@ function setDeleteId(id) {
     const type = '{{ $type }}';
     document.getElementById('deleteForm').action = `/vouchers/${type}/${id}`;
 }
+</script>
+<script>
+// ── Voucher search — plain JS row filter, works for every tab (no DataTables dependency) ──
+(function() {
+    const input   = document.getElementById('voucher_search');
+    const table   = document.getElementById('voucher-datatable');
+    const countEl = document.getElementById('voucher_search_count');
+    if (!input || !table) return;
+
+    const tbody = table.querySelector('tbody');
+    const allRows = Array.from(tbody.querySelectorAll('tr'));
+
+    // Rows that only exist to show the "No X vouchers found" empty state —
+    // never filter these, and hide them automatically once real rows exist.
+    const emptyStateRow = allRows.find(r => r.querySelector('td[colspan]'));
+    const dataRows      = allRows.filter(r => r !== emptyStateRow);
+
+    function updateCount(visibleCount) {
+        if (!countEl) return;
+        const q = input.value.trim();
+        countEl.textContent = q
+            ? `Showing ${visibleCount} of ${dataRows.length} voucher(s)`
+            : '';
+    }
+
+    input.addEventListener('input', function() {
+        const q = this.value.trim().toLowerCase();
+        let visibleCount = 0;
+
+        dataRows.forEach(function(row) {
+            const text = row.textContent.toLowerCase();
+            const match = !q || text.includes(q);
+            row.style.display = match ? '' : 'none';
+            if (match) visibleCount++;
+        });
+
+        // Toggle a "no results" message distinct from the real empty state
+        let noMatchRow = tbody.querySelector('#voucher_no_match_row');
+        if (q && visibleCount === 0) {
+            if (!noMatchRow) {
+                noMatchRow = document.createElement('tr');
+                noMatchRow.id = 'voucher_no_match_row';
+                noMatchRow.innerHTML =
+                    '<td colspan="8" class="text-center text-muted py-4">' +
+                    '<i class="fas fa-search fa-lg mb-2 d-block opacity-25"></i>' +
+                    'No vouchers match your search.</td>';
+                tbody.appendChild(noMatchRow);
+            }
+            noMatchRow.style.display = '';
+        } else if (noMatchRow) {
+            noMatchRow.style.display = 'none';
+        }
+
+        updateCount(visibleCount);
+    });
+})();
 </script>
 @endsection
