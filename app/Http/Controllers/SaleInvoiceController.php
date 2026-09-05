@@ -844,18 +844,27 @@ class SaleInvoiceController extends Controller
     {
         $prefix = $isTaxable ? 'SAL-TAX-' : 'SAL-';
 
-        $last = SaleInvoice::withTrashed()
+        // FIX: previously ordered by id/lockForUpdate()->first() and assumed the
+        // highest-id row also had the highest invoice number. If that assumption
+        // is ever broken (manual edit, deleted/restored row, seeded/imported
+        // invoice, etc.) this permanently locks onto the wrong "last" invoice and
+        // reissues the same number on every future save — not just under a race.
+        // Pulling MAX() straight from the invoice_no strings is self-healing:
+        // it always reflects the true highest number in use, regardless of row
+        // order or history.
+        $maxNo = SaleInvoice::withTrashed()
             ->whereRaw(
                 'invoice_no REGEXP ?',
                 ['^' . preg_quote($prefix, '/') . '[0-9]+$']
             )
-            ->orderByDesc('id')
             ->lockForUpdate()
-            ->first();
+            ->selectRaw(
+                'MAX(CAST(SUBSTRING(invoice_no, ?) AS UNSIGNED)) as max_no',
+                [strlen($prefix) + 1]
+            )
+            ->value('max_no');
 
-        $next = $last
-            ? ((int) str_replace($prefix, '', $last->invoice_no)) + 1
-            : 1;
+        $next = ((int) $maxNo) + 1;
 
         return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
     }
