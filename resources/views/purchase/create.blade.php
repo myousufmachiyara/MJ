@@ -910,6 +910,35 @@
     });
 
     // ================= EXCEL IMPORT =================
+    // FIX: Excel files that use merged cells for repeated values (e.g. "Item Name",
+    // "Purity", "Part Name", "Part Desc" merged down across several sub-item rows)
+    // cause XLSX.utils.sheet_to_json() to return `undefined` for every row in the
+    // merge EXCEPT the first one. That made the old code think only the first
+    // "part" row for each item had data, silently dropping the rest.
+    //
+    // fillMergedCells() copies the merged cell's value into every cell of the
+    // merge range before we convert the sheet to JSON, so every row - including
+    // every sub-part row - gets its own value. No calculation/formula logic below
+    // this point has been changed.
+    function fillMergedCells(worksheet) {
+        if (!worksheet['!merges']) return;
+        worksheet['!merges'].forEach(function (merge) {
+            const startCellRef = XLSX.utils.encode_cell(merge.s);
+            const startCell = worksheet[startCellRef];
+            const value = startCell ? startCell.v : undefined;
+            if (value === undefined) return;
+
+            for (let R = merge.s.r; R <= merge.e.r; R++) {
+                for (let C = merge.s.c; C <= merge.e.c; C++) {
+                    const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+                    if (!worksheet[cellRef]) {
+                        worksheet[cellRef] = { t: startCell.t || 's', v: value };
+                    }
+                }
+            }
+        });
+    }
+
     $('#excel_import').on('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -920,7 +949,14 @@
         reader.onload = function(e) {
             const data     = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
-            const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+            const sheet    = workbook.Sheets[workbook.SheetNames[0]];
+
+            // FIX: forward-fill any merged cells (Item Name, Purity, Part Name,
+            // Part Desc, etc.) BEFORE converting to JSON so every sub-row keeps
+            // its own copy of the value instead of coming back blank.
+            fillMergedCells(sheet);
+
+            const jsonData = XLSX.utils.sheet_to_json(sheet);
 
             if (jsonData.length === 0) return;
 
@@ -933,7 +969,7 @@
             let currentItemRow = null;
 
             jsonData.forEach((row) => {
-                if (row['Item Name'] && row['Item Name'].trim() !== "") {
+                if (row['Item Name'] && row['Item Name'].toString().trim() !== "") {
                     addNewRow();
                     currentItemRow = $('#PurchaseTable tr.item-row').last();
 
@@ -957,13 +993,22 @@
                     recalcItemGrossWeight(currentItemRow);
                 }
 
-                if (row['Part Name'] && row['Part Name'].trim() !== "" && currentItemRow) {
+                // FIX: Don't rely on "Part Name" alone to detect a part row - after
+                // unmerging it will be present on every row anyway, but this is a
+                // safety net for sheets where Part Name is genuinely blank while
+                // Part Qty/Rate still carry real data.
+                const hasPartData =
+                    (row['Part Name'] && row['Part Name'].toString().trim() !== "") ||
+                    (row['Part Qty'] !== undefined && row['Part Qty'] !== '') ||
+                    (row['Part Rate'] !== undefined && row['Part Rate'] !== '');
+
+                if (hasPartData && currentItemRow) {
                     const partsRow = currentItemRow.next('.parts-row');
                     partsRow.show();
                     partsRow.find('.add-part').click();
 
                     const currentPartRow = partsRow.find('.part-item-row').last();
-                    currentPartRow.find('.item-name-input').val(row['Part Name']);
+                    currentPartRow.find('.item-name-input').val(row['Part Name'] || '');
                     currentPartRow.find('input[name*="[part_description]"]').val(row['Part Desc'] || '');
                     currentPartRow.find('.part-qty').val(row['Part Qty'] || 0);
                     currentPartRow.find('.part-rate').val(row['Part Rate'] || 0);
