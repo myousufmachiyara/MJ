@@ -106,6 +106,7 @@
                   <tr>
                     <th width="10%" rowspan="2">Item Name</th>
                     <th width="10%" rowspan="2">Item Description</th>
+                    <th width="7%" rowspan="2">Cert. No.<br><small class="text-muted">(for label)</small></th>
                     <th width="6%" rowspan="2">Purity</th>
                     <th rowspan="2">Net Wt<br><small class="text-muted">(User Input)</small></th>
                     <th rowspan="2">Gold Gross Wt<br><small class="text-muted">(Calculated)</small></th>
@@ -137,6 +138,7 @@
                       </div>
                     </td>
                     <td><input type="text" name="items[0][item_description]" class="form-control" required></td>
+                    <td><input type="text" name="items[0][certificate_no]" class="form-control" placeholder="e.g. GIA 123456"></td>
                     <td>
                       <select name="items[0][purity]" class="form-control purity">
                         @foreach($purities as $p)
@@ -168,7 +170,7 @@
                     </td>
                   </tr>
                   <tr class="parts-row" style="display:none;background:#efefef">
-                    <td colspan="17">
+                    <td colspan="18">
                       <div class="parts-wrapper">
                         <table class="table table-sm table-bordered parts-table">
                           <thead>
@@ -513,6 +515,7 @@
                 </div>
             </td>
             <td><input type="text" name="items[${nextIndex}][item_description]" class="form-control" required></td>
+            <td><input type="text" name="items[${nextIndex}][certificate_no]" class="form-control" placeholder="e.g. GIA 123456"></td>
             <td>
                 <select name="items[${nextIndex}][purity]" class="form-control purity">
                   @foreach($purities as $p)
@@ -544,7 +547,7 @@
             </td>
         </tr>
         <tr class="parts-row" style="display:none;background:#efefef">
-            <td colspan="17">
+            <td colspan="18">
                 <div class="parts-wrapper">
                     <table class="table table-sm table-bordered parts-table">
                         <thead>
@@ -936,6 +939,7 @@
 
                     currentItemRow.find('.item-name-input').val(row['Item Name']);
                     currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
+                    currentItemRow.find('input[name*="[certificate_no]"]').val(row['Certificate No'] || '');
 
                     const purityRaw = row['Purity'] !== undefined && row['Purity'] !== ''
                         ? row['Purity']

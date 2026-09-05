@@ -171,6 +171,16 @@ class SaleInvoiceController extends Controller
         $this->clearIrrelevantPaymentFields($request);
         $this->validateInvoice($request);
 
+        // FIX (duplicate invoice_no race): a double-click Save, or a slow
+        // request the browser silently retried, can fire two near-simultaneous
+        // store() calls. Both read the same "last" invoice number before
+        // either commits, so the loser's insert can hit the unique invoice_no
+        // constraint even though generateInvoiceNo() uses lockForUpdate().
+        // Retry the whole save with a freshly generated number a couple of
+        // times before giving up, instead of surfacing a raw SQL error.
+        $maxAttempts = 3;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
         try {
             DB::beginTransaction();
 
@@ -257,14 +267,33 @@ class SaleInvoiceController extends Controller
 
         } catch (\Throwable $e) {
             DB::rollBack();
+
+            if ($this->isDuplicateInvoiceNoError($e) && $attempt < $maxAttempts) {
+                continue;
+            }
+
             Log::error('Sale Invoice Store Error', [
                 'message' => $e->getMessage(),
                 'line'    => $e->getLine(),
                 'file'    => $e->getFile(),
                 'trace'   => $e->getTraceAsString(),
+                'attempt' => $attempt,
             ]);
             return back()->withInput()->with('error', 'Error: ' . $e->getMessage());
         }
+        }
+    }
+
+    /**
+     * True when $e is a MySQL duplicate-entry error (1062) on the invoice_no
+     * unique key specifically — as opposed to any other constraint violation
+     * (which should still fail immediately rather than retry).
+     */
+    private function isDuplicateInvoiceNoError(\Throwable $e): bool
+    {
+        return $e instanceof \Illuminate\Database\QueryException
+            && (int) ($e->errorInfo[1] ?? 0) === 1062
+            && str_contains($e->getMessage(), 'invoice_no');
     }
 
     // =========================================================================
@@ -352,6 +381,13 @@ class SaleInvoiceController extends Controller
         $this->clearIrrelevantPaymentFields($request);
         $this->validateInvoice($request);
 
+        // FIX (duplicate invoice_no race): same guard as store() — only
+        // reachable here when the invoice's Tax/Non-Tax type changed on this
+        // save (the only branch below that generates a brand new invoice_no),
+        // but kept for consistency.
+        $maxAttempts = 3;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
         try {
             DB::beginTransaction();
 
@@ -451,13 +487,20 @@ class SaleInvoiceController extends Controller
 
         } catch (\Throwable $e) {
             DB::rollBack();
+
+            if ($this->isDuplicateInvoiceNoError($e) && $attempt < $maxAttempts) {
+                continue;
+            }
+
             Log::error('Sale Invoice Update Error', [
                 'message' => $e->getMessage(),
                 'line'    => $e->getLine(),
                 'file'    => $e->getFile(),
                 'trace'   => $e->getTraceAsString(),
+                'attempt' => $attempt,
             ]);
             return back()->withInput()->with('error', 'Error: ' . $e->getMessage());
+        }
         }
     }
 

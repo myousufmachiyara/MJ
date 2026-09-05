@@ -146,6 +146,7 @@
                   <tr>
                     <th width="12%" rowspan="2">Item Name</th>
                     <th width="12%" rowspan="2">Description</th>
+                    <th width="8%"  rowspan="2">Cert. No.<br><small class="text-muted">(for label)</small></th>
                     <th width="8%"  rowspan="2">Purity</th>
                     <th rowspan="2">Net Wt</th>
                     <th rowspan="2">Gross Wt</th>
@@ -515,6 +516,7 @@ $(document).ready(function () {
         const mkRate  = data.making_rate      || 0;
         const matType = data.material_type    || 'gold';
         const vatPct  = data.vat_percent      || 0;
+        const certNo  = data.certificate_no   || '';
 
         const purityOptions = `@foreach($purities as $p)<option value="{{ $p->value }}" ${purity == {{ $p->value }} ? 'selected' : ''}>{{ $p->label }}</option>@endforeach`;
 
@@ -529,6 +531,7 @@ $(document).ready(function () {
                 </div>
             </td>
             <td><input type="text" name="items[${index}][item_description]" class="form-control" value="${desc}" required></td>
+            <td><input type="text" name="items[${index}][certificate_no]" class="form-control" value="${certNo}" placeholder="e.g. GIA 123456"></td>
             <td>
                 <select name="items[${index}][purity]" class="form-control purity">
                     ${purityOptions}
@@ -565,7 +568,7 @@ $(document).ready(function () {
           </td>
         </tr>
         <tr class="parts-row" style="display:none;background:#efefef">
-            <td colspan="17">
+            <td colspan="18">
                 <div class="parts-wrapper">
                     <table class="table table-sm table-bordered parts-table">
                         <thead>

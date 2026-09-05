@@ -90,6 +90,16 @@ class PurchaseInvoiceController extends Controller
         $this->clearIrrelevantPaymentFields($request);
         $this->validateInvoice($request);
 
+        // FIX (duplicate invoice_no race): a double-click Save, or a slow
+        // request the browser silently retried, can fire two near-simultaneous
+        // store() calls. Both read the same "last" invoice number before
+        // either commits, so the loser's insert can hit the unique invoice_no
+        // constraint even though generateInvoiceNo() uses lockForUpdate().
+        // Retry the whole save with a freshly generated number a couple of
+        // times before giving up, instead of surfacing a raw SQL error.
+        $maxAttempts = 3;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
         try {
             DB::beginTransaction();
 
@@ -156,14 +166,33 @@ class PurchaseInvoiceController extends Controller
 
         } catch (\Throwable $e) {
             DB::rollBack();
+
+            if ($this->isDuplicateInvoiceNoError($e) && $attempt < $maxAttempts) {
+                continue;
+            }
+
             Log::error('Purchase Invoice Store Error', [
                 'message' => $e->getMessage(),
                 'line'    => $e->getLine(),
                 'file'    => $e->getFile(),
                 'trace'   => $e->getTraceAsString(),
+                'attempt' => $attempt,
             ]);
             return back()->withInput()->with('error', 'Error: ' . $e->getMessage());
         }
+        }
+    }
+
+    /**
+     * True when $e is a MySQL duplicate-entry error (1062) on the invoice_no
+     * unique key specifically — as opposed to any other constraint violation
+     * (which should still fail immediately rather than retry).
+     */
+    private function isDuplicateInvoiceNoError(\Throwable $e): bool
+    {
+        return $e instanceof \Illuminate\Database\QueryException
+            && (int) ($e->errorInfo[1] ?? 0) === 1062
+            && str_contains($e->getMessage(), 'invoice_no');
     }
 
     // =========================================================================
@@ -184,6 +213,7 @@ class PurchaseInvoiceController extends Controller
             return [
                 'item_name'        => $item->item_name,
                 'barcode_number'   => $item->barcode_number,
+                'certificate_no'   => $item->certificate_no,
                 'is_printed'       => $item->is_printed,
                 'product_id'       => $item->product_id,
                 // FIX (point 2): expose the item's own stored image (for custom/no-product items)
@@ -249,6 +279,13 @@ class PurchaseInvoiceController extends Controller
         $this->clearIrrelevantPaymentFields($request);
         $this->validateInvoice($request);
 
+        // FIX (duplicate invoice_no race): same guard as store() — only
+        // reachable here when the invoice's Tax/Non-Tax type changed on this
+        // save (the only branch below that generates a brand new invoice_no),
+        // but kept for consistency.
+        $maxAttempts = 3;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
         try {
             DB::beginTransaction();
 
@@ -341,13 +378,20 @@ class PurchaseInvoiceController extends Controller
 
         } catch (\Throwable $e) {
             DB::rollBack();
+
+            if ($this->isDuplicateInvoiceNoError($e) && $attempt < $maxAttempts) {
+                continue;
+            }
+
             Log::error('Purchase Invoice Update Error', [
                 'message' => $e->getMessage(),
                 'line'    => $e->getLine(),
                 'file'    => $e->getFile(),
                 'trace'   => $e->getTraceAsString(),
+                'attempt' => $attempt,
             ]);
             return back()->withInput()->with('error', 'Error: ' . $e->getMessage());
+        }
         }
     }
 
@@ -847,7 +891,10 @@ class PurchaseInvoiceController extends Controller
 
     public function printBarcodes($id)
     {
-        $invoice = PurchaseInvoice::with('items')->findOrFail($id);
+        // Eager-load parts (+ product, for a name fallback when a part has no
+        // free-text item_name) so the label's back-side breakdown doesn't
+        // trigger N+1 queries per item.
+        $invoice = PurchaseInvoice::with(['items.parts.product'])->findOrFail($id);
         $invoice->items()->update(['is_printed' => true]);
         return view('purchase.barcodes', compact('invoice'));
     }
@@ -1000,6 +1047,7 @@ class PurchaseInvoiceController extends Controller
                 'vat_amount'       => round($vatAmount, 2),
                 'item_total'       => round($itemTotal, 2),
                 'barcode_number'   => $existingBarcode ?? $this->generateBarcodeNumber($invoice, $position),
+                'certificate_no'   => $itemData['certificate_no'] ?? null,
                 'is_printed'       => $wasAlreadyPrinted,
             ]);
 
@@ -1125,6 +1173,7 @@ class PurchaseInvoiceController extends Controller
             'items.*.making_rate'    => 'required|numeric|min:0',
             'items.*.material_type'  => 'required|in:gold,diamond',
             'items.*.vat_percent'    => 'required|numeric|min:0',
+            'items.*.certificate_no' => 'nullable|string|max:191',
             'material_given_by'      => ['nullable', 'string', 'required_if:payment_method,material+making cost', 'required_if:payment_method,material'],
             'material_received_by'   => ['nullable', 'string', 'required_if:payment_method,material+making cost', 'required_if:payment_method,material'],
             'cash_amount_paid'       => 'nullable|numeric|min:0',
