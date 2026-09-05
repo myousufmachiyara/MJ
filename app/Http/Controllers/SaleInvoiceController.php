@@ -1524,7 +1524,7 @@ class SaleInvoiceController extends Controller
                     ' . ($invoice->customer->name ?? 'Walk-in Customer') . '<br>
                     ' . ($invoice->customer->address ?? '') . '<br>
                     Contact: ' . ($invoice->customer->contact_no ?? '-') . '<br>
-                    <b>Other Details:</b> ' . ($customer->remarks ?? '-') . '<br>
+                    <b>Other Details:</b> ' . ($invoice->$customer->remarks ?? '-') . '<br>
                     <b>Ref:</b> ' . ($invoice->remarks ?? '-') . '<br>
                 </td>
                 <td width="50%">
