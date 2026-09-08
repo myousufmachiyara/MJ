@@ -17,6 +17,19 @@
             --card-bg:  #ffffff;
             --mono:     'IBM Plex Mono', monospace;
             --sans:     'IBM Plex Sans', sans-serif;
+
+            /* ─────────────────────────────────────────────────────────────
+               PHYSICAL DIE-CUT LABEL DIMENSIONS — EDIT THESE TO MATCH YOUR
+               ACTUAL LABEL ROLL. Estimated from your photos:
+                 - total paddle length  : 76mm
+                 - total paddle height  : 25mm
+                 - head (wide) width    : 22mm  (the rest is the thin tail)
+               Once you have the spec sheet for your label stock, just
+               change the three values below — nothing else needs touching.
+               ───────────────────────────────────────────────────────────── */
+            --label-w:  76mm;
+            --label-h:  25mm;
+            --head-w:   22mm;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -74,7 +87,7 @@
 
         .controls-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
-        .btn-print, .btn-print-back {
+        .btn-print {
             border: none;
             padding: 9px 20px;
             font-family: var(--sans);
@@ -88,12 +101,11 @@
             align-items: center;
             gap: 8px;
             color: #fff;
+            background: var(--stamp);
         }
-        .btn-print { background: var(--stamp); }
         .btn-print:hover { background: #bf3f1e; }
-        .btn-print-back { background: #2e5f8a; }
-        .btn-print-back:hover { background: #234a6c; }
-        .btn-print svg, .btn-print-back svg { width: 15px; height: 15px; fill: #fff; }
+        .btn-print:disabled { background: #6b6b6b; cursor: not-allowed; }
+        .btn-print svg { width: 15px; height: 15px; fill: #fff; }
 
         .btn-back {
             background: rgba(255,255,255,0.1);
@@ -112,9 +124,38 @@
         }
         .btn-back:hover { background: rgba(255,255,255,0.18); color: #fff; }
 
+        /* ── SELECTION BAR ── */
+        .selection-bar {
+            margin: 16px 32px 0;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+        .sel-btn {
+            font-family: var(--mono);
+            font-size: 11.5px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            background: #fff;
+            border: 1px solid var(--rule);
+            color: var(--accent);
+            padding: 6px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .sel-btn:hover { background: #eeeae2; }
+        .sel-count {
+            font-family: var(--mono);
+            font-size: 12px;
+            color: #555;
+        }
+        .sel-count b { color: var(--ink); }
+
         /* ── WORKFLOW NOTE ── */
         .workflow-note {
-            margin: 16px 32px 0;
+            margin: 12px 32px 0;
             background: #fff8ec;
             border: 1px solid #e8d9b5;
             border-left: 4px solid #d6a03a;
@@ -125,53 +166,37 @@
         }
         .workflow-note b { color: #3d3113; }
 
-        /* ── PAGE / TABS ── */
+        /* ── PAGE ── */
         .page-wrap { padding: 20px 32px 48px; }
 
-        .side-tabs {
-            display: flex;
-            gap: 6px;
-            margin-bottom: 16px;
-            border-bottom: 1px solid var(--rule);
-        }
-        .side-tab {
-            font-family: var(--mono);
-            font-size: 12px;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            background: none;
-            border: none;
-            border-bottom: 3px solid transparent;
-            padding: 8px 14px;
-            cursor: pointer;
-            color: #888;
-            font-weight: 600;
-        }
-        .side-tab.active { color: var(--accent); border-bottom-color: var(--stamp); }
-
-        /* ── LABEL SHEETS (also the print layout) ── */
         .label-sheet {
-            display: none;
+            display: flex;
             flex-wrap: wrap;
             gap: 14px;
         }
-        .label-sheet.active-preview { display: flex; }
 
-        /* One physical thermal label — exact print dimensions. */
-        .label {
-            width: 87mm;
-            height: 37mm;
+        /* One physical die-cut label — head (wide) fused to tail (thin strip) */
+        .label-paddle {
+            width: var(--label-w);
+            height: var(--label-h);
             background: var(--card-bg);
             border: 1px solid var(--rule);
-            border-radius: 1.2mm;
             box-sizing: border-box;
             overflow: hidden;
             position: relative;
-            padding: 2mm 3mm;
-            page-break-after: always;
-            break-after: page;
+            display: flex;
+            page-break-inside: avoid;
+            break-inside: avoid;
         }
-        .label:last-child { page-break-after: auto; break-after: auto; }
+        .label-paddle.excluded { display: none; }
+
+        .label-select-wrap {
+            position: absolute;
+            top: 1mm;
+            right: 1.5mm;
+            z-index: 5;
+        }
+        .label-select-wrap input { width: 14px; height: 14px; cursor: pointer; }
 
         .label-index {
             position: absolute;
@@ -180,106 +205,68 @@
             font-family: var(--mono);
             font-size: 2mm;
             color: #ccc;
+            z-index: 5;
         }
 
-        /* -- FRONT label content -- */
-        .front-label {
+        /* -- HEAD ZONE ("Front Tag"): tag no / gold wt / diamond / stone -- */
+        .head-zone {
+            width: var(--head-w);
+            flex-shrink: 0;
+            height: 100%;
+            padding: 1.6mm 1.2mm 1mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 0.5mm;
+            border-right: 1px dashed #bbb; /* tear-line guide, screen only */
+            font-family: var(--mono);
+        }
+        .head-zone .tag-no {
+            font-weight: 700;
+            font-size: 3.1mm;
+            letter-spacing: 0.02em;
+            line-height: 1.15;
+            word-break: break-all;
+        }
+        .head-zone .hz-line {
+            font-size: 2.1mm;
+            line-height: 1.35;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .head-zone .hz-line b { color: var(--ink); font-weight: 700; }
+        .head-zone .hz-line .lbl { color: #888; }
+
+        /* -- TAIL ZONE ("Back Tag"): barcode + certificate no -- */
+        .tail-zone {
+            flex: 1;
+            min-width: 0;
+            height: 100%;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            text-align: center;
+            padding: 1mm 2mm;
+            gap: 0.6mm;
         }
-        .front-label .barcode-wrap {
+        .tail-zone .barcode-wrap {
             width: 100%;
-            padding: 0 1mm;
         }
-        .front-label .barcode-wrap svg {
+        .tail-zone .barcode-wrap svg {
             width: 100%;
             height: auto;
             display: block;
         }
-        .front-label .item-no {
+        .tail-zone .cert-no {
             font-family: var(--mono);
-            font-weight: 700;
-            font-size: 4.2mm;
-            letter-spacing: 0.04em;
-            margin-top: 0.8mm;
-        }
-        .front-label .cert-no {
-            font-family: var(--mono);
-            font-size: 2.4mm;
-            color: #666;
-            margin-top: 0.6mm;
+            font-size: 1.9mm;
+            color: #555;
             letter-spacing: 0.03em;
-        }
-        .front-label .cert-no b { color: var(--ink); font-weight: 600; }
-
-        /* -- BACK label content -- */
-        .back-label {
-            display: flex;
-            flex-direction: column;
-            font-family: var(--mono);
-        }
-        .back-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            border-bottom: 0.3mm solid var(--ink);
-            padding-bottom: 0.8mm;
-            margin-bottom: 1mm;
-        }
-        .back-top .bc-no { font-size: 2.6mm; font-weight: 700; letter-spacing: 0.03em; }
-        .back-top .gold-wt { font-size: 2.6mm; font-weight: 700; }
-        .back-top .gold-wt .u { font-weight: 400; color: #555; font-size: 2mm; }
-
-        .back-body {
-            flex: 1;
-            display: flex;
-            gap: 3mm;
-            min-height: 0;
-        }
-        .back-col {
-            flex: 1;
-            min-width: 0;
-            display: flex;
-            flex-direction: column;
-        }
-        .back-col-title {
-            font-size: 2.1mm;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            color: #666;
-            border-bottom: 0.2mm dotted #bbb;
-            padding-bottom: 0.4mm;
-            margin-bottom: 0.5mm;
-        }
-        .back-line {
-            display: flex;
-            justify-content: space-between;
-            gap: 1.5mm;
-            font-size: 2.3mm;
-            line-height: 1.5;
             white-space: nowrap;
         }
-        .back-line .nm {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            color: #333;
-        }
-        .back-line .ct { font-weight: 600; flex-shrink: 0; }
-        .back-line.muted { color: #aaa; font-style: italic; }
-        .back-total-line {
-            display: flex;
-            justify-content: space-between;
-            font-size: 2.3mm;
-            font-weight: 700;
-            border-top: 0.2mm dashed #999;
-            margin-top: auto;
-            padding-top: 0.5mm;
-        }
+        .tail-zone .cert-no b { color: var(--ink); font-weight: 600; }
 
         /* ── EMPTY STATE ── */
         .empty-state { text-align: center; padding: 80px 20px; color: #aaa; }
@@ -289,16 +276,15 @@
         /* ── PRINT STYLES ── */
         @media print {
             * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            @page { size: 87mm 37mm; margin: 0; }
+            @page { size: 76mm 25mm; margin: 0; }
             body { background: #fff; }
-            .controls, .workflow-note, .side-tabs { display: none !important; }
+            .controls, .workflow-note, .selection-bar { display: none !important; }
             .page-wrap { padding: 0; }
-            .label-sheet { display: none !important; gap: 0; }
-            .label { border: none; border-radius: 0; margin: 0; }
-            .label-index { display: none; }
-
-            body[data-print-side="front"] .front-sheet { display: flex !important; }
-            body[data-print-side="back"]  .back-sheet  { display: flex !important; }
+            .label-sheet { gap: 0; }
+            .label-paddle { border: none; margin: 0; page-break-after: always; break-after: page; }
+            .label-paddle:last-child { page-break-after: auto; break-after: auto; }
+            .label-index, .label-select-wrap { display: none !important; }
+            .head-zone { border-right: none; } /* real perforation exists on the physical die-cut, no need to draw it */
         }
     </style>
 </head>
@@ -315,27 +301,29 @@
         <div class="meta-chip">Date&nbsp;<span>{{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d M Y') }}</span></div>
         <div class="meta-chip">Vendor&nbsp;<span>{{ $invoice->vendor->name ?? '—' }}</span></div>
         <div class="meta-chip">Items&nbsp;<span>{{ $invoice->items->count() }}</span></div>
-        <div class="meta-chip">Label&nbsp;<span>87×37mm</span></div>
+        <div class="meta-chip">Label&nbsp;<span id="labelSizeChip">76×25mm (paddle)</span></div>
     </div>
 
     <div class="controls-right">
         <a href="{{ url()->previous() }}" class="btn-back">← Back</a>
-        <button class="btn-print" onclick="printSide('front')">
+        <button class="btn-print" id="printBtn" onclick="printSelected()">
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-            Print Fronts (Barcode)
-        </button>
-        <button class="btn-print-back" onclick="printSide('back')">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-            Print Backs (Weight/Ct)
+            Print Selected
         </button>
     </div>
 </div>
 
 @if($invoice->items->count())
+<div class="selection-bar">
+    <button type="button" class="sel-btn" onclick="selectAll(true)">Select All</button>
+    <button type="button" class="sel-btn" onclick="selectAll(false)">Select None</button>
+    <span class="sel-count"><b id="selCount">{{ $invoice->items->count() }}</b> of {{ $invoice->items->count() }} selected</span>
+</div>
+
 <div class="workflow-note">
-    <b>Two-sided label workflow:</b> load blank 87×37mm labels and click <b>“Print Fronts”</b> first — it prints the barcode side for every item, in order.
-    Once that batch is done, flip the same stack of labels over in the printer feed (don't reorder them) and click <b>“Print Backs”</b> to print the
-    gold/diamond/stone breakdown on the reverse of each label.
+    <b>How this label prints:</b> each sticker is printed once, in a single pass — load your die-cut paddle labels as usual and click
+    <b>“Print Selected.”</b> After printing, tear each sticker along its perforation: the wide head becomes the item/weight tag,
+    the thin tail becomes the barcode string tag you attach to the piece. Uncheck any items you don't want to print in this batch.
 </div>
 @endif
 
@@ -343,69 +331,32 @@
 <div class="page-wrap">
 
     @if($invoice->items->count())
-    <div class="side-tabs">
-        <button type="button" class="side-tab active" data-side="front" onclick="switchPreview('front')">Front — Barcode ({{ $invoice->items->count() }})</button>
-        <button type="button" class="side-tab" data-side="back" onclick="switchPreview('back')">Back — Weight / Ct ({{ $invoice->items->count() }})</button>
-    </div>
-
-    {{-- FRONT SHEET: barcode + item no + certificate # --}}
-    <div id="frontSheet" class="label-sheet front-sheet active-preview">
-        @foreach($invoice->items as $i => $item)
-        <div class="label front-label" data-index="{{ $i }}">
-            <span class="label-index">{{ str_pad($i + 1, 2, '0', STR_PAD_LEFT) }}</span>
-            <div class="barcode-wrap">
-                <svg id="bc-{{ $i }}"></svg>
-            </div>
-            <div class="item-no">{{ $item->barcode_number }}</div>
-            <div class="cert-no">Cert# <b>{{ $item->certificate_no ?: '—' }}</b></div>
-        </div>
-        @endforeach
-    </div>
-
-    {{-- BACK SHEET: gold wt + diamond breakdown + stone breakdown --}}
-    <div id="backSheet" class="label-sheet back-sheet">
+    <div id="labelSheet" class="label-sheet">
         @foreach($invoice->items as $i => $item)
         @php
-            $diamondParts = $item->diamond_parts;
-            $stoneParts   = $item->stone_parts;
+            $diamondCt = $item->diamond_total_ct ?? 0;
+            $stoneCt   = $item->stone_total_ct ?? 0;
         @endphp
-        <div class="label back-label" data-index="{{ $i }}">
+        <div class="label-paddle" data-index="{{ $i }}" data-item-id="{{ $item->id }}">
             <span class="label-index">{{ str_pad($i + 1, 2, '0', STR_PAD_LEFT) }}</span>
-            <div class="back-top">
-                <span class="bc-no">{{ $item->barcode_number }}</span>
-                <span class="gold-wt">{{ number_format($item->net_weight, 3) }}<span class="u">&nbsp;gms Au</span></span>
+            <span class="label-select-wrap">
+                <input type="checkbox" class="label-select" checked onchange="updateSelectionCount()">
+            </span>
+
+            {{-- HEAD ZONE ("Front Tag") --}}
+            <div class="head-zone">
+                <div class="tag-no">{{ $item->barcode_number }}</div>
+                <div class="hz-line"><span class="lbl">Au</span> <b>{{ number_format($item->net_weight, 3) }}</b> gm</div>
+                <div class="hz-line"><span class="lbl">Dia</span> <b>{{ number_format($diamondCt, 3) }}</b> ct</div>
+                <div class="hz-line"><span class="lbl">Stn</span> <b>{{ number_format($stoneCt, 3) }}</b> ct</div>
             </div>
-            <div class="back-body">
-                <div class="back-col">
-                    <div class="back-col-title">Diamond</div>
-                    @forelse($diamondParts as $part)
-                        <div class="back-line">
-                            <span class="nm">{{ $part['name'] }}</span>
-                            <span class="ct">{{ number_format($part['ct'], 3) }}</span>
-                        </div>
-                    @empty
-                        <div class="back-line muted">— none —</div>
-                    @endforelse
-                    <div class="back-total-line">
-                        <span>Total Ct</span>
-                        <span>{{ number_format($item->diamond_total_ct, 3) }}</span>
-                    </div>
+
+            {{-- TAIL ZONE ("Back Tag") --}}
+            <div class="tail-zone">
+                <div class="barcode-wrap">
+                    <svg id="bc-{{ $i }}"></svg>
                 </div>
-                <div class="back-col">
-                    <div class="back-col-title">Stone</div>
-                    @forelse($stoneParts as $part)
-                        <div class="back-line">
-                            <span class="nm">{{ $part['name'] }}</span>
-                            <span class="ct">{{ number_format($part['ct'], 3) }}</span>
-                        </div>
-                    @empty
-                        <div class="back-line muted">— none —</div>
-                    @endforelse
-                    <div class="back-total-line">
-                        <span>Total Ct</span>
-                        <span>{{ number_format($item->stone_total_ct, 3) }}</span>
-                    </div>
-                </div>
+                <div class="cert-no">Cert# <b>{{ $item->certificate_no ?: '—' }}</b></div>
             </div>
         </div>
         @endforeach
@@ -421,21 +372,57 @@
 </div>
 
 <script>
-    // ===== screen preview tab switching (has no effect on the print output —
-    // print visibility is controlled purely by body[data-print-side] in CSS) =====
-    window.switchPreview = function(side) {
-        document.querySelectorAll('.label-sheet').forEach(el => el.classList.remove('active-preview'));
-        document.getElementById(side === 'front' ? 'frontSheet' : 'backSheet').classList.add('active-preview');
-        document.querySelectorAll('.side-tab').forEach(t => t.classList.toggle('active', t.dataset.side === side));
+    const invoiceId = {{ $invoice->id }};
+    // Change this to route('purchase_invoices.mark_printed', $invoice->id) once the
+    // corresponding route + controller method are added — see accompanying patch notes.
+    const markPrintedUrl = @json(route('purchase_invoices.mark_printed', $invoice->id));
+    // ===== selection helpers =====
+    window.selectAll = function(state) {
+        document.querySelectorAll('.label-select').forEach(cb => cb.checked = state);
+        updateSelectionCount();
     };
 
-    // ===== print a single side =====
-    window.printSide = function(side) {
-        document.body.setAttribute('data-print-side', side);
+    window.updateSelectionCount = function() {
+        const total    = document.querySelectorAll('.label-select').length;
+        const selected = document.querySelectorAll('.label-select:checked').length;
+        document.getElementById('selCount').textContent = selected;
+        document.getElementById('printBtn').disabled = selected === 0;
+    };
+
+    // ===== print only the selected labels =====
+    window.printSelected = function() {
+        const paddles = document.querySelectorAll('.label-paddle');
+        const selectedItemIds = [];
+
+        paddles.forEach(p => {
+            const checked = p.querySelector('.label-select').checked;
+            p.classList.toggle('excluded', !checked);
+            if (checked) selectedItemIds.push(p.dataset.itemId);
+        });
+
+        if (selectedItemIds.length === 0) return;
+
+        const restore = () => {
+            paddles.forEach(p => p.classList.remove('excluded'));
+            window.removeEventListener('afterprint', restore);
+        };
+        window.addEventListener('afterprint', restore);
+
         window.print();
+
+        // Mark only the printed items as printed (fire-and-forget; safe to fail silently).
+        fetch(markPrintedUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': @json(csrf_token()),
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({ item_ids: selectedItemIds }),
+        }).catch(err => console.error('Failed to mark items as printed', err));
     };
 
-    // ===== render front-side barcodes =====
+    // ===== render tail-zone barcodes =====
     @foreach($invoice->items as $i => $item)
     (function() {
         const el      = document.getElementById('bc-{{ $i }}');
@@ -444,21 +431,23 @@
             try {
                 JsBarcode(el, barcode, {
                     format:       'CODE128',
-                    width:        1.6,
-                    height:       46,
+                    width:        1,
+                    height:       32,
                     displayValue: false,
                     margin:       0,
                     background:   '#ffffff',
                     lineColor:    '#0a0a0a',
                 });
             } catch (e) {
-                el.parentElement.innerHTML = '<div style="font-size:10px;color:#c00;text-align:center;">Invalid barcode</div>';
+                el.parentElement.innerHTML = '<div style="font-size:8px;color:#c00;text-align:center;">Invalid barcode</div>';
             }
         } else if (el) {
-            el.parentElement.innerHTML = '<div style="font-size:9px;color:#bbb;text-align:center;font-family:monospace;">No barcode</div>';
+            el.parentElement.innerHTML = '<div style="font-size:7px;color:#bbb;text-align:center;font-family:monospace;">No barcode</div>';
         }
     })();
     @endforeach
+
+    updateSelectionCount();
 </script>
 
 </body>

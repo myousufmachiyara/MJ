@@ -46,7 +46,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/purchase-invoices/download-template', [PurchaseInvoiceController::class, 'downloadTemplate'])->name('purchase.download_template');
     Route::get('/purchase-invoices/{id}/barcodes',     [PurchaseInvoiceController::class, 'printBarcodes'])->name('purchase_invoices.barcodes');
     Route::get('/purchase-return/{invoiceId}/items',   [PurchaseReturnController::class,  'getInvoiceItems'])->name('purchase_return.invoice_items');
-
+    Route::post('purchase-invoices/{id}/mark-printed', [PurchaseInvoiceController::class, 'markPrinted'])->name('purchase_invoices.mark_printed');
+    
     // ── Sale Helpers ──────────────────────────────────────────────────────────
     Route::get('/sale-invoices/scan-barcode',      [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
     Route::get('/sale-invoices/{id}/print-simple', [SaleInvoiceController::class, 'printSimple'])->middleware('check.permission:sale_invoices.print')->name('sale_invoices.print_simple');

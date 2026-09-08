@@ -891,14 +891,29 @@ class PurchaseInvoiceController extends Controller
 
     public function printBarcodes($id)
     {
-        // Eager-load parts (+ product, for a name fallback when a part has no
-        // free-text item_name) so the label's back-side breakdown doesn't
-        // trigger N+1 queries per item.
         $invoice = PurchaseInvoice::with(['items.parts.product'])->findOrFail($id);
-        $invoice->items()->update(['is_printed' => true]);
         return view('purchase.barcodes', compact('invoice'));
     }
 
+    public function markPrinted(Request $request, $id)
+    {
+        $invoice = PurchaseInvoice::findOrFail($id);
+
+        $itemIds = collect($request->input('item_ids', []))
+            ->filter()
+            ->map(fn ($v) => (int) $v)
+            ->all();
+
+        if (empty($itemIds)) {
+            return response()->json(['status' => 'no_items'], 422);
+        }
+
+        $updated = PurchaseInvoiceItem::where('purchase_invoice_id', $invoice->id)
+            ->whereIn('id', $itemIds)
+            ->update(['is_printed' => true]);
+
+        return response()->json(['status' => 'ok', 'updated' => $updated]);
+    }
     // =========================================================================
     // PRIVATE HELPERS
     // =========================================================================
