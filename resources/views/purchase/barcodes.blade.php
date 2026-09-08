@@ -19,17 +19,15 @@
             --sans:     'IBM Plex Sans', sans-serif;
 
             /* ─────────────────────────────────────────────────────────────
-               PHYSICAL DIE-CUT LABEL DIMENSIONS — EDIT THESE TO MATCH YOUR
-               ACTUAL LABEL ROLL. Estimated from your photos:
-                 - total paddle length  : 76mm
-                 - total paddle height  : 25mm
-                 - head (wide) width    : 22mm  (the rest is the thin tail)
-               Once you have the spec sheet for your label stock, just
-               change the three values below — nothing else needs touching.
+               PHYSICAL DIE-CUT LABEL DIMENSIONS — confirmed from your
+               purchase receipt: "Jewellery Label 83 x 37mm - 1000 - 40mm
+               Core" (Godex EZ120 stock). Head width is still an estimate
+               of where the die-cut perforation sits on that 83mm length —
+               nudge --head-w if the tear line lands in the wrong place.
                ───────────────────────────────────────────────────────────── */
-            --label-w:  76mm;
-            --label-h:  25mm;
-            --head-w:   22mm;
+            --label-w:  83mm;
+            --label-h:  37mm;
+            --head-w:   24mm;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -213,23 +211,23 @@
             width: var(--head-w);
             flex-shrink: 0;
             height: 100%;
-            padding: 1.6mm 1.2mm 1mm;
+            padding: 2mm 1.4mm 1.4mm;
             display: flex;
             flex-direction: column;
             justify-content: center;
-            gap: 0.5mm;
+            gap: 0.9mm;
             border-right: 1px dashed #bbb; /* tear-line guide, screen only */
             font-family: var(--mono);
         }
         .head-zone .tag-no {
             font-weight: 700;
-            font-size: 3.1mm;
+            font-size: 3.6mm;
             letter-spacing: 0.02em;
             line-height: 1.15;
             word-break: break-all;
         }
         .head-zone .hz-line {
-            font-size: 2.1mm;
+            font-size: 2.5mm;
             line-height: 1.35;
             color: #333;
             white-space: nowrap;
@@ -261,7 +259,7 @@
         }
         .tail-zone .cert-no {
             font-family: var(--mono);
-            font-size: 1.9mm;
+            font-size: 2.2mm;
             color: #555;
             letter-spacing: 0.03em;
             white-space: nowrap;
@@ -276,7 +274,7 @@
         /* ── PRINT STYLES ── */
         @media print {
             * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            @page { size: 76mm 25mm; margin: 0; }
+            @page { size: 83mm 37mm; margin: 0; }
             body { background: #fff; }
             .controls, .workflow-note, .selection-bar { display: none !important; }
             .page-wrap { padding: 0; }
@@ -301,7 +299,7 @@
         <div class="meta-chip">Date&nbsp;<span>{{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d M Y') }}</span></div>
         <div class="meta-chip">Vendor&nbsp;<span>{{ $invoice->vendor->name ?? '—' }}</span></div>
         <div class="meta-chip">Items&nbsp;<span>{{ $invoice->items->count() }}</span></div>
-        <div class="meta-chip">Label&nbsp;<span id="labelSizeChip">76×25mm (paddle)</span></div>
+        <div class="meta-chip">Label&nbsp;<span id="labelSizeChip">83×37mm (paddle)</span></div>
     </div>
 
     <div class="controls-right">
@@ -375,7 +373,8 @@
     const invoiceId = {{ $invoice->id }};
     // Change this to route('purchase_invoices.mark_printed', $invoice->id) once the
     // corresponding route + controller method are added — see accompanying patch notes.
-    const markPrintedUrl = @json(route('purchase_invoices.mark_printed', $invoice->id));
+    const markPrintedUrl = @json(url('/purchase-invoices/' . $invoice->id . '/mark-printed'));
+
     // ===== selection helpers =====
     window.selectAll = function(state) {
         document.querySelectorAll('.label-select').forEach(cb => cb.checked = state);
@@ -432,7 +431,7 @@
                 JsBarcode(el, barcode, {
                     format:       'CODE128',
                     width:        1,
-                    height:       32,
+                    height:       42,
                     displayValue: false,
                     margin:       0,
                     background:   '#ffffff',
