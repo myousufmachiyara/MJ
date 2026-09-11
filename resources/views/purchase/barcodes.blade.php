@@ -371,9 +371,7 @@
 
 <script>
     const invoiceId = {{ $invoice->id }};
-    // Change this to route('purchase_invoices.mark_printed', $invoice->id) once the
-    // corresponding route + controller method are added — see accompanying patch notes.
-    const markPrintedUrl = @json(url('/purchase-invoices/' . $invoice->id . '/mark-printed'));
+    const markPrintedUrl = @json(route('purchase_invoices.mark_printed', $invoice->id));
 
     // ===== selection helpers =====
     window.selectAll = function(state) {
