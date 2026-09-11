@@ -21,17 +21,27 @@
             /* ─────────────────────────────────────────────────────────────
                PHYSICAL LABEL DIMENSIONS — confirmed from your purchase
                receipt: "Jewellery Label 83 x 37mm - 1000 - 40mm Core"
-               (Godex EZ120 stock). This prints as ONE continuous tag —
-               nothing gets torn apart. The wide left side is the info
-               block (item no. / weight / ct); the barcode + the blank
-               length after it is what you fold around the piece and
-               press to itself to attach the tag, per your photos.
-               --head-w is just where the info block ends and the
-               barcode area begins — nudge it if that split needs to move.
+               (Godex EZ120 stock). Corrected per your annotated photo +
+               reference shots: the 83mm-wide sheet actually prints TWO
+               separate flag-tags side by side, which you tear apart in
+               the middle into two independent tags:
+                 - LEFT tag: item no. / gold wt. / diamond ct. / stone ct.
+                 - RIGHT tag: barcode / certificate no.
+               Each one, once torn off, is its own little paddle: a
+               printed head plus a blank strip of stock (the "stick")
+               that loops through a ring and presses to itself to attach
+               that tag — so each half needs its own printed head AND
+               its own blank strap tail, not just one shared strap.
+               --unit-w = width of each half (half of the total label).
+               --unit-head-w = how much of each half is the printed head;
+               the rest of that half is left blank on purpose (the strap).
+               These are still estimates — nudge them once you've measured
+               a real blank label.
                ───────────────────────────────────────────────────────────── */
-            --label-w:  83mm;
-            --label-h:  37mm;
-            --head-w:   24mm;
+            --label-w:    83mm;
+            --label-h:    37mm;
+            --unit-w:     41.5mm;
+            --unit-head-w: 16mm;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -210,67 +220,76 @@
             z-index: 5;
         }
 
-        /* -- INFO BLOCK: tag no / gold wt / diamond / stone -- */
-        .head-zone {
-            width: var(--head-w);
+        /* -- ONE HALF of the label = one flag-tag once torn apart:
+              a printed head + a blank strap (the "stick") that loops
+              through a ring and presses to itself. -- */
+        .unit {
+            width: var(--unit-w);
             flex-shrink: 0;
             height: 100%;
-            padding: 2mm 1.4mm 1.4mm;
+            display: flex;
+            position: relative;
+        }
+        .unit + .unit {
+            border-left: 1px dashed #999; /* tear guide between the two halves, screen only */
+        }
+
+        .unit-head {
+            width: var(--unit-head-w);
+            flex-shrink: 0;
+            height: 100%;
+            padding: 1.2mm 0.9mm;
             display: flex;
             flex-direction: column;
             justify-content: center;
-            gap: 0.9mm;
-            border-right: 1px dotted #ccc; /* soft visual divider, screen only — not a cut/tear line */
+            gap: 0.5mm;
             font-family: var(--mono);
         }
-        .head-zone .tag-no {
+
+        /* the rest of each half is deliberately left blank — it's the
+           strap that folds through the ring, nothing prints here */
+        .unit-strap { flex: 1; }
+
+        /* -- LEFT unit content: item no. / gold wt. / diamond / stone --
+              sized to actually fit a ~15mm-wide head — test-print and
+              tell me if any line is still clipped. */
+        .unit-info .tag-no {
             font-weight: 700;
-            font-size: 3.6mm;
-            letter-spacing: 0.02em;
-            line-height: 1.15;
+            font-size: 2.6mm;
+            letter-spacing: 0.01em;
+            line-height: 1.1;
             word-break: break-all;
         }
-        .head-zone .hz-line {
-            font-size: 2.5mm;
-            line-height: 1.35;
+        .unit-info .hz-line {
+            font-size: 1.9mm;
+            line-height: 1.3;
             color: #333;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .head-zone .hz-line b { color: var(--ink); font-weight: 700; }
-        .head-zone .hz-line .lbl { color: #888; }
+        .unit-info .hz-line b { color: var(--ink); font-weight: 700; }
+        .unit-info .hz-line .lbl { color: #888; }
 
-        /* -- BARCODE STRIP: barcode + certificate no. This area, plus the
-              blank length of stock after it, is what folds around the
-              piece and sticks to itself — it is NOT torn off. -- */
-        .tail-zone {
-            flex: 1;
-            min-width: 0;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
+        /* -- RIGHT unit content: barcode + certificate no. -- */
+        .unit-barcode .unit-head {
             align-items: center;
             justify-content: center;
-            padding: 1mm 2mm;
-            gap: 0.6mm;
+            gap: 0.5mm;
         }
-        .tail-zone .barcode-wrap {
-            width: 100%;
-        }
-        .tail-zone .barcode-wrap svg {
+        .unit-barcode .barcode-wrap { width: 100%; }
+        .unit-barcode .barcode-wrap svg {
             width: 100%;
             height: auto;
             display: block;
         }
-        .tail-zone .cert-no {
-            font-family: var(--mono);
-            font-size: 2.2mm;
+        .unit-barcode .cert-no {
+            font-size: 1.9mm;
             color: #555;
-            letter-spacing: 0.03em;
+            letter-spacing: 0.02em;
             white-space: nowrap;
         }
-        .tail-zone .cert-no b { color: var(--ink); font-weight: 600; }
+        .unit-barcode .cert-no b { color: var(--ink); font-weight: 600; }
 
         /* ── EMPTY STATE ── */
         .empty-state { text-align: center; padding: 80px 20px; color: #aaa; }
@@ -288,7 +307,7 @@
             .label-paddle { border: none; margin: 0; page-break-after: always; break-after: page; }
             .label-paddle:last-child { page-break-after: auto; break-after: auto; }
             .label-index, .label-select-wrap { display: none !important; }
-            .head-zone { border-right: none; } /* the divider is a screen-only guide, nothing to print here */
+            .unit + .unit { border-left: none; } /* the divider is a screen-only guide — the real tear point is already die-cut on your stock */
         }
     </style>
 </head>
@@ -325,10 +344,10 @@
 </div>
 
 <div class="workflow-note">
-    <b>How this label prints:</b> each sticker prints once, in a single pass, as ONE continuous tag — nothing is torn apart.
-    Load your labels as usual and click <b>“Print Selected.”</b> The wide left side shows the item no., gold weight, diamond ct.
-    and stone ct. The barcode strip on the right — plus the blank length of stock after it — is what you fold around the piece
-    and press to itself to attach the tag. Uncheck any items you don't want to print in this batch.
+    <b>How this label prints:</b> each sticker prints once, in a single pass, as two tags side by side — load your labels as usual
+    and click <b>“Print Selected.”</b> Tear it down the middle (dashed line in the preview) into two separate tags: the left one
+    (item no., gold weight, diamond ct., stone ct.) and the right one (barcode, certificate no.). Each is its own little paddle —
+    fold its blank strap through a ring and press it to itself to attach that tag. Uncheck any items you don't want to print in this batch.
 </div>
 @endif
 
@@ -348,20 +367,26 @@
                 <input type="checkbox" class="label-select" checked onchange="updateSelectionCount()">
             </span>
 
-            {{-- INFO BLOCK --}}
-            <div class="head-zone">
-                <div class="tag-no">{{ $item->barcode_number }}</div>
-                <div class="hz-line"><span class="lbl">Au</span> <b>{{ number_format($item->net_weight, 3) }}</b> gm</div>
-                <div class="hz-line"><span class="lbl">Dia</span> <b>{{ number_format($diamondCt, 3) }}</b> ct</div>
-                <div class="hz-line"><span class="lbl">Stn</span> <b>{{ number_format($stoneCt, 3) }}</b> ct</div>
+            {{-- LEFT: item no. / gold wt. / diamond / stone — its own tag once torn off --}}
+            <div class="unit unit-info">
+                <div class="unit-head">
+                    <div class="tag-no">{{ $item->barcode_number }}</div>
+                    <div class="hz-line"><span class="lbl">Au</span> <b>{{ number_format($item->net_weight, 3) }}</b> gm</div>
+                    <div class="hz-line"><span class="lbl">Dia</span> <b>{{ number_format($diamondCt, 3) }}</b> ct</div>
+                    <div class="hz-line"><span class="lbl">Stn</span> <b>{{ number_format($stoneCt, 3) }}</b> ct</div>
+                </div>
+                <div class="unit-strap"></div>
             </div>
 
-            {{-- BARCODE STRIP (this + the blank length after it folds around the piece) --}}
-            <div class="tail-zone">
-                <div class="barcode-wrap">
-                    <svg id="bc-{{ $i }}"></svg>
+            {{-- RIGHT: barcode / certificate no. — its own tag once torn off --}}
+            <div class="unit unit-barcode">
+                <div class="unit-head">
+                    <div class="barcode-wrap">
+                        <svg id="bc-{{ $i }}"></svg>
+                    </div>
+                    <div class="cert-no">Cert# <b>{{ $item->certificate_no ?: '—' }}</b></div>
                 </div>
-                <div class="cert-no">Cert# <b>{{ $item->certificate_no ?: '—' }}</b></div>
+                <div class="unit-strap"></div>
             </div>
         </div>
         @endforeach
