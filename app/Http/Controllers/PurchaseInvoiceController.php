@@ -891,29 +891,36 @@ class PurchaseInvoiceController extends Controller
 
     public function printBarcodes($id)
     {
-        $invoice = PurchaseInvoice::with(['items.parts.product'])->findOrFail($id);
+        // Eager-load parts so diamond_total_ct / stone_total_ct (used on the
+        // tag) don't trigger an N+1 query per item.
+        //
+        // NOTE: items are no longer marked as printed just by opening this
+        // page — only the ones the user actually selects and prints get
+        // marked, via markPrinted() below.
+        $invoice = PurchaseInvoice::with(['items.parts'])->findOrFail($id);
         return view('purchase.barcodes', compact('invoice'));
     }
 
-    public function markPrinted(Request $request, $id)
+    /**
+     * Mark only the specific items the user selected (and actually printed)
+     * as printed. Called by the "Print Selected" button on the barcode page.
+     */
+    public function markPrinted($id, Request $request)
     {
         $invoice = PurchaseInvoice::findOrFail($id);
 
-        $itemIds = collect($request->input('item_ids', []))
-            ->filter()
-            ->map(fn ($v) => (int) $v)
-            ->all();
-
-        if (empty($itemIds)) {
-            return response()->json(['status' => 'no_items'], 422);
-        }
+        $validated = $request->validate([
+            'item_ids'   => 'required|array|min:1',
+            'item_ids.*' => 'integer',
+        ]);
 
         $updated = PurchaseInvoiceItem::where('purchase_invoice_id', $invoice->id)
-            ->whereIn('id', $itemIds)
+            ->whereIn('id', $validated['item_ids'])
             ->update(['is_printed' => true]);
 
         return response()->json(['status' => 'ok', 'updated' => $updated]);
     }
+
     // =========================================================================
     // PRIVATE HELPERS
     // =========================================================================
@@ -942,18 +949,30 @@ class PurchaseInvoiceController extends Controller
     {
         $prefix = $isTaxable ? 'PUR-TAX-' : 'PUR-';
 
-        $last = PurchaseInvoice::withTrashed()
+        // FIX (stuck invoice number): this used to pick "the row with the
+        // highest id" via orderByDesc('id')->first() and assume that row also
+        // had the highest invoice number. Those can disagree — a row edited
+        // directly in the database, imported, or restored from a backup — and
+        // when they do, this silently locked onto an OLD invoice as "last"
+        // and kept re-issuing an already-used number FOREVER (every single
+        // attempt, not just concurrent ones), crashing on the unique
+        // invoice_no constraint every time.
+        //
+        // Fix: ask the database for the true highest number actually used in
+        // this series (MAX of the numeric suffix), instead of trusting
+        // insertion order to match numeric order.
+        $prefixLen = strlen($prefix);
+
+        $maxNo = PurchaseInvoice::withTrashed()
             ->whereRaw(
                 'invoice_no REGEXP ?',
                 ['^' . preg_quote($prefix, '/') . '[0-9]+$']
             )
-            ->orderByDesc('id')
             ->lockForUpdate()
-            ->first();
+            ->selectRaw('MAX(CAST(SUBSTRING(invoice_no, ?) AS UNSIGNED)) as max_no', [$prefixLen + 1])
+            ->value('max_no');
 
-        $next = $last
-            ? ((int) str_replace($prefix, '', $last->invoice_no)) + 1
-            : 1;
+        $next = ((int) $maxNo) + 1;
 
         return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
     }

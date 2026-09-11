@@ -19,11 +19,15 @@
             --sans:     'IBM Plex Sans', sans-serif;
 
             /* ─────────────────────────────────────────────────────────────
-               PHYSICAL DIE-CUT LABEL DIMENSIONS — confirmed from your
-               purchase receipt: "Jewellery Label 83 x 37mm - 1000 - 40mm
-               Core" (Godex EZ120 stock). Head width is still an estimate
-               of where the die-cut perforation sits on that 83mm length —
-               nudge --head-w if the tear line lands in the wrong place.
+               PHYSICAL LABEL DIMENSIONS — confirmed from your purchase
+               receipt: "Jewellery Label 83 x 37mm - 1000 - 40mm Core"
+               (Godex EZ120 stock). This prints as ONE continuous tag —
+               nothing gets torn apart. The wide left side is the info
+               block (item no. / weight / ct); the barcode + the blank
+               length after it is what you fold around the piece and
+               press to itself to attach the tag, per your photos.
+               --head-w is just where the info block ends and the
+               barcode area begins — nudge it if that split needs to move.
                ───────────────────────────────────────────────────────────── */
             --label-w:  83mm;
             --label-h:  37mm;
@@ -206,7 +210,7 @@
             z-index: 5;
         }
 
-        /* -- HEAD ZONE ("Front Tag"): tag no / gold wt / diamond / stone -- */
+        /* -- INFO BLOCK: tag no / gold wt / diamond / stone -- */
         .head-zone {
             width: var(--head-w);
             flex-shrink: 0;
@@ -216,7 +220,7 @@
             flex-direction: column;
             justify-content: center;
             gap: 0.9mm;
-            border-right: 1px dashed #bbb; /* tear-line guide, screen only */
+            border-right: 1px dotted #ccc; /* soft visual divider, screen only — not a cut/tear line */
             font-family: var(--mono);
         }
         .head-zone .tag-no {
@@ -237,7 +241,9 @@
         .head-zone .hz-line b { color: var(--ink); font-weight: 700; }
         .head-zone .hz-line .lbl { color: #888; }
 
-        /* -- TAIL ZONE ("Back Tag"): barcode + certificate no -- */
+        /* -- BARCODE STRIP: barcode + certificate no. This area, plus the
+              blank length of stock after it, is what folds around the
+              piece and sticks to itself — it is NOT torn off. -- */
         .tail-zone {
             flex: 1;
             min-width: 0;
@@ -282,7 +288,7 @@
             .label-paddle { border: none; margin: 0; page-break-after: always; break-after: page; }
             .label-paddle:last-child { page-break-after: auto; break-after: auto; }
             .label-index, .label-select-wrap { display: none !important; }
-            .head-zone { border-right: none; } /* real perforation exists on the physical die-cut, no need to draw it */
+            .head-zone { border-right: none; } /* the divider is a screen-only guide, nothing to print here */
         }
     </style>
 </head>
@@ -299,7 +305,7 @@
         <div class="meta-chip">Date&nbsp;<span>{{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d M Y') }}</span></div>
         <div class="meta-chip">Vendor&nbsp;<span>{{ $invoice->vendor->name ?? '—' }}</span></div>
         <div class="meta-chip">Items&nbsp;<span>{{ $invoice->items->count() }}</span></div>
-        <div class="meta-chip">Label&nbsp;<span id="labelSizeChip">83×37mm (paddle)</span></div>
+        <div class="meta-chip">Label&nbsp;<span id="labelSizeChip">83×37mm</span></div>
     </div>
 
     <div class="controls-right">
@@ -319,9 +325,10 @@
 </div>
 
 <div class="workflow-note">
-    <b>How this label prints:</b> each sticker is printed once, in a single pass — load your die-cut paddle labels as usual and click
-    <b>“Print Selected.”</b> After printing, tear each sticker along its perforation: the wide head becomes the item/weight tag,
-    the thin tail becomes the barcode string tag you attach to the piece. Uncheck any items you don't want to print in this batch.
+    <b>How this label prints:</b> each sticker prints once, in a single pass, as ONE continuous tag — nothing is torn apart.
+    Load your labels as usual and click <b>“Print Selected.”</b> The wide left side shows the item no., gold weight, diamond ct.
+    and stone ct. The barcode strip on the right — plus the blank length of stock after it — is what you fold around the piece
+    and press to itself to attach the tag. Uncheck any items you don't want to print in this batch.
 </div>
 @endif
 
@@ -341,7 +348,7 @@
                 <input type="checkbox" class="label-select" checked onchange="updateSelectionCount()">
             </span>
 
-            {{-- HEAD ZONE ("Front Tag") --}}
+            {{-- INFO BLOCK --}}
             <div class="head-zone">
                 <div class="tag-no">{{ $item->barcode_number }}</div>
                 <div class="hz-line"><span class="lbl">Au</span> <b>{{ number_format($item->net_weight, 3) }}</b> gm</div>
@@ -349,7 +356,7 @@
                 <div class="hz-line"><span class="lbl">Stn</span> <b>{{ number_format($stoneCt, 3) }}</b> ct</div>
             </div>
 
-            {{-- TAIL ZONE ("Back Tag") --}}
+            {{-- BARCODE STRIP (this + the blank length after it folds around the piece) --}}
             <div class="tail-zone">
                 <div class="barcode-wrap">
                     <svg id="bc-{{ $i }}"></svg>

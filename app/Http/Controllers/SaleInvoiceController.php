@@ -844,24 +844,27 @@ class SaleInvoiceController extends Controller
     {
         $prefix = $isTaxable ? 'SAL-TAX-' : 'SAL-';
 
-        // FIX: previously ordered by id/lockForUpdate()->first() and assumed the
-        // highest-id row also had the highest invoice number. If that assumption
-        // is ever broken (manual edit, deleted/restored row, seeded/imported
-        // invoice, etc.) this permanently locks onto the wrong "last" invoice and
-        // reissues the same number on every future save — not just under a race.
-        // Pulling MAX() straight from the invoice_no strings is self-healing:
-        // it always reflects the true highest number in use, regardless of row
-        // order or history.
+        // FIX (stuck invoice number): this used to pick "the row with the
+        // highest id" via orderByDesc('id')->first() and assume that row also
+        // had the highest invoice number. Those can disagree — a row edited
+        // directly in the database, imported, or restored from a backup — and
+        // when they do, this silently locked onto an OLD invoice as "last"
+        // and kept re-issuing an already-used number FOREVER (every single
+        // attempt, not just concurrent ones), crashing on the unique
+        // invoice_no constraint every time.
+        //
+        // Fix: ask the database for the true highest number actually used in
+        // this series (MAX of the numeric suffix), instead of trusting
+        // insertion order to match numeric order.
+        $prefixLen = strlen($prefix);
+
         $maxNo = SaleInvoice::withTrashed()
             ->whereRaw(
                 'invoice_no REGEXP ?',
                 ['^' . preg_quote($prefix, '/') . '[0-9]+$']
             )
             ->lockForUpdate()
-            ->selectRaw(
-                'MAX(CAST(SUBSTRING(invoice_no, ?) AS UNSIGNED)) as max_no',
-                [strlen($prefix) + 1]
-            )
+            ->selectRaw('MAX(CAST(SUBSTRING(invoice_no, ?) AS UNSIGNED)) as max_no', [$prefixLen + 1])
             ->value('max_no');
 
         $next = ((int) $maxNo) + 1;
@@ -1524,7 +1527,6 @@ class SaleInvoiceController extends Controller
                     ' . ($invoice->customer->name ?? 'Walk-in Customer') . '<br>
                     ' . ($invoice->customer->address ?? '') . '<br>
                     Contact: ' . ($invoice->customer->contact_no ?? '-') . '<br>
-                    <b>Other Details:</b> ' . ($invoice->customer->remarks ?? '-') . '<br>
                     <b>Ref:</b> ' . ($invoice->remarks ?? '-') . '<br>
                 </td>
                 <td width="50%">
