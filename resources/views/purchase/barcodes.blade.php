@@ -31,9 +31,10 @@
                  - certificate #
                Tear down the middle to separate the two items' tags.
                ───────────────────────────────────────────────────────────── */
-            --label-w: 83mm;
-            --label-h: 37mm;
-            --unit-w:  41.5mm;
+            --label-w:   83mm;
+            --label-h:   37mm;
+            --unit-w:    41.5mm;
+            --barcode-w: 19mm; /* width of the barcode+cert# block — kept same as before, centered in the wider tag */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -269,10 +270,13 @@
         .unit-select-wrap input { width: 14px; height: 14px; cursor: pointer; }
 
         .unit-barcode {
+            width: var(--barcode-w);
             flex-shrink: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
+            align-self: center;
+            margin: 0 auto;
             gap: 0.3mm;
         }
         .unit-barcode svg {
@@ -491,7 +495,7 @@
                 JsBarcode(el, barcode, {
                     format:       'CODE128',
                     width:        1.2,
-                    height:       30,
+                    height:       42,
                     displayValue: false,
                     margin:       0,
                     background:   '#ffffff',
@@ -510,4 +514,4 @@
 </script>
 
 </body>
-</html> 
+</html>
