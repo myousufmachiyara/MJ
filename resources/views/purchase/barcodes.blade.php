@@ -284,10 +284,7 @@
         .unit-barcode {
             width: var(--barcode-w);
             flex-shrink: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-            align-self: flex-start;
+            display: block;
             gap: 0.3mm;
         }
         .unit-barcode svg {
@@ -296,19 +293,26 @@
             display: block;
         }
         /* mirrored: right unit's barcode+cert hug the right edge instead
-           (top right, since the unit itself is now reversed top-to-bottom) */
+           (top right, since the unit itself is now reversed top-to-bottom).
+           Uses margin-left:auto on a fixed-width block rather than flex
+           cross-axis alignment, which is a more bulletproof way to force
+           right-alignment regardless of the parent's own flex settings. */
         .unit:nth-child(2) .unit-barcode {
-            align-items: flex-end;
-            align-self: flex-end;
+            margin-left: auto;
+            margin-right: 0;
         }
         .tag-cert {
             display: flex;
             flex-direction: column;
             align-items: flex-start;
             gap: 0.3mm;
+            margin-top: 0.3mm;
         }
         .unit:nth-child(2) .tag-cert {
             align-items: flex-end;
+            width: fit-content;
+            margin-left: auto;
+            margin-right: 0;
         }
         .tag-cert .cert-lbl {
             font-size: 1.5mm;
