@@ -34,7 +34,7 @@
             --label-w:   83mm;
             --label-h:   37mm;
             --unit-w:    41.5mm;
-            --barcode-w: 19mm; /* width of the barcode+cert# block — kept same as before, centered in the wider tag */
+            --barcode-w: 14mm; /* width of the barcode+cert# block — narrower, left-aligned in the wider tag */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -274,9 +274,8 @@
             flex-shrink: 0;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            align-self: center;
-            margin: 0 auto;
+            align-items: flex-start;
+            align-self: flex-start;
             gap: 0.3mm;
         }
         .unit-barcode svg {
@@ -287,7 +286,7 @@
         .tag-cert {
             display: flex;
             flex-direction: column;
-            align-items: center;
+            align-items: flex-start;
             gap: 0.3mm;
         }
         .tag-cert .cert-lbl {
