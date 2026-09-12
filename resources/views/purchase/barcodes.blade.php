@@ -19,28 +19,24 @@
             --sans:     'IBM Plex Sans', sans-serif;
 
             /* ─────────────────────────────────────────────────────────────
-               PHYSICAL LABEL DIMENSIONS — confirmed from your purchase
-               receipt: "Jewellery Label 83 x 37mm - 1000 - 40mm Core"
-               (Godex EZ120 stock). Corrected per your annotated photo +
-               reference shots: the 83mm-wide sheet actually prints TWO
-               separate flag-tags side by side, which you tear apart in
-               the middle into two independent tags:
-                 - LEFT tag: item no. / gold wt. / diamond ct. / stone ct.
-                 - RIGHT tag: barcode / certificate no.
-               Each one, once torn off, is its own little paddle: a
-               printed head plus a blank strip of stock (the "stick")
-               that loops through a ring and presses to itself to attach
-               that tag — so each half needs its own printed head AND
-               its own blank strap tail, not just one shared strap.
-               --unit-w = width of each half (half of the total label).
-               --unit-head-w = how much of each half is the printed head;
-               the rest of that half is left blank on purpose (the strap).
-               These are still estimates — nudge them once you've measured
-               a real blank label.
+               PHYSICAL LABEL — "Jewellery Label 83 x 37mm - 1000 - 40mm
+               Core" (Godex EZ120 stock). ONE 83x37mm sheet per item, but
+               it prints as TWO separate paddle tags side by side, torn
+               apart down the middle:
+                 - LEFT tag  — item no. / gold wt. / diamond ct. / stone ct.
+                 - RIGHT tag — barcode / certificate no.
+               Each tag's printed head sits at the OUTER edge of the sheet
+               (far left for the info tag, far right for the barcode tag),
+               with its own blank strap trailing back toward the middle.
+               Tear down the middle to separate the two tags; each one's
+               blank strap is what loops through a ring and presses to
+               itself. --unit-head-w is how wide each printed head is —
+               still an estimate, nudge it once you've measured a real
+               label.
                ───────────────────────────────────────────────────────────── */
-            --label-w:    83mm;
-            --label-h:    37mm;
-            --unit-w:     41.5mm;
+            --label-w:     83mm;
+            --label-h:     37mm;
+            --unit-w:      41.5mm;
             --unit-head-w: 16mm;
         }
 
@@ -187,8 +183,11 @@
             gap: 14px;
         }
 
-        /* One physical die-cut label — head (wide) fused to tail (thin strip) */
-        .label-paddle {
+        /* One physical 83x37mm sheet — two paddle tags, torn apart down
+           the middle. Each tag's printed head sits at the OUTER edge of
+           the sheet, with its own blank strap trailing back to the
+           middle tear line. */
+        .label-tag {
             width: var(--label-w);
             height: var(--label-h);
             background: var(--card-bg);
@@ -200,12 +199,13 @@
             page-break-inside: avoid;
             break-inside: avoid;
         }
-        .label-paddle.excluded { display: none; }
+        .label-tag.excluded { display: none; }
 
         .label-select-wrap {
             position: absolute;
-            top: 1mm;
-            right: 1.5mm;
+            bottom: 1mm;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 5;
         }
         .label-select-wrap input { width: 14px; height: 14px; cursor: pointer; }
@@ -213,16 +213,15 @@
         .label-index {
             position: absolute;
             top: 1mm;
-            left: 1.5mm;
+            left: 50%;
+            transform: translateX(-50%);
             font-family: var(--mono);
             font-size: 2mm;
             color: #ccc;
             z-index: 5;
         }
 
-        /* -- ONE HALF of the label = one flag-tag once torn apart:
-              a printed head + a blank strap (the "stick") that loops
-              through a ring and presses to itself. -- */
+        /* -- each half of the sheet: one paddle tag (head + blank strap) -- */
         .unit {
             width: var(--unit-w);
             flex-shrink: 0;
@@ -230,66 +229,64 @@
             display: flex;
             position: relative;
         }
-        .unit + .unit {
-            border-left: 1px dashed #999; /* tear guide between the two halves, screen only */
-        }
+        /* info tag: head first → lands on the far LEFT edge, strap trails right */
+        .unit-info { flex-direction: row; }
+        /* barcode tag: reversed → head lands on the far RIGHT edge, strap trails left */
+        .unit-barcode { flex-direction: row-reverse; }
+
+        /* soft guide down the middle, screen only — this is where you tear */
+        .unit + .unit { border-left: 1px dashed #ccc; }
 
         .unit-head {
             width: var(--unit-head-w);
             flex-shrink: 0;
             height: 100%;
-            padding: 1.2mm 0.9mm;
             display: flex;
             flex-direction: column;
             justify-content: center;
-            gap: 0.5mm;
+            padding: 1.2mm 0.9mm;
             font-family: var(--mono);
+            gap: 0.5mm;
         }
 
-        /* the rest of each half is deliberately left blank — it's the
-           strap that folds through the ring, nothing prints here */
+        /* the rest of each tag is deliberately left blank — it's the
+           strap that loops through a ring and presses to itself */
         .unit-strap { flex: 1; }
 
-        /* -- LEFT unit content: item no. / gold wt. / diamond / stone --
-              sized to actually fit a ~15mm-wide head — test-print and
-              tell me if any line is still clipped. */
         .unit-info .tag-no {
             font-weight: 700;
             font-size: 2.6mm;
             letter-spacing: 0.01em;
             line-height: 1.1;
             word-break: break-all;
+            margin-bottom: 1.2mm; /* pushes the item # up and the details below it down */
         }
-        .unit-info .hz-line {
+        .unit-info .tag-line {
             font-size: 1.9mm;
             line-height: 1.3;
             color: #333;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
-        .unit-info .hz-line b { color: var(--ink); font-weight: 700; }
-        .unit-info .hz-line .lbl { color: #888; }
+        .unit-info .tag-line b { color: var(--ink); font-weight: 700; }
+        .unit-info .tag-line .lbl { color: #888; }
 
-        /* -- RIGHT unit content: barcode + certificate no. -- */
         .unit-barcode .unit-head {
             align-items: center;
             justify-content: center;
-            gap: 0.5mm;
         }
-        .unit-barcode .barcode-wrap { width: 100%; }
-        .unit-barcode .barcode-wrap svg {
+        .unit-barcode svg {
             width: 100%;
             height: auto;
             display: block;
+            margin-bottom: 1.2mm; /* pushes the barcode up and the cert # below it down */
         }
-        .unit-barcode .cert-no {
-            font-size: 1.9mm;
+        .unit-barcode .tag-cert {
+            font-size: 1.7mm;
             color: #555;
-            letter-spacing: 0.02em;
             white-space: nowrap;
+            text-align: center;
         }
-        .unit-barcode .cert-no b { color: var(--ink); font-weight: 600; }
+        .unit-barcode .tag-cert b { color: var(--ink); font-weight: 600; }
 
         /* ── EMPTY STATE ── */
         .empty-state { text-align: center; padding: 80px 20px; color: #aaa; }
@@ -304,10 +301,10 @@
             .controls, .workflow-note, .selection-bar { display: none !important; }
             .page-wrap { padding: 0; }
             .label-sheet { gap: 0; }
-            .label-paddle { border: none; margin: 0; page-break-after: always; break-after: page; }
-            .label-paddle:last-child { page-break-after: auto; break-after: auto; }
+            .label-tag { border: none; margin: 0; page-break-after: always; break-after: page; }
+            .label-tag:last-child { page-break-after: auto; break-after: auto; }
             .label-index, .label-select-wrap { display: none !important; }
-            .unit + .unit { border-left: none; } /* the divider is a screen-only guide — the real tear point is already die-cut on your stock */
+            .unit + .unit { border-left: none; } /* screen-only guide, nothing to print here */
         }
     </style>
 </head>
@@ -344,10 +341,11 @@
 </div>
 
 <div class="workflow-note">
-    <b>How this label prints:</b> each sticker prints once, in a single pass, as two tags side by side — load your labels as usual
-    and click <b>“Print Selected.”</b> Tear it down the middle (dashed line in the preview) into two separate tags: the left one
-    (item no., gold weight, diamond ct., stone ct.) and the right one (barcode, certificate no.). Each is its own little paddle —
-    fold its blank strap through a ring and press it to itself to attach that tag. Uncheck any items you don't want to print in this batch.
+    <b>How this label prints:</b> each 83×37mm sheet prints as TWO tags side by side — the LEFT tag (item no., gold weight,
+    diamond ct., stone ct.) and the RIGHT tag (barcode, certificate no.). Each tag's printed part sits at the outer edge of
+    the sheet with its own blank strap trailing toward the middle — tear down the middle to separate the two tags, then fold
+    each strap through a ring and press it to itself. Load your labels as usual and click <b>“Print Selected.”</b> Uncheck
+    any items you don't want to print in this batch.
 </div>
 @endif
 
@@ -361,30 +359,26 @@
             $diamondCt = $item->diamond_total_ct ?? 0;
             $stoneCt   = $item->stone_total_ct ?? 0;
         @endphp
-        <div class="label-paddle" data-index="{{ $i }}" data-item-id="{{ $item->id }}">
+        <div class="label-tag" data-index="{{ $i }}" data-item-id="{{ $item->id }}">
             <span class="label-index">{{ str_pad($i + 1, 2, '0', STR_PAD_LEFT) }}</span>
             <span class="label-select-wrap">
                 <input type="checkbox" class="label-select" checked onchange="updateSelectionCount()">
             </span>
 
-            {{-- LEFT: item no. / gold wt. / diamond / stone — its own tag once torn off --}}
             <div class="unit unit-info">
                 <div class="unit-head">
                     <div class="tag-no">{{ $item->barcode_number }}</div>
-                    <div class="hz-line"><span class="lbl">Au</span> <b>{{ number_format($item->net_weight, 3) }}</b> gm</div>
-                    <div class="hz-line"><span class="lbl">Dia</span> <b>{{ number_format($diamondCt, 3) }}</b> ct</div>
-                    <div class="hz-line"><span class="lbl">Stn</span> <b>{{ number_format($stoneCt, 3) }}</b> ct</div>
+                    <div class="tag-line"><span class="lbl">Au</span> <b>{{ number_format($item->net_weight, 3) }}</b> gm</div>
+                    <div class="tag-line"><span class="lbl">Dia</span> <b>{{ number_format($diamondCt, 3) }}</b> ct</div>
+                    <div class="tag-line"><span class="lbl">Stn</span> <b>{{ number_format($stoneCt, 3) }}</b> ct</div>
                 </div>
                 <div class="unit-strap"></div>
             </div>
 
-            {{-- RIGHT: barcode / certificate no. — its own tag once torn off --}}
             <div class="unit unit-barcode">
                 <div class="unit-head">
-                    <div class="barcode-wrap">
-                        <svg id="bc-{{ $i }}"></svg>
-                    </div>
-                    <div class="cert-no">Cert# <b>{{ $item->certificate_no ?: '—' }}</b></div>
+                    <svg id="bc-{{ $i }}"></svg>
+                    <div class="tag-cert">Cert# <b>{{ $item->certificate_no ?: '—' }}</b></div>
                 </div>
                 <div class="unit-strap"></div>
             </div>
@@ -420,19 +414,19 @@
 
     // ===== print only the selected labels =====
     window.printSelected = function() {
-        const paddles = document.querySelectorAll('.label-paddle');
+        const tags = document.querySelectorAll('.label-tag');
         const selectedItemIds = [];
 
-        paddles.forEach(p => {
-            const checked = p.querySelector('.label-select').checked;
-            p.classList.toggle('excluded', !checked);
-            if (checked) selectedItemIds.push(p.dataset.itemId);
+        tags.forEach(t => {
+            const checked = t.querySelector('.label-select').checked;
+            t.classList.toggle('excluded', !checked);
+            if (checked) selectedItemIds.push(t.dataset.itemId);
         });
 
         if (selectedItemIds.length === 0) return;
 
         const restore = () => {
-            paddles.forEach(p => p.classList.remove('excluded'));
+            tags.forEach(t => t.classList.remove('excluded'));
             window.removeEventListener('afterprint', restore);
         };
         window.addEventListener('afterprint', restore);
@@ -451,7 +445,7 @@
         }).catch(err => console.error('Failed to mark items as printed', err));
     };
 
-    // ===== render tail-zone barcodes =====
+    // ===== render barcodes =====
     @foreach($invoice->items as $i => $item)
     (function() {
         const el      = document.getElementById('bc-{{ $i }}');
@@ -461,7 +455,7 @@
                 JsBarcode(el, barcode, {
                     format:       'CODE128',
                     width:        1,
-                    height:       42,
+                    height:       34,
                     displayValue: false,
                     margin:       0,
                     background:   '#ffffff',
