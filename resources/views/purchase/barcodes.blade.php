@@ -383,9 +383,9 @@
             <div class="unit" data-item-id="{{ $item->id }}">
                 <div class="unit-info">
                     <div class="tag-no">{{ $item->barcode_number }}</div>
-                    <div class="tag-line"><span class="lbl">Au</span> <b>{{ number_format($item->net_weight, 3) }}</b> gm</div>
-                    <div class="tag-line"><span class="lbl">Dia</span> <b>{{ number_format($diamondCt, 3) }}</b> ct</div>
-                    <div class="tag-line"><span class="lbl">Stn</span> <b>{{ number_format($stoneCt, 3) }}</b> ct</div>
+                    <div class="tag-line"><b>GOLD: {{ number_format($item->net_weight, 3) }} gm</b></div>
+                    <div class="tag-line"><b>DIA: {{ number_format($diamondCt, 3) }} ct</b></div>
+                    <div class="tag-line"><b>STONE: {{ number_format($stoneCt, 3) }} ct</b></div>
                 </div>
                 <div class="unit-fold">
                     <span class="unit-index">{{ str_pad($itemCounter, 2, '0', STR_PAD_LEFT) }}</span>
