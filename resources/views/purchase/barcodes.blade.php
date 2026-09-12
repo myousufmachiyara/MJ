@@ -34,7 +34,7 @@
             --label-w:   83mm;
             --label-h:   37mm;
             --unit-w:    41.5mm;
-            --barcode-w: 28mm; /* width of the barcode block — widened for real scan reliability (see note below) */
+            --barcode-w: 25mm; /* width of the barcode block — widened for real scan reliability (see note below) */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -110,7 +110,7 @@
         }
         .btn-print:hover { background: #bf3f1e; }
         .btn-print:disabled { background: #6b6b6b; cursor: not-allowed; }
-        .btn-print svg { width: 15px; height: 15px; fill: #fff; }
+        .btn-print svg { width: 30px; height: 30px; fill: #fff; }
 
         .btn-back {
             background: rgba(255,255,255,0.1);
