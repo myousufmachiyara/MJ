@@ -20,25 +20,20 @@
 
             /* ─────────────────────────────────────────────────────────────
                PHYSICAL LABEL — "Jewellery Label 83 x 37mm - 1000 - 40mm
-               Core" (Godex EZ120 stock). ONE 83x37mm sheet per item, but
-               it prints as TWO separate paddle tags side by side, torn
-               apart down the middle:
-                 - LEFT tag  — item no. / gold wt. / diamond ct. / stone ct.
-                 - RIGHT tag — barcode / certificate no.
-               Each tag's printed head sits at the OUTER edge of the sheet
-               (far left for the info tag, far right for the barcode tag),
-               with its own blank strap trailing back toward the middle.
-               Tear down the middle to separate the two tags; each one's
-               blank strap is what loops through a ring and presses to
-               itself. --unit-head-w is how wide each printed head is —
-               still an estimate, nudge it once you've measured a real
-               label.
+               Core" (Godex EZ120 stock). ONE 83x37mm sheet now holds TWO
+               DIFFERENT ITEMS — one complete tag on the left half, one
+               complete tag on the right half. Each half, top to bottom:
+                 - item #
+                 - gold / diamond / stone
+                 - a blank vertical gap (fold this through a ring and
+                   press it to itself to attach the tag)
+                 - barcode
+                 - certificate #
+               Tear down the middle to separate the two items' tags.
                ───────────────────────────────────────────────────────────── */
-            --label-w:         83mm;
-            --label-h:         37mm;
-            --unit-w:          41.5mm;
-            --unit-head-w:     16mm;
-            --barcode-head-w:  19mm;
+            --label-w: 83mm;
+            --label-h: 37mm;
+            --unit-w:  41.5mm;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -184,10 +179,8 @@
             gap: 14px;
         }
 
-        /* One physical 83x37mm sheet — two paddle tags, torn apart down
-           the middle. Each tag's printed head sits at the OUTER edge of
-           the sheet, with its own blank strap trailing back to the
-           middle tear line. */
+        /* One physical 83x37mm sheet — two completely separate item tags,
+           side by side, torn apart down the middle. */
         .label-tag {
             width: var(--label-w);
             height: var(--label-h);
@@ -202,60 +195,35 @@
         }
         .label-tag.excluded { display: none; }
 
-        .label-select-wrap {
-            position: absolute;
-            bottom: 1mm;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 5;
-        }
-        .label-select-wrap input { width: 14px; height: 14px; cursor: pointer; }
-
-        .label-index {
-            position: absolute;
-            top: 1mm;
-            left: 50%;
-            transform: translateX(-50%);
-            font-family: var(--mono);
-            font-size: 2mm;
-            color: #ccc;
-            z-index: 5;
-        }
-
-        /* -- each half of the sheet: one paddle tag (head + blank strap) -- */
+        /* -- one half of the sheet = one complete item tag, stacked
+              top to bottom: item info / fold gap / barcode+cert -- */
         .unit {
             width: var(--unit-w);
             flex-shrink: 0;
             height: 100%;
             display: flex;
+            flex-direction: column;
             position: relative;
+            padding: 1.6mm 1.8mm;
+            font-family: var(--mono);
         }
-        /* info tag: head first → lands on the far LEFT edge, strap trails right */
-        .unit-info { flex-direction: row; }
-        /* barcode tag: reversed → head lands on the far RIGHT edge, strap trails left */
-        .unit-barcode { flex-direction: row-reverse; }
-
-        /* soft guide down the middle, screen only — this is where you tear */
+        /* soft guide down the middle, screen only — this is where you tear
+           to separate the two items */
         .unit + .unit { border-left: 1px dashed #ccc; }
 
-        .unit-head {
-            width: var(--unit-head-w);
+        /* an unchecked item's half stays blank (keeps its physical space
+           on the sheet) rather than disappearing */
+        .unit.unit-excluded { visibility: hidden; }
+
+        /* the second half is left blank when an odd number of items
+           means there's no second item for this sheet */
+        .unit.unit-blank { }
+
+        .unit-info {
             flex-shrink: 0;
-            height: 100%;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            padding: 1.2mm 0.9mm;
-            font-family: var(--mono);
-            gap: 0.5mm;
-        }
-
-        /* the rest of each tag is deliberately left blank — it's the
-           strap that loops through a ring and presses to itself */
-        .unit-strap { flex: 1; }
-
-        .unit-info .unit-head {
-            transform: translateY(0.8mm); /* nudges the whole info block down slightly */
+            gap: 0.4mm;
         }
         .unit-info .tag-no {
             font-weight: 700;
@@ -263,7 +231,7 @@
             letter-spacing: 0.01em;
             line-height: 1.1;
             word-break: break-all;
-            margin-bottom: 1.8mm; /* gap between the item # and the details below it */
+            margin-bottom: 1mm;
         }
         .unit-info .tag-line {
             font-size: 2.1mm;
@@ -274,30 +242,56 @@
         .unit-info .tag-line b { color: var(--ink); font-weight: 700; }
         .unit-info .tag-line .lbl { color: #888; }
 
-        .unit-barcode .unit-head {
-            width: var(--barcode-head-w);
-            align-items: center;
-            justify-content: center;
-            transform: translateY(-0.8mm); /* nudges the whole barcode block up slightly */
+        /* the blank vertical gap in the middle of each tag — this is
+           what you fold through a ring and press to itself */
+        .unit-fold {
+            flex: 1;
+            min-height: 3mm;
+            position: relative;
         }
-        .unit-barcode svg {
-            width: 100%;
-            height: auto;
-            display: block;
-            margin-bottom: 2mm; /* gap between the barcode and the cert # below it */
+        .unit-index {
+            position: absolute;
+            top: 1mm;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: var(--mono);
+            font-size: 2mm;
+            color: #ccc;
+            z-index: 5;
         }
-        .unit-barcode .tag-cert {
+        .unit-select-wrap {
+            position: absolute;
+            bottom: 1mm;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+        }
+        .unit-select-wrap input { width: 14px; height: 14px; cursor: pointer; }
+
+        .unit-barcode {
+            flex-shrink: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 0.3mm;
         }
-        .unit-barcode .tag-cert .cert-lbl {
+        .unit-barcode svg {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        .tag-cert {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3mm;
+        }
+        .tag-cert .cert-lbl {
             font-size: 1.5mm;
             color: #888;
             white-space: nowrap;
         }
-        .unit-barcode .tag-cert b {
+        .tag-cert b {
             font-size: 2.1mm;
             color: var(--ink);
             font-weight: 600;
@@ -319,7 +313,7 @@
             .label-sheet { gap: 0; }
             .label-tag { border: none; margin: 0; page-break-after: always; break-after: page; }
             .label-tag:last-child { page-break-after: auto; break-after: auto; }
-            .label-index, .label-select-wrap { display: none !important; }
+            .unit-index, .unit-select-wrap { display: none !important; }
             .unit + .unit { border-left: none; } /* screen-only guide, nothing to print here */
         }
     </style>
@@ -337,7 +331,7 @@
         <div class="meta-chip">Date&nbsp;<span>{{ \Carbon\Carbon::parse($invoice->invoice_date)->format('d M Y') }}</span></div>
         <div class="meta-chip">Vendor&nbsp;<span>{{ $invoice->vendor->name ?? '—' }}</span></div>
         <div class="meta-chip">Items&nbsp;<span>{{ $invoice->items->count() }}</span></div>
-        <div class="meta-chip">Label&nbsp;<span id="labelSizeChip">83×37mm</span></div>
+        <div class="meta-chip">Label&nbsp;<span id="labelSizeChip">83×37mm (2 items/sheet)</span></div>
     </div>
 
     <div class="controls-right">
@@ -357,11 +351,11 @@
 </div>
 
 <div class="workflow-note">
-    <b>How this label prints:</b> each 83×37mm sheet prints as TWO tags side by side — the LEFT tag (item no., gold weight,
-    diamond ct., stone ct.) and the RIGHT tag (barcode, certificate no.). Each tag's printed part sits at the outer edge of
-    the sheet with its own blank strap trailing toward the middle — tear down the middle to separate the two tags, then fold
-    each strap through a ring and press it to itself. Load your labels as usual and click <b>“Print Selected.”</b> Uncheck
-    any items you don't want to print in this batch.
+    <b>How this label prints:</b> each 83×37mm sheet holds TWO items — one complete tag on the left half, one complete tag
+    on the right half. Each half has (top to bottom) the item #, gold/diamond/stone, a blank gap, then the barcode and
+    certificate #. Tear the sheet down the middle to separate the two items' tags, then fold each one at its blank gap
+    through a ring and press it to itself. Load your labels as usual and click <b>“Print Selected.”</b> Uncheck any items
+    you don't want to print in this batch — an unchecked item's half prints blank rather than shifting the layout.
 </div>
 @endif
 
@@ -369,38 +363,44 @@
 <div class="page-wrap">
 
     @if($invoice->items->count())
+    @php
+        $pairs = collect($invoice->items)->chunk(2)->values();
+        $itemCounter = 0;
+    @endphp
     <div id="labelSheet" class="label-sheet">
-        @foreach($invoice->items as $i => $item)
-        @php
-            $diamondCt = $item->diamond_total_ct ?? 0;
-            $stoneCt   = $item->stone_total_ct ?? 0;
-        @endphp
-        <div class="label-tag" data-index="{{ $i }}" data-item-id="{{ $item->id }}">
-            <span class="label-index">{{ str_pad($i + 1, 2, '0', STR_PAD_LEFT) }}</span>
-            <span class="label-select-wrap">
-                <input type="checkbox" class="label-select" checked onchange="updateSelectionCount()">
-            </span>
-
-            <div class="unit unit-info">
-                <div class="unit-head">
+        @foreach($pairs as $sheetIndex => $pair)
+        <div class="label-tag" data-index="{{ $sheetIndex }}">
+            @foreach($pair as $item)
+            @php
+                $itemCounter++;
+                $diamondCt = $item->diamond_total_ct ?? 0;
+                $stoneCt   = $item->stone_total_ct ?? 0;
+            @endphp
+            <div class="unit" data-item-id="{{ $item->id }}">
+                <div class="unit-info">
                     <div class="tag-no">{{ $item->barcode_number }}</div>
                     <div class="tag-line"><span class="lbl">Au</span> <b>{{ number_format($item->net_weight, 3) }}</b> gm</div>
                     <div class="tag-line"><span class="lbl">Dia</span> <b>{{ number_format($diamondCt, 3) }}</b> ct</div>
                     <div class="tag-line"><span class="lbl">Stn</span> <b>{{ number_format($stoneCt, 3) }}</b> ct</div>
                 </div>
-                <div class="unit-strap"></div>
-            </div>
-
-            <div class="unit unit-barcode">
-                <div class="unit-head">
-                    <svg id="bc-{{ $i }}"></svg>
+                <div class="unit-fold">
+                    <span class="unit-index">{{ str_pad($itemCounter, 2, '0', STR_PAD_LEFT) }}</span>
+                    <span class="unit-select-wrap">
+                        <input type="checkbox" class="label-select" checked onchange="updateSelectionCount()">
+                    </span>
+                </div>
+                <div class="unit-barcode">
+                    <svg id="bc-{{ $item->id }}"></svg>
                     <div class="tag-cert">
                         <span class="cert-lbl">Cert#</span>
                         <b>{{ $item->certificate_no ?: '—' }}</b>
                     </div>
                 </div>
-                <div class="unit-strap"></div>
             </div>
+            @endforeach
+            @if($pair->count() < 2)
+            <div class="unit unit-blank"></div>
+            @endif
         </div>
         @endforeach
     </div>
@@ -431,21 +431,38 @@
         document.getElementById('printBtn').disabled = selected === 0;
     };
 
-    // ===== print only the selected labels =====
+    // ===== print only the selected items =====
+    // Each physical sheet can hold 2 different items. If only one of the
+    // two is checked, that sheet still prints (it's one physical label)
+    // but the unchecked item's half is left blank instead of printed.
     window.printSelected = function() {
-        const tags = document.querySelectorAll('.label-tag');
+        const sheets = document.querySelectorAll('.label-tag');
         const selectedItemIds = [];
 
-        tags.forEach(t => {
-            const checked = t.querySelector('.label-select').checked;
-            t.classList.toggle('excluded', !checked);
-            if (checked) selectedItemIds.push(t.dataset.itemId);
+        sheets.forEach(sheet => {
+            const units = sheet.querySelectorAll('.unit[data-item-id]');
+            let anySelected = false;
+
+            units.forEach(u => {
+                const cb = u.querySelector('.label-select');
+                const checked = cb ? cb.checked : false;
+                u.classList.toggle('unit-excluded', !checked);
+                if (checked) {
+                    anySelected = true;
+                    selectedItemIds.push(u.dataset.itemId);
+                }
+            });
+
+            sheet.classList.toggle('excluded', !anySelected);
         });
 
         if (selectedItemIds.length === 0) return;
 
         const restore = () => {
-            tags.forEach(t => t.classList.remove('excluded'));
+            sheets.forEach(sheet => {
+                sheet.classList.remove('excluded');
+                sheet.querySelectorAll('.unit-excluded').forEach(u => u.classList.remove('unit-excluded'));
+            });
             window.removeEventListener('afterprint', restore);
         };
         window.addEventListener('afterprint', restore);
@@ -465,16 +482,16 @@
     };
 
     // ===== render barcodes =====
-    @foreach($invoice->items as $i => $item)
+    @foreach($invoice->items as $item)
     (function() {
-        const el      = document.getElementById('bc-{{ $i }}');
+        const el      = document.getElementById('bc-{{ $item->id }}');
         const barcode = @json($item->barcode_number);
         if (el && barcode) {
             try {
                 JsBarcode(el, barcode, {
                     format:       'CODE128',
                     width:        1.2,
-                    height:       42,
+                    height:       30,
                     displayValue: false,
                     margin:       0,
                     background:   '#ffffff',
@@ -493,4 +510,4 @@
 </script>
 
 </body>
-</html>
+</html> 
