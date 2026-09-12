@@ -494,7 +494,7 @@
             try {
                 JsBarcode(el, barcode, {
                     format:       'CODE128',
-                    width:        1.2,
+                    width:        1,
                     height:       22,
                     displayValue: false,
                     margin:       0,
