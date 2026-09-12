@@ -237,6 +237,11 @@
         .unit:nth-child(2) .unit-info {
             margin-top: 0;
             margin-bottom: 6mm; /* mirrored: pushes it up away from the bottom edge instead */
+            align-items: flex-end;
+            text-align: right;
+            margin-left: auto;
+            margin-right: 0;
+            width: fit-content;
         }
         .unit-info .tag-no {
             font-weight: 700;
@@ -256,7 +261,7 @@
         .unit-info .tag-line .lbl { color: #888; }
 
         /* the blank vertical gap in the middle of each tag — this is
-           what you fold through a ring and press to itself */
+           what you fold through a ring and press it to itself */
         .unit-fold {
             flex: 1;
             min-height: 3mm;
