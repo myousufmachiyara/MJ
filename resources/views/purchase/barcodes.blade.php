@@ -232,7 +232,7 @@
             display: flex;
             flex-direction: column;
             gap: 0.4mm;
-            margin-top: 8mm; /* pushes item #/gold/dia/stone further down */
+            margin-top: 9mm; /* pushes item #/gold/dia/stone further down */
         }
         .unit:nth-child(2) .unit-info {
             margin-top: 0;
