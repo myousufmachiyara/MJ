@@ -34,7 +34,7 @@
             --label-w:   83mm;
             --label-h:   37mm;
             --unit-w:    41.5mm;
-            --barcode-w: 14mm; /* width of the barcode+cert# block — narrower, left-aligned in the wider tag */
+            --barcode-w: 16.8mm; /* width of the barcode+cert# block — 20% wider than before for clearer scan lines */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -225,7 +225,7 @@
             display: flex;
             flex-direction: column;
             gap: 0.4mm;
-            margin-top: 5.5mm; /* pushes item #/gold/dia/stone further down */
+            margin-top: 7mm; /* pushes item #/gold/dia/stone further down */
         }
         .unit-info .tag-no {
             font-weight: 700;
@@ -236,7 +236,7 @@
             margin-bottom: 1mm;
         }
         .unit-info .tag-line {
-            font-size: 2.1mm;
+            font-size: 2mm;
             line-height: 1.3;
             color: #333;
             white-space: nowrap;
@@ -383,9 +383,9 @@
             <div class="unit" data-item-id="{{ $item->id }}">
                 <div class="unit-info">
                     <div class="tag-no">{{ $item->barcode_number }}</div>
-                    <div class="tag-line"><span class="lbl">Au</span> <b>{{ number_format($item->net_weight, 3) }}</b> gm</div>
-                    <div class="tag-line"><span class="lbl">Dia</span> <b>{{ number_format($diamondCt, 3) }}</b> ct</div>
-                    <div class="tag-line"><span class="lbl">Stn</span> <b>{{ number_format($stoneCt, 3) }}</b> ct</div>
+                    <div class="tag-line"><b>GOLD:{{ number_format($item->net_weight, 3) }}</b> gm</div>
+                    <div class="tag-line"><b>DIA:{{ number_format($diamondCt, 3) }}</b> ct</div>
+                    <div class="tag-line"><b>STONE:{{ number_format($stoneCt, 3) }}</b> ct</div>
                 </div>
                 <div class="unit-fold">
                     <span class="unit-index">{{ str_pad($itemCounter, 2, '0', STR_PAD_LEFT) }}</span>
