@@ -288,7 +288,7 @@
             gap: 0.3mm;
         }
         .unit-barcode svg {
-            width: 50%;
+            width: 40%;
             height: auto;
             display: block;
         }
