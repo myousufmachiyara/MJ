@@ -34,10 +34,11 @@
                still an estimate, nudge it once you've measured a real
                label.
                ───────────────────────────────────────────────────────────── */
-            --label-w:     83mm;
-            --label-h:     37mm;
-            --unit-w:      41.5mm;
-            --unit-head-w: 16mm;
+            --label-w:         83mm;
+            --label-h:         37mm;
+            --unit-w:          41.5mm;
+            --unit-head-w:     16mm;
+            --barcode-head-w:  19mm;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -253,16 +254,19 @@
            strap that loops through a ring and presses to itself */
         .unit-strap { flex: 1; }
 
+        .unit-info .unit-head {
+            transform: translateY(0.8mm); /* nudges the whole info block down slightly */
+        }
         .unit-info .tag-no {
             font-weight: 700;
-            font-size: 2.6mm;
+            font-size: 2.9mm;
             letter-spacing: 0.01em;
             line-height: 1.1;
             word-break: break-all;
-            margin-bottom: 1.2mm; /* pushes the item # up and the details below it down */
+            margin-bottom: 1.8mm; /* gap between the item # and the details below it */
         }
         .unit-info .tag-line {
-            font-size: 1.9mm;
+            font-size: 2.1mm;
             line-height: 1.3;
             color: #333;
             white-space: nowrap;
@@ -271,22 +275,34 @@
         .unit-info .tag-line .lbl { color: #888; }
 
         .unit-barcode .unit-head {
+            width: var(--barcode-head-w);
             align-items: center;
             justify-content: center;
+            transform: translateY(-0.8mm); /* nudges the whole barcode block up slightly */
         }
         .unit-barcode svg {
             width: 100%;
             height: auto;
             display: block;
-            margin-bottom: 1.2mm; /* pushes the barcode up and the cert # below it down */
+            margin-bottom: 2mm; /* gap between the barcode and the cert # below it */
         }
         .unit-barcode .tag-cert {
-            font-size: 1.7mm;
-            color: #555;
-            white-space: nowrap;
-            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3mm;
         }
-        .unit-barcode .tag-cert b { color: var(--ink); font-weight: 600; }
+        .unit-barcode .tag-cert .cert-lbl {
+            font-size: 1.5mm;
+            color: #888;
+            white-space: nowrap;
+        }
+        .unit-barcode .tag-cert b {
+            font-size: 2.1mm;
+            color: var(--ink);
+            font-weight: 600;
+            white-space: nowrap;
+        }
 
         /* ── EMPTY STATE ── */
         .empty-state { text-align: center; padding: 80px 20px; color: #aaa; }
@@ -378,7 +394,10 @@
             <div class="unit unit-barcode">
                 <div class="unit-head">
                     <svg id="bc-{{ $i }}"></svg>
-                    <div class="tag-cert">Cert# <b>{{ $item->certificate_no ?: '—' }}</b></div>
+                    <div class="tag-cert">
+                        <span class="cert-lbl">Cert#</span>
+                        <b>{{ $item->certificate_no ?: '—' }}</b>
+                    </div>
                 </div>
                 <div class="unit-strap"></div>
             </div>
@@ -454,8 +473,8 @@
             try {
                 JsBarcode(el, barcode, {
                     format:       'CODE128',
-                    width:        1,
-                    height:       34,
+                    width:        1.2,
+                    height:       42,
                     displayValue: false,
                     margin:       0,
                     background:   '#ffffff',
