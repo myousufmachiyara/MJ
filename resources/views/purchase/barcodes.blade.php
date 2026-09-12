@@ -225,7 +225,7 @@
             display: flex;
             flex-direction: column;
             gap: 0.4mm;
-            margin-top: 3.5mm; /* pushes item #/gold/dia/stone further down (~30% of the fold gap) */
+            margin-top: 5.5mm; /* pushes item #/gold/dia/stone further down */
         }
         .unit-info .tag-no {
             font-weight: 700;
