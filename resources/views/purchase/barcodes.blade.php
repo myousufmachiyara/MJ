@@ -34,7 +34,7 @@
             --label-w:   83mm;
             --label-h:   37mm;
             --unit-w:    41.5mm;
-            --barcode-w: 25mm; /* width of the barcode block — widened for real scan reliability (see note below) */
+            --barcode-w: 36mm; /* width of the barcode block — widened for real scan reliability (see note below) */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -110,7 +110,7 @@
         }
         .btn-print:hover { background: #bf3f1e; }
         .btn-print:disabled { background: #6b6b6b; cursor: not-allowed; }
-        .btn-print svg { width: 30px; height: 30px; fill: #fff; }
+        .btn-print svg { width: 15px; height: 15px; fill: #fff; }
 
         .btn-back {
             background: rgba(255,255,255,0.1);
@@ -220,12 +220,23 @@
            means there's no second item for this sheet */
         .unit.unit-blank { }
 
+        /* the RIGHT-hand item is mirrored top-to-bottom: its barcode sits
+           at the top right, item info at the bottom — so the two tags
+           aren't just duplicates sitting in an identical layout */
+        .unit:nth-child(2) {
+            flex-direction: column-reverse;
+        }
+
         .unit-info {
             flex-shrink: 0;
             display: flex;
             flex-direction: column;
             gap: 0.4mm;
             margin-top: 6mm; /* pushes item #/gold/dia/stone further down */
+        }
+        .unit:nth-child(2) .unit-info {
+            margin-top: 0;
+            margin-bottom: 6mm; /* mirrored: pushes it up away from the bottom edge instead */
         }
         .unit-info .tag-no {
             font-weight: 700;
@@ -284,11 +295,20 @@
             height: auto;
             display: block;
         }
+        /* mirrored: right unit's barcode+cert hug the right edge instead
+           (top right, since the unit itself is now reversed top-to-bottom) */
+        .unit:nth-child(2) .unit-barcode {
+            align-items: flex-end;
+            align-self: flex-end;
+        }
         .tag-cert {
             display: flex;
             flex-direction: column;
             align-items: flex-start;
             gap: 0.3mm;
+        }
+        .unit:nth-child(2) .tag-cert {
+            align-items: flex-end;
         }
         .tag-cert .cert-lbl {
             font-size: 1.5mm;
@@ -383,9 +403,9 @@
             <div class="unit" data-item-id="{{ $item->id }}">
                 <div class="unit-info">
                     <div class="tag-no">{{ $item->barcode_number }}</div>
-                    <div class="tag-line"><b>GOLD: {{ number_format($item->net_weight, 3) }} gm</b></div>
-                    <div class="tag-line"><b>DIA: {{ number_format($diamondCt, 3) }} ct</b></div>
-                    <div class="tag-line"><b>STONE: {{ number_format($stoneCt, 3) }} ct</b></div>
+                    <div class="tag-line"><span class="lbl">Au</span> <b>{{ number_format($item->net_weight, 3) }}</b> gm</div>
+                    <div class="tag-line"><span class="lbl">Dia</span> <b>{{ number_format($diamondCt, 3) }}</b> ct</div>
+                    <div class="tag-line"><span class="lbl">Stn</span> <b>{{ number_format($stoneCt, 3) }}</b> ct</div>
                 </div>
                 <div class="unit-fold">
                     <span class="unit-index">{{ str_pad($itemCounter, 2, '0', STR_PAD_LEFT) }}</span>
