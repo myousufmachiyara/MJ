@@ -286,12 +286,12 @@
 
         .unit-barcode {
             width: var(--barcode-w);
-            flex-shrink: 0;
+            
             display: block;
         }
         .unit-barcode svg {
             width: 100%;
-            height: 100%;
+            height: auto;
             display: block;
         }
         /* mirrored: right unit's barcode+cert hug the right edge instead
