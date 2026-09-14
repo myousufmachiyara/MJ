@@ -34,7 +34,7 @@
             --label-w:   83mm;
             --label-h:   37mm;
             --unit-w:    41.5mm;
-            --barcode-w: 36mm; /* width of the barcode block — widened back for real scan reliability (18mm was too narrow: bars measured ~0.107mm, well under the ~0.2mm minimum for reliable scanning) */
+            --barcode-w: 37.8mm; /* the physical max this half-tag can hold (unit is 41.5mm minus 1.8mm padding each side); pushed to the ceiling to give the barcode every fraction of a mm it can get */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -304,7 +304,7 @@
         .unit:nth-child(2) .unit-barcode {
             margin-left: auto;
             margin-right: 0;
-            margin-bottom: 10mm;
+            margin-bottom: 3mm;
         }
         .tag-cert {
             display: flex;
@@ -526,7 +526,10 @@
                     width:        1.2,
                     height:       22,
                     displayValue: false,
-                    margin:       0,
+                    marginTop:    0,
+                    marginBottom: 0,
+                    marginLeft:   5, // quiet zone — was 0 before, which is a real reason scanners can fail to lock on
+                    marginRight:  5,
                     background:   '#ffffff',
                     lineColor:    '#0a0a0a',
                 });
