@@ -232,7 +232,7 @@
             display: flex;
             flex-direction: column;
             gap: 0.4mm;
-            margin-top: 9mm; /* pushes item #/gold/dia/stone further down */
+            margin-top: 12mm; /* pushes item #/gold/dia/stone further down */
         }
         .unit:nth-child(2) .unit-info {
             margin-top: 0;
@@ -321,7 +321,7 @@
         }
         .tag-cert .cert-lbl {
             font-size: 1.5mm;
-            color: #888;
+            color: #000000;
             white-space: nowrap;
         }
         .tag-cert b {
@@ -425,7 +425,7 @@
                 <div class="unit-barcode">
                     <svg id="bc-{{ $item->id }}"></svg>
                     <div class="tag-cert">
-                        <span class="cert-lbl">Cert#</span>
+                        <b><span class="cert-lbl">Cert#</span></b>
                         <b>{{ $item->certificate_no ?: '—' }}</b>
                     </div>
                 </div>
