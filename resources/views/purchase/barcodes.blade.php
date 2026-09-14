@@ -34,7 +34,7 @@
             --label-w:   83mm;
             --label-h:   37mm;
             --unit-w:    41.5mm;
-            --barcode-w: 18mm; /* width of the barcode block — widened for real scan reliability (see note below) */
+            --barcode-w: 36mm; /* width of the barcode block — widened back for real scan reliability (18mm was too narrow: bars measured ~0.107mm, well under the ~0.2mm minimum for reliable scanning) */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -299,10 +299,12 @@
            (top right, since the unit itself is now reversed top-to-bottom).
            Uses margin-left:auto on a fixed-width block rather than flex
            cross-axis alignment, which is a more bulletproof way to force
-           right-alignment regardless of the parent's own flex settings. */
+           right-alignment regardless of the parent's own flex settings.
+           margin-bottom lifts it up off the bottom edge a bit. */
         .unit:nth-child(2) .unit-barcode {
             margin-left: auto;
             margin-right: 0;
+            margin-bottom: 3mm;
         }
         .tag-cert {
             display: flex;
