@@ -286,8 +286,9 @@
 
         .unit-barcode {
             width: var(--barcode-w);
-            
+            flex-shrink: 0;
             display: block;
+            gap: 0.3mm;
         }
         .unit-barcode svg {
             width: 100%;
@@ -422,7 +423,7 @@
                     </span>
                 </div>
                 <div class="unit-barcode">
-                    <svg id="bc-{{ $item->id }}"></svg>
+                    <svg id="bc-{{ $item->barcode_number }}"></svg>
                     <div class="tag-cert">
                         <b><span class="cert-lbl">Cert#</span></b>
                         <b>{{ $item->certificate_no ?: '—' }}</b>
