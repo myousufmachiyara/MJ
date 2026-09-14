@@ -253,12 +253,13 @@
         }
         .unit-info .tag-line {
             font-size: 1.8mm;
+            font-weight: 600;
             line-height: 1.3;
-            color: #333;
+            color: #000000;
             white-space: nowrap;
         }
         .unit-info .tag-line b { color: var(--ink); font-weight: 700; }
-        .unit-info .tag-line .lbl { color: #888; }
+        .unit-info .tag-line .lbl { color: #000000; }
 
         /* the blank vertical gap in the middle of each tag — this is
            what you fold through a ring and press it to itself */
