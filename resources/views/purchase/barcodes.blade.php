@@ -34,7 +34,7 @@
             --label-w:   83mm;
             --label-h:   37mm;
             --unit-w:    41.5mm;
-            --barcode-w: 37.8mm; /* the physical max this half-tag can hold (unit is 41.5mm minus 1.8mm padding each side); pushed to the ceiling to give the barcode every fraction of a mm it can get */
+            --barcode-w: 18mm; /* the physical max this half-tag can hold (unit is 41.5mm minus 1.8mm padding each side); pushed to the ceiling to give the barcode every fraction of a mm it can get */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -522,7 +522,7 @@
                 JsBarcode(el, barcode, {
                     format:       'CODE128',
                     width:        1.2,
-                    height:       40,
+                    height:       35,
                     displayValue: false,
                     marginTop:    0,
                     marginBottom: 0,
