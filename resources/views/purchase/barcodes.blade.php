@@ -34,7 +34,7 @@
             --label-w:   83mm;
             --label-h:   37mm;
             --unit-w:    41.5mm;
-            --barcode-w: 50mm; /* width of the barcode block — widened for real scan reliability (see note below) */
+            --barcode-w: 45mm; /* width of the barcode block — widened for real scan reliability (see note below) */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -295,7 +295,7 @@
         }
         .unit-barcode svg {
             width: 40%;
-            height: auto;
+            height: 100%;
             display: block;
         }
         /* mirrored: right unit's barcode+cert hug the right edge instead
