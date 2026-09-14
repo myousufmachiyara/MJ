@@ -520,8 +520,8 @@
             try {
                 JsBarcode(el, barcode, {
                     format:       'CODE128',
-                    width:        1,
-                    height:       35,
+                    width:        1.2,
+                    height:       30,
                     displayValue: false,
                     marginTop:    0,
                     marginBottom: 0,
