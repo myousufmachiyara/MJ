@@ -288,6 +288,7 @@
             width: var(--barcode-w);
             flex-shrink: 0;
             display: block;
+            gap: 0.3mm;
         }
         .unit-barcode svg {
             width: 100%;
@@ -521,7 +522,7 @@
                 JsBarcode(el, barcode, {
                     format:       'CODE128',
                     width:        1.2,
-                    height:       30,
+                    height:       35,
                     displayValue: false,
                     marginTop:    0,
                     marginBottom: 0,
