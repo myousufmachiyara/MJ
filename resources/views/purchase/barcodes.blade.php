@@ -245,14 +245,14 @@
         }
         .unit-info .tag-no {
             font-weight: 700;
-            font-size: 2.2mm;
+            font-size: 1.8mm;
             letter-spacing: 0.01em;
-            line-height: 1.1;
+            line-height: 1;
             word-break: break-all;
-            margin-bottom: 1mm;
+            margin-bottom: 0.5mm;
         }
         .unit-info .tag-line {
-            font-size: 2.1mm;
+            font-size: 1.8mm;
             line-height: 1.3;
             color: #333;
             white-space: nowrap;
