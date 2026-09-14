@@ -223,9 +223,6 @@
         /* the RIGHT-hand item is mirrored top-to-bottom: its barcode sits
            at the top right, item info at the bottom — so the two tags
            aren't just duplicates sitting in an identical layout */
-        .unit:nth-child(2) {
-            flex-direction: column-reverse;
-        }
 
         .unit-info {
             flex-shrink: 0;
