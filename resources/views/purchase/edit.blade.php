@@ -3,6 +3,36 @@
 @section('title', 'Purchase | Edit Invoice #' . $purchaseInvoice->invoice_no)
 
 @section('content')
+
+{{-- ═══════════════════════════════════════════════════════════════════════
+     EXCEL IMPORT — MODE CHOICE MODAL
+     Shown only when the item table already has data at the moment a file
+     is picked. Lets the user choose to keep existing rows and append the
+     Excel rows, or wipe the table and replace it entirely with the Excel
+     rows. Self-contained (no Bootstrap JS dependency) so it works
+     regardless of which Bootstrap version layouts.app loads.
+     Mirrors the same feature on the Create Purchase Invoice page.
+     ═══════════════════════════════════════════════════════════════════════ --}}
+<div id="excelImportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:8px; max-width:480px; width:92%; padding:24px; box-shadow:0 10px 40px rgba(0,0,0,0.25);">
+    <h5 class="mb-2"><i class="fas fa-file-excel text-success"></i> Import Excel — Existing Items Found</h5>
+    <p class="text-muted mb-3">
+      This invoice already has item rows. How should the imported Excel data be applied?
+    </p>
+    <div class="d-grid gap-2">
+      <button type="button" id="excelImportReplace" class="btn btn-danger w-100 mb-2">
+        <i class="fas fa-trash-alt"></i> Remove existing items &amp; replace with Excel
+      </button>
+      <button type="button" id="excelImportAppend" class="btn btn-success w-100 mb-2">
+        <i class="fas fa-plus"></i> Keep existing items &amp; add Excel items
+      </button>
+      <button type="button" id="excelImportCancel" class="btn btn-secondary w-100">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="row">
   <div class="col">
     <form id="main-form" action="{{ route('purchase_invoices.update', $purchaseInvoice->id) }}" method="POST" enctype="multipart/form-data">
@@ -561,7 +591,7 @@ $(document).ready(function () {
                                   cursor:pointer;border:1px solid #dee2e6;"
                             onclick="window.open('${data.image_url}','_blank')">`
                     : ''
-            }</td>            
+            }</td>
             <td>
               <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
               <button type="button" class="btn btn-sm btn-primary toggle-parts"><i class="fas fa-wrench"></i></button>
@@ -960,10 +990,63 @@ $(document).ready(function () {
     });
 
     // ================= EXCEL IMPORT =================
+    // Same "keep existing items vs. replace" mode-choice modal as the Create
+    // Purchase Invoice page. If the item table already has real data (either
+    // rows loaded from this invoice, or rows the user typed/added since),
+    // ask whether the Excel data should be appended to it or should replace
+    // it entirely. If the table is empty, skip the prompt and import
+    // straight in "append" mode, same as Create does.
+    //
+    // NOTE: none of the row-parsing / field-mapping / calculation logic
+    // below was changed — only wrapped so it can run in "append" or
+    // "replace" mode.
+    let pendingExcelFile = null;
+
+    function tableHasRealData() {
+        return $('#PurchaseTable tr.item-row').toArray().some(function (row) {
+            const $row = $(row);
+            const name = $row.find('.item-name-input').val();
+            const productSelected = $row.find('.product-select').val();
+            return (name && name.trim() !== '') || (productSelected && productSelected !== '');
+        });
+    }
+
+    function showExcelImportModal() {
+        document.getElementById('excelImportModal').style.display = 'flex';
+    }
+    function hideExcelImportModal() {
+        document.getElementById('excelImportModal').style.display = 'none';
+    }
+
     $('#excel_import').on('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
+        pendingExcelFile = file;
 
+        if (tableHasRealData()) {
+            showExcelImportModal();
+        } else {
+            runExcelImport(pendingExcelFile, 'append');
+        }
+    });
+
+    $('#excelImportReplace').on('click', function() {
+        hideExcelImportModal();
+        if (pendingExcelFile) runExcelImport(pendingExcelFile, 'replace');
+    });
+
+    $('#excelImportAppend').on('click', function() {
+        hideExcelImportModal();
+        if (pendingExcelFile) runExcelImport(pendingExcelFile, 'append');
+    });
+
+    $('#excelImportCancel').on('click', function() {
+        hideExcelImportModal();
+        pendingExcelFile = null;
+        $('#excel_import').val('');
+    });
+
+    function runExcelImport(file, mode) {
         const unmatchedPurityRows = [];
 
         const reader = new FileReader();
@@ -971,17 +1054,30 @@ $(document).ready(function () {
             const data     = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
             const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-            if (jsonData.length === 0) return;
 
-            let firstRow = $('#PurchaseTable tr.item-row').first();
-            if ($('#PurchaseTable tr.item-row').length === 1 && !firstRow.find('.item-name-input').val()) {
-                firstRow.next('.parts-row').remove();
-                firstRow.remove();
+            if (jsonData.length === 0) {
+                alert('The selected file has no data rows.');
+                $('#excel_import').val('');
+                pendingExcelFile = null;
+                return;
+            }
+
+            if (mode === 'replace') {
+                // Wipe every existing item + its parts row before importing.
+                $('#PurchaseTable tr.item-row, #PurchaseTable tr.parts-row').remove();
+            } else {
+                // append mode: only clean up a single default blank starter
+                // row, exactly like before — never touches rows with data.
+                let firstRow = $('#PurchaseTable tr.item-row').first();
+                if ($('#PurchaseTable tr.item-row').length === 1 && !firstRow.find('.item-name-input').val()) {
+                    firstRow.next('.parts-row').remove();
+                    firstRow.remove();
+                }
             }
 
             let currentItemRow = null;
             jsonData.forEach(row => {
-                if (row['Item Name'] && row['Item Name'].trim() !== '') {
+                if (row['Item Name'] && row['Item Name'].toString().trim() !== '') {
                     addNewRow();
                     currentItemRow = $('#PurchaseTable tr.item-row').last();
                     currentItemRow.find('.item-name-input').val(row['Item Name']);
@@ -1001,7 +1097,7 @@ $(document).ready(function () {
                     currentItemRow.find('.vat-percent').val(row['VAT %'] || 0);
                     recalcItemGrossWeight(currentItemRow);
                 }
-                if (row['Part Name'] && row['Part Name'].trim() !== '' && currentItemRow) {
+                if (row['Part Name'] && row['Part Name'].toString().trim() !== '' && currentItemRow) {
                     const partsRow = currentItemRow.next('.parts-row');
                     partsRow.show();
                     partsRow.find('.add-part').click();
@@ -1024,13 +1120,18 @@ $(document).ready(function () {
                 const list = unmatchedPurityRows.map(r => `- ${r.item}: ${r.purity}`).join('\n');
                 alert('Items imported, but the following rows had a Purity value with no matching option in the Purity dropdown — please check them manually:\n\n' + list);
             } else {
-                alert('Items Imported Successfully!');
+                alert(
+                    mode === 'replace'
+                        ? 'Existing items removed. Items imported successfully!'
+                        : 'Items imported successfully and added to the existing list!'
+                );
             }
 
             $('#excel_import').val('');
+            pendingExcelFile = null;
         };
         reader.readAsArrayBuffer(file);
-    });
+    }
 
 });
 
