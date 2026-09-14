@@ -295,7 +295,7 @@
         }
         .unit-barcode svg {
             width: 40%;
-            height: 100%;
+            height: auto;
             display: block;
         }
         /* mirrored: right unit's barcode+cert hug the right edge instead
