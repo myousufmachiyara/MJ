@@ -310,8 +310,6 @@
             display: flex;
             flex-direction: column;
             align-items: flex-start;
-            gap: 0.3mm;
-            margin-top: 0.3mm;
         }
         .unit:nth-child(2) .tag-cert {
             align-items: flex-end;
