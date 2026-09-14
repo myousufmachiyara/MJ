@@ -288,11 +288,10 @@
             width: var(--barcode-w);
             flex-shrink: 0;
             display: block;
-            gap: 0.3mm;
         }
         .unit-barcode svg {
             width: 100%;
-            height: auto;
+            height: 100%;
             display: block;
         }
         /* mirrored: right unit's barcode+cert hug the right edge instead
