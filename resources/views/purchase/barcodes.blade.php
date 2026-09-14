@@ -224,6 +224,7 @@
            at the top right, item info at the bottom — so the two tags
            aren't just duplicates sitting in an identical layout */
 
+
         .unit-info {
             flex-shrink: 0;
             display: flex;
@@ -233,7 +234,6 @@
         }
         .unit:nth-child(2) .unit-info {
             margin-top: 0;
-            margin-bottom: 6mm; /* mirrored: pushes it up away from the bottom edge instead */
             align-items: flex-end;
             text-align: right;
             margin-left: auto;
