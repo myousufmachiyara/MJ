@@ -526,8 +526,8 @@
                     displayValue: false,
                     marginTop:    0,
                     marginBottom: 0,
-                    marginLeft:   5, // quiet zone — was 0 before, which is a real reason scanners can fail to lock on
-                    marginRight:  5,
+                    marginLeft:   0, // quiet zone — was 0 before, which is a real reason scanners can fail to lock on
+                    marginRight:  0,
                     background:   '#ffffff',
                     lineColor:    '#0a0a0a',
                 });
