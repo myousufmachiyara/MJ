@@ -55,19 +55,22 @@ class PurchaseInvoiceController extends Controller
     {
         $filename = 'purchase_import_template.csv';
 
+        // NOTE: 'Certificate No' (item-level, e.g. "GIA 123456") is a
+        // different field from 'Cert. Charges' (part-level, a numeric
+        // certification fee) — both are kept, at different positions.
         $rows = [
             [
-                'Item Name', 'Description', 'Purity', 'Gross Wt',
+                'Item Name', 'Description', 'Certificate No', 'Purity', 'Gross Wt',
                 'Making Rate', 'Material', 'VAT %',
                 'Part Name', 'Part Desc', 'Part Qty', 'Part Rate',
                 'Stone Qty', 'Stone Rate', 'Cert. Charges',
             ],
-            ['18K Gold Bracelet', 'Handmade Chain Design', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50', '75.00'],
-            ['22K Wedding Band', 'Plain Polished', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '', ''],
-            ['Diamond Engagement Ring', 'Solitaire Setting', '0.75', '4.20', '150.00', 'gold', '5', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0', '200.00'],
-            ['', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10', '0'],
+            ['18K Gold Bracelet', 'Handmade Chain Design', 'GIA 1234567', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50', '75.00'],
+            ['22K Wedding Band', 'Plain Polished', '', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '', ''],
+            ['Diamond Engagement Ring', 'Solitaire Setting', 'GIA 9988776', '0.75', '4.20', '150.00', 'gold', '5', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0', '200.00'],
+            ['', '', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10', '0'],
         ];
 
         // StreamedResponse: Laravel sends headers first, THEN the callback writes body.

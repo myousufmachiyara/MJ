@@ -1138,6 +1138,7 @@ $(document).ready(function () {
                     currentItemRow = $('#PurchaseTable tr.item-row').last();
                     currentItemRow.find('.item-name-input').val(row['Item Name']);
                     currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
+                    currentItemRow.find('input[name*="[certificate_no]"]').val(row['Certificate No'] || '');
 
                     const purityRaw = row['Purity'] !== undefined && row['Purity'] !== ''
                         ? row['Purity']
