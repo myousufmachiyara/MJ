@@ -249,7 +249,7 @@
             margin-bottom: 0.5mm;
         }
         .unit-info .tag-line {
-            font-size: 1.8mm;
+            font-size: 2mm;
             font-weight: 600;
             line-height: 1.3;
             color: #000000;
@@ -410,9 +410,9 @@
             <div class="unit" data-item-id="{{ $item->id }}">
                 <div class="unit-info">
                     <div class="tag-no">{{ $item->barcode_number }}</div>
-                    <div class="tag-line"><b>GOLD:</b> {{ number_format($item->net_weight, 3) }} gm</div>
-                    <div class="tag-line"><b>DIA:</b> {{ number_format($diamondCt, 3) }} ct</div>
-                    <div class="tag-line"><b>STONE:</b> {{ number_format($stoneCt, 3) }} ct</div>
+                    <div class="tag-line"><b>GOLD:</b> {{ number_format($item->net_weight, 3) }}</div>
+                    <div class="tag-line"><b>DIA:</b> {{ number_format($diamondCt, 3) }}</div>
+                    <div class="tag-line"><b>STONE:</b> {{ number_format($stoneCt, 3) }}</div>
                 </div>
                 <div class="unit-fold">
                     <span class="unit-index">{{ str_pad($itemCounter, 2, '0', STR_PAD_LEFT) }}</span>
