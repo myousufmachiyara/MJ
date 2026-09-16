@@ -450,8 +450,49 @@
 $(document).ready(function () {
 
     const products      = @json($products);
+    const categories    = @json($categories);
     const existingItems = @json($itemsData);
     const TROY_OUNCE_TO_GRAM = 31.1035;
+
+    // ================= CATEGORY / SUBCATEGORY =================
+    function categoryOptionsHtml(selectedId) {
+        let html = '<option value="">Select Category</option>';
+        categories.forEach(c => {
+            const sel = (selectedId && selectedId == c.id) ? 'selected' : '';
+            html += `<option value="${c.id}" ${sel}>${c.name}</option>`;
+        });
+        return html;
+    }
+
+    const SUBCATEGORY_BASE = '{{ url("/get-subcategories") }}';
+
+    function loadSubcategoryOptions(subSelect, categoryId, selectedSubcategoryId) {
+        subSelect.html('<option value="">Loading...</option>').prop('disabled', true);
+        if (!categoryId) {
+            subSelect.html('<option value="">Select Subcategory</option>').prop('disabled', false);
+            return;
+        }
+        fetch(`${SUBCATEGORY_BASE}/${categoryId}`)
+            .then(res => res.json())
+            .then(data => {
+                subSelect.prop('disabled', false);
+                let options = '<option value="">Select Subcategory</option>';
+                (Array.isArray(data) ? data : []).forEach(sc => {
+                    const label = sc.code ? `${sc.name} (${sc.code})` : sc.name;
+                    const sel   = (selectedSubcategoryId && selectedSubcategoryId == sc.id) ? 'selected' : '';
+                    options += `<option value="${sc.id}" ${sel}>${label}</option>`;
+                });
+                subSelect.html(options);
+            })
+            .catch(() => {
+                subSelect.html('<option value="">Select Subcategory</option>').prop('disabled', false);
+            });
+    }
+
+    $(document).on('change', '.category-select', function() {
+        const row = $(this).closest('tr.item-row');
+        loadSubcategoryOptions(row.find('.subcategory-select'), $(this).val());
+    });
 
     // ===== PARTS TOGGLE =====
     $(document).on('click', '.toggle-parts', function() {
@@ -554,9 +595,14 @@ $(document).ready(function () {
         <tr class="item-row" data-item-index="${index}">
             <td>
                 <div class="product-wrapper">
-                    <input type="text" name="items[${index}][item_name]" class="form-control item-name-input" placeholder="Product Name" value="${name}">
+                    <input type="text" name="items[${index}][item_name]" class="form-control item-name-input" placeholder="Product Name" value="${name}" required>
                     <input type="hidden" name="items[${index}][barcode_number]" value="${data.barcode_number || ''}">
-                    <button type="button" class="btn btn-link p-0 toggle-product">Select Product</button>
+                    <select name="items[${index}][category_id]" class="form-control form-control-sm category-select mt-1">
+                        ${categoryOptionsHtml(data.category_id)}
+                    </select>
+                    <select name="items[${index}][subcategory_id]" class="form-control form-control-sm subcategory-select mt-1">
+                        <option value="">Select Subcategory</option>
+                    </select>
                     <input type="file" name="items[${index}][image]" class="form-control form-control-sm item-image-input mt-1" accept="image/*">
                 </div>
             </td>
@@ -661,6 +707,12 @@ $(document).ready(function () {
         if (!itemData.image_url && itemData.product_id) {
             fetchAndShowImage(itemRow, itemData.product_id);
         }
+
+        // Restore the subcategory dropdown (category is rendered pre-selected
+        // already; subcategory needs an AJAX fetch scoped to that category).
+        if (itemData.category_id) {
+            loadSubcategoryOptions(itemRow.find('.subcategory-select'), itemData.category_id, itemData.subcategory_id);
+        }
     });
 
     calculateTotals();
@@ -740,18 +792,22 @@ $(document).ready(function () {
         calculateTotals();
     });
 
-    // ===== PRODUCT TOGGLE =====
+    // ===== PRODUCT TOGGLE (PARTS ONLY) =====
+    // NOTE: this toggle used to also exist on the main Item Name field, but
+    // main invoice items are never linked to the Product catalog — Item Name
+    // is always free-text input there (Category/Subcategory dropdowns handle
+    // classification instead). It's kept here only for parts rows (diamond /
+    // stone components), where linking to a catalog Product is still useful
+    // (e.g. to pull the part's measurement unit).
     $(document).on('click', '.toggle-product, .revert-to-name', function() {
         const isReverting = $(this).hasClass('revert-to-name');
         const wrapper     = $(this).closest('.product-wrapper');
         const isPart      = wrapper.closest('tr').hasClass('part-item-row');
-        const itemIdx     = isPart
-            ? wrapper.closest('.parts-row').prev('.item-row').data('item-index')
-            : wrapper.closest('.item-row').data('item-index');
+        if (!isPart) return;
 
-        let namePath = isPart
-            ? `items[${itemIdx}][parts][${wrapper.closest('.part-item-row').data('part-index')}]`
-            : `items[${itemIdx}]`;
+        const itemIdx  = wrapper.closest('.parts-row').prev('.item-row').data('item-index');
+        const partIdx  = wrapper.closest('.part-item-row').data('part-index');
+        const namePath = `items[${itemIdx}][parts][${partIdx}]`;
 
         if (isReverting) {
             wrapper.html(`

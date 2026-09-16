@@ -10,6 +10,8 @@ class PurchaseInvoiceItem extends Model
         'purchase_invoice_id',
         'item_name',
         'product_id',
+        'category_id',
+        'subcategory_id',
         'image_path',
         'variation_id',
         'item_description',
@@ -82,6 +84,16 @@ class PurchaseInvoiceItem extends Model
     public function product()
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function category()
+    {
+        return $this->belongsTo(ProductCategory::class, 'category_id');
+    }
+
+    public function subcategory()
+    {
+        return $this->belongsTo(ProductSubcategory::class, 'subcategory_id');
     }
 
     public function variation()

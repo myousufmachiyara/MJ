@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoiceItem;
 use App\Models\Product;
+use App\Models\ProductCategory;
+use App\Models\ProductSubcategory;
 use App\Models\Voucher;
 use App\Models\MeasurementUnit;
 use App\Models\AccountingEntry;
@@ -36,12 +38,13 @@ class PurchaseInvoiceController extends Controller
 
     public function create()
     {
-        $vendors  = ChartOfAccounts::where('account_type', 'vendor')->get();
-        $banks    = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();        
-        $products = Product::with('measurementUnit')->get();
-        $purities = Purity::all();
+        $vendors    = ChartOfAccounts::where('account_type', 'vendor')->get();
+        $banks      = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();
+        $products   = Product::with('measurementUnit')->get();
+        $purities   = Purity::all();
+        $categories = ProductCategory::orderBy('name')->get();
 
-        return view('purchase.create', compact('products', 'vendors', 'banks', 'purities'));
+        return view('purchase.create', compact('products', 'vendors', 'banks', 'purities', 'categories'));
     }
 
     // =========================================================================
@@ -204,8 +207,9 @@ class PurchaseInvoiceController extends Controller
         $purchaseInvoice = PurchaseInvoice::with(['items.parts', 'attachments'])->findOrFail($id);
         $purities        = Purity::all();
         $vendors         = ChartOfAccounts::where('account_type', 'vendor')->get();
-        $banks           = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();        
+        $banks           = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();
         $products        = Product::with('measurementUnit')->get();
+        $categories      = ProductCategory::orderBy('name')->get();
         $goldAedOunce = ($purchaseInvoice->gold_rate_aed ?? 0) * 31.1035;
         $diamondAedCt = $purchaseInvoice->diamond_rate_aed ?? 0;
 
@@ -216,6 +220,8 @@ class PurchaseInvoiceController extends Controller
                 'certificate_no'   => $item->certificate_no,
                 'is_printed'       => $item->is_printed,
                 'product_id'       => $item->product_id,
+                'category_id'      => $item->category_id,
+                'subcategory_id'   => $item->subcategory_id,
                 // FIX (point 2): expose the item's own stored image (for custom/no-product items)
                 // so the edit view's JS can show it without relying solely on the product AJAX lookup.
                 'image_path'       => $item->image_path,
@@ -251,7 +257,7 @@ class PurchaseInvoiceController extends Controller
         })->values()->toArray();
 
         return view('purchase.edit', compact(
-            'purchaseInvoice', 'vendors', 'banks', 'products',
+            'purchaseInvoice', 'vendors', 'banks', 'products', 'categories',
             'itemsData', 'goldAedOunce', 'diamondAedCt', 'purities'
         ));
     }
@@ -1060,9 +1066,13 @@ class PurchaseInvoiceController extends Controller
                 $imagePath = $itemData['image']->store('purchase_invoice_items', 'public');
             }
 
+            $subcategoryId = !empty($itemData['subcategory_id']) ? (int) $itemData['subcategory_id'] : null;
+
             $invoiceItem = $invoice->items()->create([
                 'item_name'        => $itemData['item_name']        ?? null,
                 'product_id'       => $itemData['product_id']       ?? null,
+                'category_id'      => $itemData['category_id']      ?? null,
+                'subcategory_id'   => $subcategoryId,
                 'image_path'       => $imagePath,
                 'item_description' => $itemData['item_description'] ?? null,
                 'net_weight'       => $netWeight,
@@ -1080,7 +1090,7 @@ class PurchaseInvoiceController extends Controller
                 'vat_percent'      => $vatPercent,
                 'vat_amount'       => round($vatAmount, 2),
                 'item_total'       => round($itemTotal, 2),
-                'barcode_number'   => $existingBarcode ?? $this->generateBarcodeNumber($invoice, $position),
+                'barcode_number'   => $existingBarcode ?? $this->generateBarcodeNumber($invoice, $position, $subcategoryId),
                 'certificate_no'   => $itemData['certificate_no'] ?? null,
                 'is_printed'       => $wasAlreadyPrinted,
             ]);
@@ -1200,6 +1210,8 @@ class PurchaseInvoiceController extends Controller
             'items'                  => 'required|array|min:1',
             'items.*.item_name'      => 'nullable|string|required_without:items.*.product_id',
             'items.*.product_id'     => 'nullable|exists:products,id|required_without:items.*.item_name',
+            'items.*.category_id'    => 'nullable|exists:product_categories,id',
+            'items.*.subcategory_id' => 'nullable|exists:product_subcategories,id',
             'items.*.image'          => 'nullable|image|max:5120',
             'items.*.net_weight'     => 'required|numeric|min:0',
             'items.*.gross_weight'   => 'required|numeric|min:0',
@@ -1595,11 +1607,62 @@ class PurchaseInvoiceController extends Controller
 
     // ── Barcode ───────────────────────────────────────────────────────────────
 
-    private function generateBarcodeNumber(PurchaseInvoice $invoice, int $itemPosition): string
+    /**
+     * NEW FORMAT: {SubcategoryCode}-{sequence no of that subcategory}, e.g.
+     * an item under subcategory code "RING" becomes "RING-00001", the next
+     * item ever assigned to that same subcategory becomes "RING-00002", etc.
+     * (the invoice number / is_taxable / item position are no longer part of
+     * the barcode at all once a subcategory is selected).
+     *
+     * FALLBACK: when the item row has no subcategory selected (subcategory
+     * is an additive field on top of the existing item-name/product entry —
+     * it was not made mandatory, so older-style rows can still be saved),
+     * this keeps generating the legacy MJ-/MJT-{invoiceNo}-{position} format
+     * exactly as before, so nothing breaks for invoices that don't use the
+     * new category/subcategory dropdowns.
+     */
+    private function generateBarcodeNumber(PurchaseInvoice $invoice, int $itemPosition, ?int $subcategoryId = null): string
     {
+        if ($subcategoryId) {
+            $subcategory = ProductSubcategory::find($subcategoryId);
+            if ($subcategory && $subcategory->code) {
+                return $this->generateSubcategoryBarcodeNumber($subcategory->code);
+            }
+        }
+
         $prefix    = $invoice->is_taxable ? 'MJT-' : 'MJ-';
         $invoiceNo = substr($invoice->invoice_no, strrpos($invoice->invoice_no, '-') + 1);
         return $prefix . $invoiceNo . '-' . $itemPosition;
+    }
+
+    /**
+     * Next sequential barcode number for a given subcategory code, in the
+     * form "{code}-00001". Uses the same REGEXP + MAX(...) + lockForUpdate()
+     * approach as generateInvoiceNo() so it is race-safe under concurrent
+     * saves and never bleeds into a different (but prefix-overlapping)
+     * subcategory's numbering — e.g. code "RING" will never match a
+     * "RINGX-00003" barcode belonging to a different subcategory.
+     *
+     * MUST be called inside an active DB::beginTransaction() block —
+     * createItems() (the only caller) is always invoked from inside
+     * store()/update(), which already wrap it.
+     */
+    private function generateSubcategoryBarcodeNumber(string $subcategoryCode): string
+    {
+        $prefix    = $subcategoryCode . '-';
+        $prefixLen = strlen($prefix);
+
+        $maxNo = PurchaseInvoiceItem::whereRaw(
+                'barcode_number REGEXP ?',
+                ['^' . preg_quote($prefix, '/') . '[0-9]+$']
+            )
+            ->lockForUpdate()
+            ->selectRaw('MAX(CAST(SUBSTRING(barcode_number, ?) AS UNSIGNED)) as max_no', [$prefixLen + 1])
+            ->value('max_no');
+
+        $next = ((int) $maxNo) + 1;
+
+        return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
     }
 
     // ── PDF helpers ───────────────────────────────────────────────────────────

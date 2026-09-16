@@ -3,35 +3,6 @@
 @section('title', 'Purchase | New Invoice')
 
 @section('content')
-
-{{-- ═══════════════════════════════════════════════════════════════════════
-     EXCEL IMPORT — MODE CHOICE MODAL
-     Shown only when the item table already has data at the moment a file
-     is picked. Lets the user choose to keep existing rows and append the
-     Excel rows, or wipe the table and replace it entirely with the Excel
-     rows. Self-contained (no Bootstrap JS dependency) so it works
-     regardless of which Bootstrap version layouts.app loads.
-     ═══════════════════════════════════════════════════════════════════════ --}}
-<div id="excelImportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;">
-  <div style="background:#fff; border-radius:8px; max-width:480px; width:92%; padding:24px; box-shadow:0 10px 40px rgba(0,0,0,0.25);">
-    <h5 class="mb-2"><i class="fas fa-file-excel text-success"></i> Import Excel — Existing Items Found</h5>
-    <p class="text-muted mb-3">
-      This invoice already has item rows. How should the imported Excel data be applied?
-    </p>
-    <div class="d-grid gap-2">
-      <button type="button" id="excelImportReplace" class="btn btn-danger w-100 mb-2">
-        <i class="fas fa-trash-alt"></i> Remove existing items &amp; replace with Excel
-      </button>
-      <button type="button" id="excelImportAppend" class="btn btn-success w-100 mb-2">
-        <i class="fas fa-plus"></i> Keep existing items &amp; add Excel items
-      </button>
-      <button type="button" id="excelImportCancel" class="btn btn-secondary w-100">
-        Cancel
-      </button>
-    </div>
-  </div>
-</div>
-
 <div class="row">
   <div class="col">
     <form action="{{ route('purchase_invoices.store') }}" method="POST" enctype="multipart/form-data">
@@ -161,8 +132,16 @@
                   <tr class="item-row" data-item-index="0">
                     <td>
                       <div class="product-wrapper">
-                        <input type="text" name="items[0][item_name]" class="form-control item-name-input" placeholder="Product Name">
-                        <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
+                        <input type="text" name="items[0][item_name]" class="form-control item-name-input" placeholder="Product Name" required>
+                        <select name="items[0][category_id]" class="form-control form-control-sm category-select mt-1">
+                            <option value="">Select Category</option>
+                            @foreach($categories as $cat)
+                              <option value="{{ $cat->id }}">{{ $cat->name }}</option>
+                            @endforeach
+                        </select>
+                        <select name="items[0][subcategory_id]" class="form-control form-control-sm subcategory-select mt-1">
+                            <option value="">Select Subcategory</option>
+                        </select>
                         <input type="file" name="items[0][image]" class="form-control form-control-sm item-image-input mt-1" accept="image/*">
                       </div>
                     </td>
@@ -451,7 +430,48 @@
 
 <script>
   $(document).ready(function () {
-    const products = @json($products);
+    const products   = @json($products);
+    const categories = @json($categories);
+
+    // ================= CATEGORY / SUBCATEGORY =================
+    function categoryOptionsHtml(selectedId) {
+        let html = '<option value="">Select Category</option>';
+        categories.forEach(c => {
+            const sel = (selectedId && selectedId == c.id) ? 'selected' : '';
+            html += `<option value="${c.id}" ${sel}>${c.name}</option>`;
+        });
+        return html;
+    }
+
+    const SUBCATEGORY_BASE = '{{ url("/get-subcategories") }}';
+
+    function loadSubcategoryOptions(subSelect, categoryId, selectedSubcategoryId) {
+        subSelect.html('<option value="">Loading...</option>').prop('disabled', true);
+        if (!categoryId) {
+            subSelect.html('<option value="">Select Subcategory</option>').prop('disabled', false);
+            return;
+        }
+        fetch(`${SUBCATEGORY_BASE}/${categoryId}`)
+            .then(res => res.json())
+            .then(data => {
+                subSelect.prop('disabled', false);
+                let options = '<option value="">Select Subcategory</option>';
+                (Array.isArray(data) ? data : []).forEach(sc => {
+                    const label = sc.code ? `${sc.name} (${sc.code})` : sc.name;
+                    const sel   = (selectedSubcategoryId && selectedSubcategoryId == sc.id) ? 'selected' : '';
+                    options += `<option value="${sc.id}" ${sel}>${label}</option>`;
+                });
+                subSelect.html(options);
+            })
+            .catch(() => {
+                subSelect.html('<option value="">Select Subcategory</option>').prop('disabled', false);
+            });
+    }
+
+    $(document).on('change', '.category-select', function() {
+        const row = $(this).closest('tr.item-row');
+        loadSubcategoryOptions(row.find('.subcategory-select'), $(this).val());
+    });
 
     $(document).on('click', '.toggle-parts', function() {
         const partsRow = $(this).closest('tr').next('.parts-row');
@@ -538,8 +558,13 @@
         <tr class="item-row" data-item-index="${nextIndex}">
             <td>
                 <div class="product-wrapper">
-                    <input type="text" name="items[${nextIndex}][item_name]" class="form-control item-name-input" placeholder="Product Name">
-                    <button type="button" class="btn btn-link p-0 toggle-product"> Select Product </button>
+                    <input type="text" name="items[${nextIndex}][item_name]" class="form-control item-name-input" placeholder="Product Name" required>
+                    <select name="items[${nextIndex}][category_id]" class="form-control form-control-sm category-select mt-1">
+                        ${categoryOptionsHtml()}
+                    </select>
+                    <select name="items[${nextIndex}][subcategory_id]" class="form-control form-control-sm subcategory-select mt-1">
+                        <option value="">Select Subcategory</option>
+                    </select>
                     <input type="file" name="items[${nextIndex}][image]" class="form-control form-control-sm item-image-input mt-1" accept="image/*">
                 </div>
             </td>
@@ -645,20 +670,22 @@
         calculateTotals();
     });
 
-    // ================= PRODUCT TOGGLE =================
+    // ================= PRODUCT TOGGLE (PARTS ONLY) =================
+    // NOTE: this toggle used to also exist on the main Item Name field, but
+    // main invoice items are never linked to the Product catalog — Item Name
+    // is always free-text input there (Category/Subcategory dropdowns handle
+    // classification instead). It's kept here only for parts rows (diamond /
+    // stone components), where linking to a catalog Product is still useful
+    // (e.g. to pull the part's measurement unit).
     $(document).on('click', '.toggle-product, .revert-to-name', function () {
         const isReverting = $(this).hasClass('revert-to-name');
         const wrapper = $(this).closest('.product-wrapper');
         const isPart = wrapper.closest('tr').hasClass('part-item-row');
-        const itemIdx = isPart ? wrapper.closest('.parts-row').prev('.item-row').data('item-index') : wrapper.closest('.item-row').data('item-index');
+        if (!isPart) return;
 
-        let namePath = '';
-        if (isPart) {
-            const partIdx = wrapper.closest('.part-item-row').data('part-index');
-            namePath = `items[${itemIdx}][parts][${partIdx}]`;
-        } else {
-            namePath = `items[${itemIdx}]`;
-        }
+        const itemIdx = wrapper.closest('.parts-row').prev('.item-row').data('item-index');
+        const partIdx = wrapper.closest('.part-item-row').data('part-index');
+        const namePath = `items[${itemIdx}][parts][${partIdx}]`;
 
         if (isReverting) {
             wrapper.html(`
@@ -700,7 +727,7 @@
             .then(res => res.json())
             .then(data => {
                 variationSelect.prop('disabled', false);
-                let options = '<option value="">Select Variation</option>';
+                let options = '<option value="">No variation</option>';
                 if (data.success && data.variation.length > 0) {
                     options = '<option value="">Select Variation</option>';
                     data.variation.forEach(v => {
@@ -939,125 +966,30 @@
     });
 
     // ================= EXCEL IMPORT =================
-    // FIX: Excel files that use merged cells for repeated values (e.g. "Item Name",
-    // "Purity", "Part Name", "Part Desc" merged down across several sub-item rows)
-    // cause XLSX.utils.sheet_to_json() to return `undefined` for every row in the
-    // merge EXCEPT the first one. That made the old code think only the first
-    // "part" row for each item had data, silently dropping the rest.
-    //
-    // fillMergedCells() copies the merged cell's value into every cell of the
-    // merge range before we convert the sheet to JSON, so every row - including
-    // every sub-part row - gets its own value. No calculation/formula logic below
-    // this point has been changed.
-    function fillMergedCells(worksheet) {
-        if (!worksheet['!merges']) return;
-        worksheet['!merges'].forEach(function (merge) {
-            const startCellRef = XLSX.utils.encode_cell(merge.s);
-            const startCell = worksheet[startCellRef];
-            const value = startCell ? startCell.v : undefined;
-            if (value === undefined) return;
-
-            for (let R = merge.s.r; R <= merge.e.r; R++) {
-                for (let C = merge.s.c; C <= merge.e.c; C++) {
-                    const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
-                    if (!worksheet[cellRef]) {
-                        worksheet[cellRef] = { t: startCell.t || 's', v: value };
-                    }
-                }
-            }
-        });
-    }
-
-    // ── NEW: append-vs-replace import mode ──────────────────────────────────
-    // pendingExcelFile holds the file the user just picked while we wait for
-    // them to choose a mode in the modal (or, when the table is still empty,
-    // we skip the modal entirely and import straight in "append" mode).
-    let pendingExcelFile = null;
-
-    function tableHasRealData() {
-        return $('#PurchaseTable tr.item-row').toArray().some(function (row) {
-            const $row = $(row);
-            const name = $row.find('.item-name-input').val();
-            const productSelected = $row.find('.product-select').val();
-            return (name && name.trim() !== '') || (productSelected && productSelected !== '');
-        });
-    }
-
-    function showExcelImportModal() {
-        document.getElementById('excelImportModal').style.display = 'flex';
-    }
-    function hideExcelImportModal() {
-        document.getElementById('excelImportModal').style.display = 'none';
-    }
-
     $('#excel_import').on('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
-        pendingExcelFile = file;
 
-        if (tableHasRealData()) {
-            showExcelImportModal();
-        } else {
-            runExcelImport(pendingExcelFile, 'append');
-        }
-    });
-
-    $('#excelImportReplace').on('click', function() {
-        hideExcelImportModal();
-        if (pendingExcelFile) runExcelImport(pendingExcelFile, 'replace');
-    });
-
-    $('#excelImportAppend').on('click', function() {
-        hideExcelImportModal();
-        if (pendingExcelFile) runExcelImport(pendingExcelFile, 'append');
-    });
-
-    $('#excelImportCancel').on('click', function() {
-        hideExcelImportModal();
-        pendingExcelFile = null;
-        $('#excel_import').val('');
-    });
-
-    function runExcelImport(file, mode) {
         const unmatchedPurityRows = [];
 
         const reader = new FileReader();
         reader.onload = function(e) {
             const data     = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
-            const sheet    = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
 
-            // FIX: forward-fill any merged cells (Item Name, Purity, Part Name,
-            // Part Desc, etc.) BEFORE converting to JSON so every sub-row keeps
-            // its own copy of the value instead of coming back blank.
-            fillMergedCells(sheet);
+            if (jsonData.length === 0) return;
 
-            const jsonData = XLSX.utils.sheet_to_json(sheet);
-
-            if (jsonData.length === 0) {
-                alert('The selected file has no data rows.');
-                $('#excel_import').val('');
-                pendingExcelFile = null;
-                return;
-            }
-
-            if (mode === 'replace') {
-                // Wipe every existing item + its parts row before importing.
-                $('#PurchaseTable tr.item-row, #PurchaseTable tr.parts-row').remove();
-            } else {
-                // append mode: only clean up the single default blank starter
-                // row, exactly like before — never touches rows with data.
-                let firstRow = $('#PurchaseTable tr.item-row').first();
-                if ($('#PurchaseTable tr.item-row').length === 1 && !firstRow.find('.item-name-input').val()) {
-                    firstRow.next('.parts-row').remove();
-                    firstRow.remove();
-                }
+            let firstRow = $('#PurchaseTable tr.item-row').first();
+            if ($('#PurchaseTable tr.item-row').length === 1 && !firstRow.find('.item-name-input').val()) {
+                firstRow.next('.parts-row').remove();
+                firstRow.remove();
             }
 
             let currentItemRow = null;
 
             jsonData.forEach((row) => {
-                if (row['Item Name'] && row['Item Name'].toString().trim() !== "") {
+                if (row['Item Name'] && row['Item Name'].trim() !== "") {
                     addNewRow();
                     currentItemRow = $('#PurchaseTable tr.item-row').last();
 
@@ -1081,22 +1013,13 @@
                     recalcItemGrossWeight(currentItemRow);
                 }
 
-                // FIX: Don't rely on "Part Name" alone to detect a part row - after
-                // unmerging it will be present on every row anyway, but this is a
-                // safety net for sheets where Part Name is genuinely blank while
-                // Part Qty/Rate still carry real data.
-                const hasPartData =
-                    (row['Part Name'] && row['Part Name'].toString().trim() !== "") ||
-                    (row['Part Qty'] !== undefined && row['Part Qty'] !== '') ||
-                    (row['Part Rate'] !== undefined && row['Part Rate'] !== '');
-
-                if (hasPartData && currentItemRow) {
+                if (row['Part Name'] && row['Part Name'].trim() !== "" && currentItemRow) {
                     const partsRow = currentItemRow.next('.parts-row');
                     partsRow.show();
                     partsRow.find('.add-part').click();
 
                     const currentPartRow = partsRow.find('.part-item-row').last();
-                    currentPartRow.find('.item-name-input').val(row['Part Name'] || '');
+                    currentPartRow.find('.item-name-input').val(row['Part Name']);
                     currentPartRow.find('input[name*="[part_description]"]').val(row['Part Desc'] || '');
                     currentPartRow.find('.part-qty').val(row['Part Qty'] || 0);
                     currentPartRow.find('.part-rate').val(row['Part Rate'] || 0);
@@ -1119,18 +1042,13 @@
                     'no matching option in the Purity dropdown — please check them manually:\n\n' + list
                 );
             } else {
-                alert(
-                    mode === 'replace'
-                        ? 'Existing items removed. Items imported successfully!'
-                        : 'Items imported successfully and added to the existing list!'
-                );
+                alert('Items Imported Successfully!');
             }
 
             $('#excel_import').val('');
-            pendingExcelFile = null;
         };
         reader.readAsArrayBuffer(file);
-    }
+    });
 
     // Prevent double submit
     document.querySelector('form').addEventListener('submit', function() {
