@@ -451,6 +451,10 @@ $(document).ready(function () {
 
     const products      = @json($products);
     const categories    = @json($categories);
+    // Preloaded in full (not just fetched per-category via AJAX) so Excel
+    // import can resolve a row's Category Code / Subcategory Code to real
+    // IDs entirely client-side — see applyCategorySubcategoryFromCodes().
+    const subcategories = @json($subcategories);
     const existingItems = @json($itemsData);
     const TROY_OUNCE_TO_GRAM = 31.1035;
 
@@ -493,6 +497,72 @@ $(document).ready(function () {
         const row = $(this).closest('tr.item-row');
         loadSubcategoryOptions(row.find('.subcategory-select'), $(this).val());
     });
+
+    // ── Excel import: resolve Category Code / Subcategory Code text to IDs ──
+    function normalizeCode(v) {
+        return (v === undefined || v === null) ? '' : v.toString().trim();
+    }
+
+    function findCategoryByCode(code) {
+        const norm = normalizeCode(code).toLowerCase();
+        if (!norm) return null;
+        return categories.find(c => normalizeCode(c.code).toLowerCase() === norm) || null;
+    }
+
+    function findSubcategoryByCode(code) {
+        const norm = normalizeCode(code).toLowerCase();
+        if (!norm) return null;
+        return subcategories.find(sc => normalizeCode(sc.code).toLowerCase() === norm) || null;
+    }
+
+    function subcategoryOptionsHtmlForCategory(categoryId, selectedId) {
+        let html = '<option value="">Select Subcategory</option>';
+        subcategories
+            .filter(sc => sc.category_id == categoryId)
+            .forEach(sc => {
+                const label = sc.code ? `${sc.name} (${sc.code})` : sc.name;
+                const sel   = (selectedId && selectedId == sc.id) ? 'selected' : '';
+                html += `<option value="${sc.id}" ${sel}>${label}</option>`;
+            });
+        return html;
+    }
+
+    /**
+     * Resolves an imported row's Category Code / Subcategory Code text to
+     * real category_id/subcategory_id selections on that item row, entirely
+     * from the preloaded `categories`/`subcategories` arrays (no AJAX, so a
+     * bulk import of many rows doesn't fire dozens of concurrent requests).
+     * Subcategory Code takes priority for deriving the category — a code
+     * alone is enough since subcategory codes are unique — falling back to
+     * Category Code alone when no Subcategory Code is given or matched.
+     * Anything that doesn't match a known code is pushed onto `warnings`
+     * (by row label) instead of failing the import.
+     */
+    function applyCategorySubcategoryFromCodes(itemRow, categoryCodeRaw, subcategoryCodeRaw, itemLabel, warnings) {
+        const categoryCode    = normalizeCode(categoryCodeRaw);
+        const subcategoryCode = normalizeCode(subcategoryCodeRaw);
+        if (!categoryCode && !subcategoryCode) return;
+
+        const matchedSubcategory = subcategoryCode ? findSubcategoryByCode(subcategoryCode) : null;
+        let   matchedCategory    = categoryCode ? findCategoryByCode(categoryCode) : null;
+
+        if (subcategoryCode && !matchedSubcategory) {
+            warnings.push(`${itemLabel}: Subcategory Code "${subcategoryCode}" not found`);
+        }
+        if (categoryCode && !matchedCategory) {
+            warnings.push(`${itemLabel}: Category Code "${categoryCode}" not found`);
+        }
+
+        if (matchedSubcategory) {
+            matchedCategory = categories.find(c => c.id == matchedSubcategory.category_id) || matchedCategory;
+        }
+        if (!matchedCategory) return;
+
+        itemRow.find('.category-select').val(matchedCategory.id);
+        itemRow.find('.subcategory-select')
+            .prop('disabled', false)
+            .html(subcategoryOptionsHtmlForCategory(matchedCategory.id, matchedSubcategory ? matchedSubcategory.id : null));
+    }
 
     // ===== PARTS TOGGLE =====
     $(document).on('click', '.toggle-parts', function() {
@@ -1104,6 +1174,7 @@ $(document).ready(function () {
 
     function runExcelImport(file, mode) {
         const unmatchedPurityRows = [];
+        const categorySubWarnings = [];
 
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -1139,6 +1210,10 @@ $(document).ready(function () {
                     currentItemRow.find('.item-name-input').val(row['Item Name']);
                     currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
                     currentItemRow.find('input[name*="[certificate_no]"]').val(row['Certificate No'] || '');
+                    applyCategorySubcategoryFromCodes(
+                        currentItemRow, row['Category Code'], row['Subcategory Code'],
+                        row['Item Name'], categorySubWarnings
+                    );
 
                     const purityRaw = row['Purity'] !== undefined && row['Purity'] !== ''
                         ? row['Purity']
@@ -1173,9 +1248,25 @@ $(document).ready(function () {
 
             calculateTotals();
 
+            const warningBlocks = [];
             if (unmatchedPurityRows.length > 0) {
-                const list = unmatchedPurityRows.map(r => `- ${r.item}: ${r.purity}`).join('\n');
-                alert('Items imported, but the following rows had a Purity value with no matching option in the Purity dropdown — please check them manually:\n\n' + list);
+                warningBlocks.push(
+                    'Purity value with no matching dropdown option:\n' +
+                    unmatchedPurityRows.map(r => `- ${r.item}: ${r.purity}`).join('\n')
+                );
+            }
+            if (categorySubWarnings.length > 0) {
+                warningBlocks.push(
+                    'Category/Subcategory Code not found:\n' +
+                    categorySubWarnings.map(w => `- ${w}`).join('\n')
+                );
+            }
+
+            if (warningBlocks.length > 0) {
+                alert(
+                    'Items imported, but please check the following manually:\n\n' +
+                    warningBlocks.join('\n\n')
+                );
             } else {
                 alert(
                     mode === 'replace'

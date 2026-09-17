@@ -38,13 +38,19 @@ class PurchaseInvoiceController extends Controller
 
     public function create()
     {
-        $vendors    = ChartOfAccounts::where('account_type', 'vendor')->get();
-        $banks      = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();
-        $products   = Product::with('measurementUnit')->get();
-        $purities   = Purity::all();
-        $categories = ProductCategory::orderBy('name')->get();
+        $vendors      = ChartOfAccounts::where('account_type', 'vendor')->get();
+        $banks        = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();
+        $products     = Product::with('measurementUnit')->get();
+        $purities     = Purity::all();
+        $categories   = ProductCategory::orderBy('name')->get();
+        // FIX: preloaded (not fetched via AJAX) so the Excel import can
+        // resolve a row's Category Code / Subcategory Code to IDs entirely
+        // client-side, synchronously, for every row in one pass — an AJAX
+        // call per imported row would be slow and error-prone (races between
+        // many concurrent fetches as the import loop runs).
+        $subcategories = ProductSubcategory::orderBy('name')->get();
 
-        return view('purchase.create', compact('products', 'vendors', 'banks', 'purities', 'categories'));
+        return view('purchase.create', compact('products', 'vendors', 'banks', 'purities', 'categories', 'subcategories'));
     }
 
     // =========================================================================
@@ -58,19 +64,26 @@ class PurchaseInvoiceController extends Controller
         // NOTE: 'Certificate No' (item-level, e.g. "GIA 123456") is a
         // different field from 'Cert. Charges' (part-level, a numeric
         // certification fee) — both are kept, at different positions.
+        //
+        // 'Category Code' / 'Subcategory Code' must match the `code` field
+        // already set up under Product Categories / Product Subcategories
+        // (not a name) — e.g. "RING" / "RING-A" below are illustrative
+        // only, replace with your own codes. Either can be left blank; if
+        // only Subcategory Code is given, its Category is resolved from it
+        // automatically since subcategory codes are unique in the system.
         $rows = [
             [
-                'Item Name', 'Description', 'Certificate No', 'Purity', 'Gross Wt',
-                'Making Rate', 'Material', 'VAT %',
+                'Item Name', 'Description', 'Certificate No', 'Category Code', 'Subcategory Code',
+                'Purity', 'Gross Wt', 'Making Rate', 'Material', 'VAT %',
                 'Part Name', 'Part Desc', 'Part Qty', 'Part Rate',
                 'Stone Qty', 'Stone Rate', 'Cert. Charges',
             ],
-            ['18K Gold Bracelet', 'Handmade Chain Design', 'GIA 1234567', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50', '75.00'],
-            ['22K Wedding Band', 'Plain Polished', '', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '', ''],
-            ['Diamond Engagement Ring', 'Solitaire Setting', 'GIA 9988776', '0.75', '4.20', '150.00', 'gold', '5', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0', '200.00'],
-            ['', '', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10', '0'],
+            ['18K Gold Bracelet', 'Handmade Chain Design', 'GIA 1234567', 'RING', 'RING-A', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50', '75.00'],
+            ['22K Wedding Band', 'Plain Polished', '', '', '', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '', ''],
+            ['Diamond Engagement Ring', 'Solitaire Setting', 'GIA 9988776', 'NECK', 'NECK-B', '0.75', '4.20', '150.00', 'gold', '5', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0', '200.00'],
+            ['', '', '', '', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10', '0'],
         ];
 
         // StreamedResponse: Laravel sends headers first, THEN the callback writes body.
@@ -213,6 +226,8 @@ class PurchaseInvoiceController extends Controller
         $banks           = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();
         $products        = Product::with('measurementUnit')->get();
         $categories      = ProductCategory::orderBy('name')->get();
+        // See create() for why this is preloaded rather than fetched via AJAX.
+        $subcategories   = ProductSubcategory::orderBy('name')->get();
         $goldAedOunce = ($purchaseInvoice->gold_rate_aed ?? 0) * 31.1035;
         $diamondAedCt = $purchaseInvoice->diamond_rate_aed ?? 0;
 
@@ -260,7 +275,7 @@ class PurchaseInvoiceController extends Controller
         })->values()->toArray();
 
         return view('purchase.edit', compact(
-            'purchaseInvoice', 'vendors', 'banks', 'products', 'categories',
+            'purchaseInvoice', 'vendors', 'banks', 'products', 'categories', 'subcategories',
             'itemsData', 'goldAedOunce', 'diamondAedCt', 'purities'
         ));
     }
