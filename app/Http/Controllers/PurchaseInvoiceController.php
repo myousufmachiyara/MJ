@@ -71,19 +71,22 @@ class PurchaseInvoiceController extends Controller
         // only, replace with your own codes. Either can be left blank; if
         // only Subcategory Code is given, its Category is resolved from it
         // automatically since subcategory codes are unique in the system.
+        //
+        // 'Tray No' is free text (e.g. "T-101") identifying the physical
+        // tray the item is stored in. Optional, read as-is, no matching.
         $rows = [
             [
-                'Item Name', 'Description', 'Certificate No', 'Category Code', 'Subcategory Code',
+                'Item Name', 'Description', 'Certificate No', 'Category Code', 'Subcategory Code', 'Tray No',
                 'Purity', 'Gross Wt', 'Making Rate', 'Material', 'VAT %',
                 'Part Name', 'Part Desc', 'Part Qty', 'Part Rate',
                 'Stone Qty', 'Stone Rate', 'Cert. Charges',
             ],
-            ['18K Gold Bracelet', 'Handmade Chain Design', 'GIA 1234567', 'RING', 'RING-A', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50', '75.00'],
-            ['22K Wedding Band', 'Plain Polished', '', '', '', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '', ''],
-            ['Diamond Engagement Ring', 'Solitaire Setting', 'GIA 9988776', 'NECK', 'NECK-B', '0.75', '4.20', '150.00', 'gold', '5', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0', '200.00'],
-            ['', '', '', '', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10', '0'],
+            ['18K Gold Bracelet', 'Handmade Chain Design', 'GIA 1234567', 'RING', 'RING-A', 'T-101', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50', '75.00'],
+            ['22K Wedding Band', 'Plain Polished', '', '', '', '', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '', ''],
+            ['Diamond Engagement Ring', 'Solitaire Setting', 'GIA 9988776', 'NECK', 'NECK-B', 'T-205', '0.75', '4.20', '150.00', 'gold', '5', '', '', '', '', '', '', ''],
+            ['', '', '', '', '', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0', '200.00'],
+            ['', '', '', '', '', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10', '0'],
         ];
 
         // StreamedResponse: Laravel sends headers first, THEN the callback writes body.

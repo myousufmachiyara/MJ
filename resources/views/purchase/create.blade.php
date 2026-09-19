@@ -1158,6 +1158,7 @@
                     currentItemRow.find('.item-name-input').val(row['Item Name']);
                     currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
                     currentItemRow.find('input[name*="[certificate_no]"]').val(row['Certificate No'] || '');
+                    currentItemRow.find('.tray-no-input').val(row['Tray No'] || '');
                     applyCategorySubcategoryFromCodes(
                         currentItemRow, row['Category Code'], row['Subcategory Code'],
                         row['Item Name'], categorySubWarnings
