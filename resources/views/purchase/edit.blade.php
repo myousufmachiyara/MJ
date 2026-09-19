@@ -658,6 +658,7 @@ $(document).ready(function () {
         const matType = data.material_type    || 'gold';
         const vatPct  = data.vat_percent      || 0;
         const certNo  = data.certificate_no   || '';
+        const trayNo  = data.tray_no          || '';
 
         const purityOptions = `@foreach($purities as $p)<option value="{{ $p->value }}" ${purity == {{ $p->value }} ? 'selected' : ''}>{{ $p->label }}</option>@endforeach`;
 
@@ -673,6 +674,7 @@ $(document).ready(function () {
                     <select name="items[${index}][subcategory_id]" class="form-control form-control-sm subcategory-select mt-1">
                         <option value="">Select Subcategory</option>
                     </select>
+                    <input type="text" name="items[${index}][tray_no]" class="form-control form-control-sm tray-no-input mt-1" value="${trayNo}" placeholder="Tray No">
                     <input type="file" name="items[${index}][image]" class="form-control form-control-sm item-image-input mt-1" accept="image/*">
                 </div>
             </td>

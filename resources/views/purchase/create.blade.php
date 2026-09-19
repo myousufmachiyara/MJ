@@ -172,6 +172,7 @@
                         <select name="items[0][subcategory_id]" class="form-control form-control-sm subcategory-select mt-1">
                             <option value="">Select Subcategory</option>
                         </select>
+                        <input type="text" name="items[0][tray_no]" class="form-control form-control-sm tray-no-input mt-1" placeholder="Tray No">
                         <input type="file" name="items[0][image]" class="form-control form-control-sm item-image-input mt-1" accept="image/*">
                       </div>
                     </td>
@@ -665,6 +666,7 @@
                     <select name="items[${nextIndex}][subcategory_id]" class="form-control form-control-sm subcategory-select mt-1">
                         <option value="">Select Subcategory</option>
                     </select>
+                    <input type="text" name="items[${nextIndex}][tray_no]" class="form-control form-control-sm tray-no-input mt-1" placeholder="Tray No">
                     <input type="file" name="items[${nextIndex}][image]" class="form-control form-control-sm item-image-input mt-1" accept="image/*">
                 </div>
             </td>

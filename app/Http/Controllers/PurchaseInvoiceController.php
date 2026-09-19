@@ -240,6 +240,7 @@ class PurchaseInvoiceController extends Controller
                 'product_id'       => $item->product_id,
                 'category_id'      => $item->category_id,
                 'subcategory_id'   => $item->subcategory_id,
+                'tray_no'          => $item->tray_no,
                 // FIX (point 2): expose the item's own stored image (for custom/no-product items)
                 // so the edit view's JS can show it without relying solely on the product AJAX lookup.
                 'image_path'       => $item->image_path,
@@ -1091,6 +1092,7 @@ class PurchaseInvoiceController extends Controller
                 'product_id'       => $itemData['product_id']       ?? null,
                 'category_id'      => $itemData['category_id']      ?? null,
                 'subcategory_id'   => $subcategoryId,
+                'tray_no'          => $itemData['tray_no']           ?? null,
                 'image_path'       => $imagePath,
                 'item_description' => $itemData['item_description'] ?? null,
                 'net_weight'       => $netWeight,
@@ -1230,6 +1232,7 @@ class PurchaseInvoiceController extends Controller
             'items.*.product_id'     => 'nullable|exists:products,id|required_without:items.*.item_name',
             'items.*.category_id'    => 'nullable|exists:product_categories,id',
             'items.*.subcategory_id' => 'nullable|exists:product_subcategories,id',
+            'items.*.tray_no'        => 'nullable|string|max:255',
             'items.*.image'          => 'nullable|image|max:5120',
             'items.*.net_weight'     => 'required|numeric|min:0',
             'items.*.gross_weight'   => 'required|numeric|min:0',
