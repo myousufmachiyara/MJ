@@ -205,7 +205,7 @@
             display: flex;
             flex-direction: column;
             position: relative;
-            padding: 1.6mm 1.8mm;
+            padding: 1.1mm 1.8mm;
             font-family: var(--mono);
         }
         /* soft guide down the middle, screen only — this is where you tear
@@ -304,7 +304,7 @@
         .unit:nth-child(2) .unit-barcode {
             margin-left: auto;
             margin-right: 0;
-            margin-bottom: 5mm;
+            margin-bottom: 10mm;
         }
         .tag-cert {
             display: flex;
