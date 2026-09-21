@@ -224,7 +224,6 @@
            at the top right, item info at the bottom — so the two tags
            aren't just duplicates sitting in an identical layout */
 
-
         .unit-info {
             flex-shrink: 0;
             display: flex;
@@ -288,7 +287,7 @@
             width: var(--barcode-w);
             flex-shrink: 0;
             display: block;
-            gap: 0mm;
+            gap: 3mm;
         }
         .unit-barcode svg {
             width: 100%;
@@ -304,7 +303,7 @@
         .unit:nth-child(2) .unit-barcode {
             margin-left: auto;
             margin-right: 0;
-            margin-bottom: 20mm;
+            margin-bottom: 23mm;
         }
         .tag-cert {
             display: flex;
