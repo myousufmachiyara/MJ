@@ -233,7 +233,7 @@
             margin-top: 12mm; /* pushes item #/gold/dia/stone further down */
         }
         .unit:nth-child(2) .unit-info {
-            margin-top: 0;
+            margin-top: 2mm;
             align-items: flex-end;
             text-align: right;
             margin-left: auto;
