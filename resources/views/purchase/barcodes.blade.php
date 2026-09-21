@@ -304,7 +304,7 @@
         .unit:nth-child(2) .unit-barcode {
             margin-left: auto;
             margin-right: 0;
-            margin-bottom: 10mm;
+            margin-bottom: 6mm;
         }
         .tag-cert {
             display: flex;
