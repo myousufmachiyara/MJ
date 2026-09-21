@@ -423,6 +423,7 @@
                 <div class="unit-barcode">
                     <svg id="bc-{{ $item->id }}"></svg>
                     <div class="tag-cert">
+                        <b>{{ $item->tray_no ?: '—' }}</b>
                         <b><span class="cert-lbl">Cert#</span></b>
                         <b>{{ $item->certificate_no ?: '—' }}</b>
                     </div>
