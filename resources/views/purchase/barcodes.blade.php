@@ -205,7 +205,15 @@
             display: flex;
             flex-direction: column;
             position: relative;
-            padding: 0mm 1.8mm;
+            /* FIX (tray/barcode/cert touching the bottom edge): this used to
+               be `0mm 1.8mm` — zero top/bottom padding — combined with
+               .unit-fold's flex:1 (which claims ALL leftover vertical space),
+               that left nothing to stop .unit-barcode from sitting flush
+               against the physical bottom edge of the 37mm label. A small
+               bottom padding here reserves a little breathing room for BOTH
+               halves uniformly, without changing the overall stacked
+               item-info/fold/barcode structure. */
+            padding: 0mm 1.8mm 2mm;
             font-family: var(--mono);
         }
         /* soft guide down the middle, screen only — this is where you tear
@@ -293,13 +301,19 @@
             width: 100%;
             height: auto;
             display: block;
+            /* FIX (unscannable barcode): forces the browser/printer to keep
+               each bar's edges pixel-crisp instead of anti-aliasing them as
+               the SVG scales to fit --barcode-w. At the module widths this
+               18mm ceiling forces for a long barcode, any blur/soft edging
+               from scaling is often the difference between a scanner
+               locking on and not. */
+            shape-rendering: crispEdges;
         }
         /* mirrored: right unit's barcode+cert hug the right edge instead
            (top right, since the unit itself is now reversed top-to-bottom).
            Uses margin-left:auto on a fixed-width block rather than flex
            cross-axis alignment, which is a more bulletproof way to force
-           right-alignment regardless of the parent's own flex settings.
-           margin-bottom lifts it up off the bottom edge a bit. */
+           right-alignment regardless of the parent's own flex settings. */
         .unit:nth-child(2) .unit-barcode {
             margin-left: auto;
             margin-right: 0;
@@ -419,7 +433,7 @@
                         <input type="checkbox" class="label-select" checked onchange="updateSelectionCount()">
                     </span>
                 </div>
-                
+
                 <div class="unit-barcode">
                     <div class="tag-cert">
                         <b><span class="cert-lbl">{{ $item->tray_no ?: '—' }}</span></b>
@@ -523,13 +537,37 @@
             try {
                 JsBarcode(el, barcode, {
                     format:       'CODE128',
-                    width:        1.2,
-                    height:       35,
+                    // FIX (unscannable barcode), two changes here:
+                    // 1. width bumped from 1.2 -> 2 (an integer). JsBarcode
+                    //    draws each bar this many SVG px wide; a fractional
+                    //    value (1.2) means bar edges land on fractional
+                    //    pixels, which the browser then anti-aliases/blurs
+                    //    when the SVG is scaled to fit --barcode-w. Integer
+                    //    widths keep every bar edge crisp through that scale.
+                    // 2. marginLeft/marginRight raised from 0 -> 10. A
+                    //    barcode needs a blank "quiet zone" on each side for
+                    //    a scanner to find where it starts/stops — at 0
+                    //    there was none at all, which on its own can be
+                    //    enough to make an otherwise-fine barcode unreadable.
+                    // Because --barcode-w scales the whole SVG to a fixed physical
+                    // width regardless of these pixel values, this quiet zone
+                    // is reserved as a proportion of that 18mm, not extra space
+                    // on top of it — some of the already-tight width now goes
+                    // to margin instead of bars. That's an unavoidable trade:
+                    // without it most scanners can't lock on at all. Note also
+                    // that at 18mm, a long barcode (12+ characters, e.g. the
+                    // legacy MJT-/MJ- format) is right at or below what a
+                    // typical label printer can resolve reliably — this change
+                    // gets it as scannable as this physical width allows, but
+                    // shorter barcode text (e.g. the newer {code}-00001 codes)
+                    // will scan more reliably than the long legacy ones.
+                    width:        2,
+                    height:       45,
                     displayValue: false,
                     marginTop:    0,
                     marginBottom: 0,
-                    marginLeft:   0, // quiet zone — was 0 before, which is a real reason scanners can fail to lock on
-                    marginRight:  0,
+                    marginLeft:   10,
+                    marginRight:  10,
                     background:   '#ffffff',
                     lineColor:    '#0a0a0a',
                 });
