@@ -427,8 +427,7 @@
                     </div>
                     <svg id="bc-{{ $item->id }}"></svg>
                     <div class="tag-cert">
-                        <b><span class="cert-lbl">Cert#</span></b>
-                        <b>{{ $item->certificate_no ?: '—' }}</b>
+                        <b><span class="cert-lbl">Cert#: {{ $item->certificate_no ?: '—' }}</span></b>
                     </div>
                 </div>
             </div>
