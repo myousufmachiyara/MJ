@@ -246,7 +246,7 @@
             letter-spacing: 0.01em;
             line-height: 1;
             word-break: break-all;
-            margin-bottom: 0.5mm;
+            margin-bottom: 0.7mm;
         }
         .unit-info .tag-line {
             font-size: 2mm;
