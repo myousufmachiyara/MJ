@@ -287,7 +287,7 @@
             width: var(--barcode-w);
             flex-shrink: 0;
             display: block;
-            gap: 3mm;
+            gap: 0mm;
         }
         .unit-barcode svg {
             width: 100%;
