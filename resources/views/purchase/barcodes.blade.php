@@ -205,7 +205,7 @@
             display: flex;
             flex-direction: column;
             position: relative;
-            padding: 0.3mm 1.8mm;
+            padding: 0mm 1.8mm;
             font-family: var(--mono);
         }
         /* soft guide down the middle, screen only — this is where you tear
