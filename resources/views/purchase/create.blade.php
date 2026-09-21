@@ -647,7 +647,18 @@
     // silently abort the whole collapse, and the console.log/console.error
     // calls below give a permanent, unambiguous record — with DevTools
     // "Preserve log" enabled — of whether this ran and what it did.
-    function collectItemsJsonForSubmit() {
+    //
+    // ROOT CAUSE FIX (found on edit.blade.php, applied here too): a plain
+    // `function collectItemsJsonForSubmit() {` declaration scopes it to THIS
+    // $(document).ready(...) closure only. The addEventListener('submit', ...)
+    // handler was moved OUTSIDE this closure (top-level script, for
+    // resilience against earlier errors in this callback) — from outside,
+    // that inner declaration isn't visible at all, so the call was throwing
+    // "ReferenceError: collectItemsJsonForSubmit is not defined" at every
+    // submit. Assigning to `window.` (same pattern this file already uses
+    // for addNewRow/removeRow, for the identical reason) makes it reachable
+    // from anywhere on the page regardless of where it's declared.
+    window.collectItemsJsonForSubmit = function collectItemsJsonForSubmit() {
         const itemsObj = {};
         let collected = 0;
         let failed = 0;
@@ -680,7 +691,7 @@
         } catch (err) {
             console.error('[items_json] FAILED to write the items_json hidden field — items_json will submit empty:', err);
         }
-    }
+    };
 
     // ================= ROW MANAGEMENT =================
     function updateRowIndexes() {

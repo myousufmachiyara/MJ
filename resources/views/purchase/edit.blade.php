@@ -665,7 +665,22 @@ $(document).ready(function () {
     // even after this is confirmed working — with DevTools "Preserve log"
     // enabled they give a permanent, unambiguous record of whether this
     // function ran and what it did on any given submit.
-    function collectItemsJsonForSubmit() {
+    //
+    // ROOT CAUSE FIX: this used to be a plain `function collectItemsJsonForSubmit() {`
+    // declaration, which scopes it to THIS $(document).ready(...) closure only.
+    // resubmitWithConfirm() and the addEventListener('submit', ...) handler
+    // below both call this function from OUTSIDE this closure (they always
+    // have, since before this file was ever touched for this fix) — so every
+    // call was throwing "ReferenceError: collectItemsJsonForSubmit is not
+    // defined" at actual submit time, on every single invoice, silently
+    // aborting before items_json was ever populated or any items[] field was
+    // disabled. Small invoices never needed the collapse to survive PHP's
+    // multipart parsing, so this broke invisibly until a large invoice hit
+    // the real limit. Assigning to `window.` (same pattern already used by
+    // addNewRow/removeRow below, for the same cross-scope-visibility reason)
+    // makes it reachable from anywhere on the page, regardless of where it's
+    // declared relative to $(document).ready(...).
+    window.collectItemsJsonForSubmit = function collectItemsJsonForSubmit() {
         const itemsObj = {};
         let collected = 0;
         let failed = 0;
@@ -698,7 +713,7 @@ $(document).ready(function () {
         } catch (err) {
             console.error('[items_json] FAILED to write the items_json hidden field — items_json will submit empty:', err);
         }
-    }
+    };
 
     // ===== ROW INDEX MANAGEMENT =====
     function updateRowIndexes() {
