@@ -420,8 +420,9 @@
                         <input type="checkbox" class="label-select" checked onchange="updateSelectionCount()">
                     </span>
                 </div>
+                
                 <div class="unit-barcode">
-                    <b>{{ $item->tray_no ?: '—' }}</b>
+                    <div class="tag-no">{{ $item->tray_no ?: '—' }}</div>
                     <svg id="bc-{{ $item->id }}"></svg>
                     <div class="tag-cert">
                         <b><span class="cert-lbl">Cert#</span></b>
