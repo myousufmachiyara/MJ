@@ -38,6 +38,13 @@
     <form action="{{ route('purchase_invoices.store') }}" method="POST" enctype="multipart/form-data">
       @csrf
 
+      {{-- FIX (multipart body parts limit): see edit.blade.php for the full
+           explanation. collectItemsJsonForSubmit() (defined below) packs every
+           items[N][...] field into this JSON field and disables the individual
+           inputs so a large invoice doesn't generate more multipart parts than
+           PHP's max_multipart_body_parts ini limit allows. --}}
+      <input type="hidden" name="items_json" id="items_json">
+
       @if ($errors->any())
         <div class="alert alert-danger">
           <ul class="mb-0">
@@ -626,6 +633,53 @@
             success: function(data) { showItemImage(row, data.image_url || null, data.name || ''); },
             error:   function()     { row.find('.item-img-cell').html(''); }
         });
+    }
+
+    // ===== ITEMS JSON SERIALIZATION (multipart body parts limit fix) =====
+    // Packs every items[N][field] / items[N][parts][M][field] input under
+    // #PurchaseTable into one JSON blob (#items_json) and disables those
+    // inputs so the browser doesn't ALSO send them as individual multipart
+    // parts. File inputs (item images) are left alone — a file can't be put
+    // inside JSON, so items[N][image] still travels as a real multipart part.
+    //
+    // DIAGNOSTIC INSTRUMENTATION (mirrors edit.blade.php): each field is
+    // collected inside its own try/catch so one bad/unexpected field can't
+    // silently abort the whole collapse, and the console.log/console.error
+    // calls below give a permanent, unambiguous record — with DevTools
+    // "Preserve log" enabled — of whether this ran and what it did.
+    function collectItemsJsonForSubmit() {
+        const itemsObj = {};
+        let collected = 0;
+        let failed = 0;
+        document.querySelectorAll('#PurchaseTable [name^="items["]').forEach(function (el) {
+            try {
+                if (el.type === 'file') return;
+                const matches = el.name.match(/\[([^\]]*)\]/g);
+                if (!matches) return;
+                const path = matches.map(function (p) { return p.slice(1, -1); });
+                let cur = itemsObj;
+                for (let i = 0; i < path.length; i++) {
+                    const key = path[i];
+                    if (i === path.length - 1) {
+                        cur[key] = el.value;
+                    } else {
+                        if (typeof cur[key] !== 'object' || cur[key] === null) cur[key] = {};
+                        cur = cur[key];
+                    }
+                }
+                el.disabled = true;
+                collected++;
+            } catch (err) {
+                failed++;
+                console.error('[items_json] could not collapse field "' + (el && el.name) + '" — leaving it as a normal (undisabled) field so it still submits on its own:', err);
+            }
+        });
+        try {
+            document.getElementById('items_json').value = JSON.stringify(itemsObj);
+            console.log('[items_json] collapse complete: ' + collected + ' field(s) collapsed into items_json, ' + failed + ' field(s) skipped/left as individual fields.');
+        } catch (err) {
+            console.error('[items_json] FAILED to write the items_json hidden field — items_json will submit empty:', err);
+        }
     }
 
     // ================= ROW MANAGEMENT =================
@@ -1233,12 +1287,27 @@
         reader.readAsArrayBuffer(file);
     }
 
-    // Prevent double submit
-    document.querySelector('form').addEventListener('submit', function() {
-        const btn = this.querySelector('button[type="submit"]');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-    });
   });
+
+  // DIAGNOSTIC (mirrors edit.blade.php): this submit-listener registration
+  // sits OUTSIDE the $(document).ready(...) callback above, at the top level
+  // of this <script> tag, so it runs the instant the browser parses this
+  // line — it does NOT wait on, and is not blocked by, anything inside
+  // $(document).ready(...). The console.log at the end is intentional and
+  // should stay: if it is MISSING from the console on a fresh hard-refresh
+  // of this page, something earlier in this same <script> tag threw before
+  // reaching this line (check the console for the actual error) and the
+  // submit handler below was never attached at all.
+  try {
+      document.querySelector('form').addEventListener('submit', function() {
+          collectItemsJsonForSubmit();
+          const btn = this.querySelector('button[type="submit"]');
+          btn.disabled = true;
+          btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+      });
+      console.log('[items_json] submit listener attached successfully on page load.');
+  } catch (err) {
+      console.error('[items_json] FAILED to attach submit listener on page load:', err);
+  }
 </script>
 @endsection

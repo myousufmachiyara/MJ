@@ -39,6 +39,19 @@
       @csrf
       @method('PUT')
 
+      {{-- FIX (multipart body parts limit): on submit, collectItemsJsonForSubmit()
+           (defined below) packs every items[N][...] / items[N][parts][M][...]
+           field into this single JSON field and disables the individual inputs
+           so they aren't also sent as one multipart part per cell. A large
+           invoice (hundreds of items) was generating more multipart parts than
+           PHP's max_multipart_body_parts ini limit allows, causing PHP to
+           silently drop fields that appear later in the HTML than the cutoff —
+           this hidden field sits at the very top of the form so it is always
+           parsed regardless. Item image files still travel as real
+           items[N][image] file parts; see decodeItemsJsonPayload() in
+           PurchaseInvoiceController. --}}
+      <input type="hidden" name="items_json" id="items_json">
+
       @if ($errors->any())
         <div class="alert alert-danger">
           <ul class="mb-0">
@@ -54,16 +67,25 @@
           <strong>Warning:</strong> The following items have already been printed and will be permanently deleted:
           <br><code>{{ session('printed_delete_warning') }}</code>
           <br><br>
-          <form method="POST" action="{{ route('purchase_invoices.update', $purchaseInvoice->id) }}" enctype="multipart/form-data" id="confirm-delete-form">
-            @csrf @method('PUT')
-            <input type="hidden" name="confirm_delete_printed" value="1">
-            <button type="button" class="btn btn-danger" onclick="resubmitWithConfirm()">
-              Delete anyway and update invoice
-            </button>
-            <a href="{{ route('purchase_invoices.edit', $purchaseInvoice->id) }}" class="btn btn-secondary ms-2">
-              Go back and keep items
-            </a>
-          </form>
+          {{-- FIX: this used to be its own <form id="confirm-delete-form">...</form>
+               nested INSIDE #main-form. Browsers don't allow nested forms — the
+               inner <form> open tag gets silently dropped by the HTML parser, but
+               its closing </form> tag is still honored and ends up closing the
+               OUTER #main-form early (right here). Everything below this point in
+               the page — the items table, Currency card, Payment Method, and the
+               hidden net_amount input — ended up outside the real <form> in the
+               DOM, so none of it was submitted, causing "currency/net amount/
+               payment method field is required" errors whenever this warning was
+               shown. The button below never actually needed its own <form>:
+               resubmitWithConfirm() already submits #main-form directly and
+               appends confirm_delete_printed itself, so the wrapper is removed
+               entirely rather than nested. --}}
+          <button type="button" class="btn btn-danger" onclick="resubmitWithConfirm()">
+            Delete anyway and update invoice
+          </button>
+          <a href="{{ route('purchase_invoices.edit', $purchaseInvoice->id) }}" class="btn btn-secondary ms-2">
+            Go back and keep items
+          </a>
         </div>
       @endif
 
@@ -622,6 +644,62 @@ $(document).ready(function () {
         });
     }
 
+    // ===== ITEMS JSON SERIALIZATION (multipart body parts limit fix) =====
+    // Packs every items[N][field] / items[N][parts][M][field] input under
+    // #PurchaseTable into one JSON blob (#items_json) and disables those
+    // inputs so the browser doesn't ALSO send them as individual multipart
+    // parts. File inputs (item images) are left alone — a file can't be put
+    // inside JSON, so items[N][image] still travels as a real multipart part.
+    // Must run before ANY submission of #main-form, including the
+    // resubmitWithConfirm() path which calls form.submit() directly and so
+    // bypasses the form's 'submit' event listener entirely.
+    // DIAGNOSTIC INSTRUMENTATION: every field is now collected inside its own
+    // try/catch so ONE bad/unexpected field can't silently abort the whole
+    // collapse (previously: a single thrown error partway through the
+    // forEach meant items_json stayed empty AND none of the fields after the
+    // failure point got disabled, while fields processed before it still did
+    // — an all-or-nothing failure that was invisible unless you happened to
+    // be watching the console at the exact moment of submit, since a normal
+    // form submit navigates away and wipes the console log). The
+    // console.log/console.error calls below are intentional and should stay
+    // even after this is confirmed working — with DevTools "Preserve log"
+    // enabled they give a permanent, unambiguous record of whether this
+    // function ran and what it did on any given submit.
+    function collectItemsJsonForSubmit() {
+        const itemsObj = {};
+        let collected = 0;
+        let failed = 0;
+        document.querySelectorAll('#PurchaseTable [name^="items["]').forEach(function (el) {
+            try {
+                if (el.type === 'file') return;
+                const matches = el.name.match(/\[([^\]]*)\]/g);
+                if (!matches) return;
+                const path = matches.map(function (p) { return p.slice(1, -1); });
+                let cur = itemsObj;
+                for (let i = 0; i < path.length; i++) {
+                    const key = path[i];
+                    if (i === path.length - 1) {
+                        cur[key] = el.value;
+                    } else {
+                        if (typeof cur[key] !== 'object' || cur[key] === null) cur[key] = {};
+                        cur = cur[key];
+                    }
+                }
+                el.disabled = true;
+                collected++;
+            } catch (err) {
+                failed++;
+                console.error('[items_json] could not collapse field "' + (el && el.name) + '" — leaving it as a normal (undisabled) field so it still submits on its own:', err);
+            }
+        });
+        try {
+            document.getElementById('items_json').value = JSON.stringify(itemsObj);
+            console.log('[items_json] collapse complete: ' + collected + ' field(s) collapsed into items_json, ' + failed + ' field(s) skipped/left as individual fields.');
+        } catch (err) {
+            console.error('[items_json] FAILED to write the items_json hidden field — items_json will submit empty:', err);
+        }
+    }
+
     // ===== ROW INDEX MANAGEMENT =====
     function updateRowIndexes() {
         $('#PurchaseTable tr.item-row').each(function(i) {
@@ -760,32 +838,51 @@ $(document).ready(function () {
     }
 
     // ===== LOAD EXISTING ITEMS =====
+    // DIAGNOSTIC / RESILIENCE: each row is built inside its own try/catch.
+    // Previously, one bad item (unexpected/missing field in itemData) could
+    // throw and abort the ENTIRE forEach loop partway through — silently
+    // leaving the rest of the invoice's rows missing from the table (and,
+    // since $(document).ready() callbacks aren't guaranteed to keep the rest
+    // of this script block from continuing, this was a plausible source of
+    // the "everything downstream looks fine in the page source but the form
+    // behaves as if this never ran" symptom). Now a single bad row is
+    // logged and skipped instead of taking the other ~199 rows down with it.
+    let rowsBuilt = 0;
+    let rowsFailed = 0;
     existingItems.forEach(function(itemData, i) {
-        $('#PurchaseTable').append(buildItemRowHtml(i, itemData));
+        try {
+            $('#PurchaseTable').append(buildItemRowHtml(i, itemData));
 
-        const itemRow  = $('#PurchaseTable tr.item-row').last();
-        const partsRow = itemRow.next('.parts-row');
+            const itemRow  = $('#PurchaseTable tr.item-row').last();
+            const partsRow = itemRow.next('.parts-row');
 
-        if (itemData.parts && itemData.parts.length > 0) {
-            partsRow.show();
-            itemData.parts.forEach(function(partData, j) {
-                partsRow.find('.parts-table tbody').append(buildPartRowHtml(i, j, partData));
-            });
-        }
+            if (itemData.parts && itemData.parts.length > 0) {
+                partsRow.show();
+                itemData.parts.forEach(function(partData, j) {
+                    partsRow.find('.parts-table tbody').append(buildPartRowHtml(i, j, partData));
+                });
+            }
 
-        recalcItemGrossWeight(itemRow);
+            recalcItemGrossWeight(itemRow);
 
-        // Load product image if this item was linked to a product
-        if (!itemData.image_url && itemData.product_id) {
-            fetchAndShowImage(itemRow, itemData.product_id);
-        }
+            // Load product image if this item was linked to a product
+            if (!itemData.image_url && itemData.product_id) {
+                fetchAndShowImage(itemRow, itemData.product_id);
+            }
 
-        // Restore the subcategory dropdown (category is rendered pre-selected
-        // already; subcategory needs an AJAX fetch scoped to that category).
-        if (itemData.category_id) {
-            loadSubcategoryOptions(itemRow.find('.subcategory-select'), itemData.category_id, itemData.subcategory_id);
+            // Restore the subcategory dropdown (category is rendered pre-selected
+            // already; subcategory needs an AJAX fetch scoped to that category).
+            if (itemData.category_id) {
+                loadSubcategoryOptions(itemRow.find('.subcategory-select'), itemData.category_id, itemData.subcategory_id);
+            }
+
+            rowsBuilt++;
+        } catch (err) {
+            rowsFailed++;
+            console.error('[existingItems] failed to build row for item index ' + i + ' (id=' + (itemData && itemData.id) + '):', err, itemData);
         }
     });
+    console.log('[existingItems] built ' + rowsBuilt + ' of ' + existingItems.length + ' item row(s)' + (rowsFailed ? (', ' + rowsFailed + ' FAILED — see errors above') : '') + '.');
 
     calculateTotals();
 
@@ -1293,13 +1390,29 @@ function resubmitWithConfirm() {
     input.name  = 'confirm_delete_printed';
     input.value = '1';
     form.appendChild(input);
+    collectItemsJsonForSubmit(); // form.submit() below bypasses the 'submit' event listener, so this must run explicitly first
     form.submit();
 }
 
-document.getElementById('main-form').addEventListener('submit', function() {
-    const btn = this.querySelector('button[type="submit"]');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
-});
+// DIAGNOSTIC: this block sits OUTSIDE the $(document).ready(...) callback
+// above, at the top level of this <script> tag, so it runs the instant the
+// browser parses this line — it does NOT wait on, and is not blocked by,
+// anything inside $(document).ready(...) (including the loop that builds
+// the ~200 item rows). The console.log at the end is intentional and should
+// stay: if it is MISSING from the console on a fresh hard-refresh of this
+// page, something earlier in this same <script> tag threw before reaching
+// this line (check the console for the actual error, it will be the real
+// root cause) and the submit handler below was never attached at all.
+try {
+    document.getElementById('main-form').addEventListener('submit', function() {
+        collectItemsJsonForSubmit();
+        const btn = this.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+    });
+    console.log('[items_json] submit listener attached successfully on page load.');
+} catch (err) {
+    console.error('[items_json] FAILED to attach submit listener on page load:', err);
+}
 </script>
 @endsection

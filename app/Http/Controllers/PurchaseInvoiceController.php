@@ -109,7 +109,9 @@ class PurchaseInvoiceController extends Controller
 
     public function store(Request $request)
     {
+        $this->decodeItemsJsonPayload($request);
         $this->clearIrrelevantPaymentFields($request);
+        $this->logRequestDiagnostics($request, 'store');
         $this->validateInvoice($request);
 
         // FIX (duplicate invoice_no race): a double-click Save, or a slow
@@ -290,6 +292,9 @@ class PurchaseInvoiceController extends Controller
 
     public function update(Request $request, $id)
     {
+        $this->decodeItemsJsonPayload($request);
+        $this->logRequestDiagnostics($request, 'update:' . $id);
+
         $invoice = PurchaseInvoice::findOrFail($id);
 
         $incomingBarcodes  = collect($request->items)->pluck('barcode_number')->filter()->values();
@@ -1003,6 +1008,108 @@ class PurchaseInvoiceController extends Controller
         $next = ((int) $maxNo) + 1;
 
         return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * FIX (multipart body parts limit): a large invoice (hundreds of items,
+     * each ~20 form fields, some with several "parts" sub-rows of their own)
+     * generates far more multipart/form-data parts than PHP's
+     * max_multipart_body_parts ini limit allows (seen in production as
+     * "Multipart body parts limit exceeded 10020" on a 197-item invoice).
+     * Once that limit is hit, PHP silently stops parsing the rest of the
+     * request body, so any field appearing later in the HTML than the cutoff
+     * — currency, net_amount, payment_method, etc. — never reaches
+     * $request->all() at all, surfacing as "field is required" errors even
+     * though the user filled them in.
+     *
+     * The item rows now serialize themselves into a single hidden JSON field
+     * (items_json) on submit instead of one multipart part per cell, which
+     * cuts a 200-item invoice from several thousand parts down to a small
+     * constant number regardless of item count. Item image uploads still
+     * travel as real items[N][image] file parts (a file can't go inside
+     * JSON) — Laravel's Request::all() recursively merges the uploaded-file
+     * bag back into the decoded items array below, keyed by the same N, so
+     * every existing $request->items consumer (validateInvoice, createItems,
+     * the barcode-diffing in update()) needs no other changes.
+     *
+     * If items_json is missing or fails to decode (e.g. JS disabled, or an
+     * old cached page that predates this fix), this is a no-op and
+     * $request->items falls back to however PHP itself parsed the
+     * multipart body — the previous behavior.
+     */
+    private function decodeItemsJsonPayload(Request $request): void
+    {
+        $raw = $request->input('items_json');
+
+        if (!is_string($raw) || $raw === '') {
+            // DIAGNOSTIC: this is the state we've been trying to confirm or
+            // rule out from screenshots — logged here so it's a permanent,
+            // server-side fact instead of something that has to be caught
+            // live in DevTools. If this line appears in the log for a submit
+            // that SHOULD have gone through collectItemsJsonForSubmit() (i.e.
+            // the edit/create page's JS), the JSON collapse did not run/
+            // complete in the browser for that request — the request fell
+            // back to however PHP itself parsed the raw multipart body,
+            // which is exactly the failure mode that drops fields on a large
+            // invoice (see the class doc-comment above for why).
+            Log::warning('[PurchaseInvoice] items_json missing/empty — falling back to raw multipart items parsing', [
+                'url'             => $request->fullUrl(),
+                'items_count_raw' => is_array($request->input('items')) ? count($request->input('items')) : 0,
+                'max_input_vars'  => ini_get('max_input_vars'),
+            ]);
+            return;
+        }
+
+        $decoded = json_decode($raw, true);
+
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            $request->merge(['items' => $decoded]);
+            Log::info('[PurchaseInvoice] items_json decoded and merged successfully', [
+                'url'          => $request->fullUrl(),
+                'items_count'  => count($decoded),
+            ]);
+        } else {
+            // items_json was present but not valid JSON — also worth knowing
+            // about, since it means the field WAS submitted (so the browser
+            // JS did run) but something corrupted its content before submit.
+            Log::error('[PurchaseInvoice] items_json present but failed to decode', [
+                'url'        => $request->fullUrl(),
+                'json_error' => json_last_error_msg(),
+                'raw_length' => strlen($raw),
+            ]);
+        }
+    }
+
+    /**
+     * DIAGNOSTIC: logs, as plain server-side fact, exactly which top-level
+     * fields Laravel actually received on this request and whether the
+     * three fields that have been failing validation (currency, net_amount,
+     * payment_method) are among them. Call this right before
+     * validateInvoice() in store()/update(). This removes any ambiguity
+     * from browser screenshots/Network-tab evidence — if
+     * 'currency_present' etc. comes back false here, those fields were
+     * genuinely never parsed out of the request body by PHP (a
+     * multipart/max_input_vars cutoff), not a validation-rule quirk or a
+     * stale screenshot.
+     */
+    private function logRequestDiagnostics(Request $request, string $context): void
+    {
+        $all = $request->all();
+
+        Log::info("[PurchaseInvoice] request diagnostics ({$context})", [
+            'url'                 => $request->fullUrl(),
+            'top_level_field_count' => count($all),
+            'items_count'         => is_array($request->input('items')) ? count($request->input('items')) : 0,
+            'currency_present'    => $request->has('currency'),
+            'currency_value'      => $request->input('currency'),
+            'net_amount_present'  => $request->has('net_amount'),
+            'net_amount_value'    => $request->input('net_amount'),
+            'payment_method_present' => $request->has('payment_method'),
+            'payment_method_value'   => $request->input('payment_method'),
+            'items_json_present'  => $request->has('items_json') && $request->input('items_json') !== '',
+            'max_input_vars'      => ini_get('max_input_vars'),
+            'post_max_size'       => ini_get('post_max_size'),
+        ]);
     }
 
     private function createItems(
