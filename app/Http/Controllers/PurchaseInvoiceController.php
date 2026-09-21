@@ -374,12 +374,43 @@ class PurchaseInvoiceController extends Controller
 
             ]);
 
+            // SAFETY NET (data-loss guard): items/parts are hard-deleted below
+            // with no soft-delete column on either table, so if the incoming
+            // $request->items ever comes through empty/malformed (a client-side
+            // bug, a caching/deploy mismatch, whatever), the old rows are gone
+            // for good the instant this transaction commits — as just happened
+            // to Invoice #140 (~200 items wiped, replaced with 0). Capture the
+            // pre-delete count here so it can be compared against what
+            // createItems() actually produces, and refuse to commit — throwing
+            // rolls the whole transaction back, so the delete() calls below are
+            // undone too — rather than silently accepting a suspicious wipe.
+            $oldItemCount = $invoice->items()->count();
+
             foreach ($invoice->items as $oldItem) {
                 $oldItem->parts()->delete();
             }
             $invoice->items()->delete();
 
             [$totals] = $this->createItems($invoice, $request->items, $request, 1, preservePrinted: true);
+
+            $newItemCount = $invoice->items()->count();
+
+            if ($oldItemCount > 0 && $newItemCount === 0) {
+                Log::error('[PurchaseInvoice] REFUSING TO COMMIT — update would delete all existing items and save 0', [
+                    'invoice_id'        => $invoice->id,
+                    'invoice_no'        => $invoice->invoice_no,
+                    'old_item_count'    => $oldItemCount,
+                    'submitted_items_count' => is_array($request->items) ? count($request->items) : 0,
+                    'items_json_present'    => $request->has('items_json') && $request->input('items_json') !== '' && $request->input('items_json') !== null,
+                    'sample_first_item'     => is_array($request->items) ? (reset($request->items) ?: null) : null,
+                ]);
+
+                throw new \Exception(
+                    "Refusing to save: this update would delete all {$oldItemCount} existing item(s) on Invoice #{$invoice->invoice_no} " .
+                    "and save 0 new ones. Nothing was changed — the submitted item data was empty or unreadable. " .
+                    "See laravel.log for '[PurchaseInvoice] REFUSING TO COMMIT' for details."
+                );
+            }
 
             $calculatedNet    = $invoice->items()->sum('item_total');
             $calculatedNetAed = $request->currency === 'USD'
@@ -1063,6 +1094,22 @@ class PurchaseInvoiceController extends Controller
         $decoded = json_decode($raw, true);
 
         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            // FIX (empty-string FK columns): Laravel's built-in
+            // ConvertEmptyStringsToNull middleware normally turns every empty
+            // form field into null automatically, but it only runs against
+            // the ORIGINAL request body, earlier in the middleware pipeline —
+            // before this controller method ever executes. Data merged in
+            // here via $request->merge() never passes through it. The old
+            // raw-multipart parsing path got that null-conversion for free;
+            // this JSON-collapse path doesn't, so an empty <select> (e.g. no
+            // Category chosen) now arrives as the literal string '' instead
+            // of null — which MySQL's strict mode rejects for an integer
+            // column (seen in production as "Incorrect integer value: '' for
+            // column category_id"). Restore parity by applying the same
+            // empty-string-to-null conversion here, recursively, exactly as
+            // the middleware would have.
+            $decoded = $this->convertEmptyStringsToNullRecursive($decoded);
+
             $request->merge(['items' => $decoded]);
             Log::info('[PurchaseInvoice] items_json decoded and merged successfully', [
                 'url'          => $request->fullUrl(),
@@ -1078,6 +1125,28 @@ class PurchaseInvoiceController extends Controller
                 'raw_length' => strlen($raw),
             ]);
         }
+    }
+
+    /**
+     * Recursively converts every empty-string ('') leaf value in $data to
+     * null, mirroring Laravel's ConvertEmptyStringsToNull middleware — see
+     * decodeItemsJsonPayload() above for why that middleware doesn't apply
+     * to data merged in after it has already run. Used only on the decoded
+     * items_json payload, so it only ever touches item/part field values
+     * (strings, or nested item/part arrays) — never an UploadedFile object
+     * or anything else non-scalar/non-array.
+     */
+    private function convertEmptyStringsToNullRecursive(array $data): array
+    {
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $data[$key] = $this->convertEmptyStringsToNullRecursive($value);
+            } elseif ($value === '') {
+                $data[$key] = null;
+            }
+        }
+
+        return $data;
     }
 
     /**
@@ -1195,12 +1264,21 @@ class PurchaseInvoiceController extends Controller
                 $imagePath = $itemData['image']->store('purchase_invoice_items', 'public');
             }
 
+            // FIX (belt-and-suspenders alongside convertEmptyStringsToNullRecursive()
+            // in decodeItemsJsonPayload()): these are nullable integer FK
+            // columns, so an empty string here (no Category/Product chosen)
+            // must become null, never ''  — MySQL strict mode rejects '' for
+            // an int column. subcategory_id already guarded against this;
+            // category_id/product_id didn't, which is what caused the
+            // "Incorrect integer value: '' for column category_id" failure.
             $subcategoryId = !empty($itemData['subcategory_id']) ? (int) $itemData['subcategory_id'] : null;
+            $categoryId    = !empty($itemData['category_id'])    ? (int) $itemData['category_id']    : null;
+            $productId     = !empty($itemData['product_id'])     ? (int) $itemData['product_id']     : null;
 
             $invoiceItem = $invoice->items()->create([
                 'item_name'        => $itemData['item_name']        ?? null,
-                'product_id'       => $itemData['product_id']       ?? null,
-                'category_id'      => $itemData['category_id']      ?? null,
+                'product_id'       => $productId,
+                'category_id'      => $categoryId,
                 'subcategory_id'   => $subcategoryId,
                 'tray_no'          => $itemData['tray_no']           ?? null,
                 'image_path'       => $imagePath,
