@@ -34,7 +34,7 @@
             --label-w:   83mm;
             --label-h:   37mm;
             --unit-w:    41.5mm;
-            --barcode-w: 30mm; /* the physical max this half-tag can hold (unit is 41.5mm minus 1.8mm padding each side); pushed to the ceiling to give the barcode every fraction of a mm it can get */
+            --barcode-w: 18mm; /* the physical max this half-tag can hold (unit is 41.5mm minus 1.8mm padding each side); pushed to the ceiling to give the barcode every fraction of a mm it can get */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -279,8 +279,7 @@
         .unit-select-wrap input { width: 14px; height: 14px; cursor: pointer; }
 
         .unit-barcode {
-            width: 100%;
-            height:100%;
+            width: var(--barcode-w);
             flex-shrink: 0;
             display: block;
             gap: 0mm;
