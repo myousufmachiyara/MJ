@@ -289,12 +289,6 @@
             width: 100%;
             height: auto;
             display: block;
-            /* FIX (unscannable barcode): forces the browser/printer to keep
-               each bar's edges pixel-crisp instead of anti-aliasing them as
-               the SVG scales to fit --barcode-w. At the module widths this
-               18mm ceiling forces for a long barcode, any blur/soft edging
-               from scaling is often the difference between a scanner
-               locking on and not. */
             shape-rendering: crispEdges;
         }
         /* mirrored: right unit's barcode+cert hug the right edge instead
