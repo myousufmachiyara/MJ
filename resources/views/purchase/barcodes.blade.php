@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
     <style>
         :root {
             --ink:      #0a0a0a;
@@ -46,6 +47,17 @@
             min-height: 100vh;
         }
 
+        .qr-holder {
+            width: 14mm;
+            height: 14mm;
+            flex-shrink: 0;
+        }
+        .qr-holder svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+            shape-rendering: crispEdges;
+        }
         /* ── SCREEN-ONLY CONTROLS ── */
         .controls {
             background: var(--accent);
@@ -418,7 +430,7 @@
                     <div class="tag-cert">
                         <b><span class="cert-lbl">{{ $item->tray_no ?: '—' }}</span></b>
                     </div>
-                    <svg id="bc-{{ $item->id }}"></svg>
+                    <div class="qr-holder" id="qr-{{ $item->id }}"></div>
                     <div class="tag-cert">
                         <b><span class="cert-lbl">Cert#: {{ $item->certificate_no ?: '—' }}</span></b>
                     </div>
@@ -511,36 +523,21 @@
     // ===== render barcodes =====
     @foreach($invoice->items as $item)
     (function() {
-        const el      = document.getElementById('bc-{{ $item->id }}');
+        const el      = document.getElementById('qr-{{ $item->id }}');
         const barcode = @json($item->barcode_number);
         if (el && barcode) {
             try {
-                // Use CODE128C (numeric-pair packing, ~2x denser) whenever the
-                // ENTIRE barcode is digits with an even length — this is the
-                // single biggest lever for fitting more data into the fixed
-                // 18mm width. CODE128C requires an even digit count; anything
-                // else (letters, odd-length numerics) falls back to plain
-                // CODE128, which still auto-switches to subset C internally
-                // for any numeric run it finds, just not as aggressively.
-                const isPureEvenNumeric = /^\d+$/.test(barcode) && barcode.length % 2 === 0;
-
-                JsBarcode(el, barcode, {
-                    format:       isPureEvenNumeric ? 'CODE128C' : 'CODE128',
-                    width:        2,
-                    height:       45,
-                    displayValue: false,
-                    marginTop:    0,
-                    marginBottom: 0,
-                    marginLeft:   6,
-                    marginRight:  6,
-                    background:   '#ffffff',
-                    lineColor:    '#0a0a0a',
-                });
+                // typeNumber 0 = auto-size to fit data; ecc 'M' = balanced
+                // error correction (good default for print/scan robustness)
+                const qr = qrcode(0, 'M');
+                qr.addData(barcode);
+                qr.make();
+                el.innerHTML = qr.createSvgTag({ scalable: true, margin: 1 });
             } catch (e) {
-                el.parentElement.innerHTML = '<div style="font-size:8px;color:#c00;text-align:center;">Invalid barcode</div>';
+                el.innerHTML = '<div style="font-size:6px;color:#c00;">QR error</div>';
             }
         } else if (el) {
-            el.parentElement.innerHTML = '<div style="font-size:7px;color:#bbb;text-align:center;font-family:monospace;">No barcode</div>';
+            el.innerHTML = '<div style="font-size:6px;color:#bbb;">No code</div>';
         }
     })();
     @endforeach
