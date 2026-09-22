@@ -280,6 +280,7 @@
 
         .unit-barcode {
             width: var(--barcode-w);
+            height: 20mm;
             flex-shrink: 0;
             display: block;
             gap: 0mm;
