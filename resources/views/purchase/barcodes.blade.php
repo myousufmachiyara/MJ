@@ -158,6 +158,19 @@
         }
         .sel-count b { color: var(--ink); }
 
+        /* ── WORKFLOW NOTE ── */
+        .workflow-note {
+            margin: 12px 32px 0;
+            background: #fff8ec;
+            border: 1px solid #e8d9b5;
+            border-left: 4px solid #d6a03a;
+            padding: 10px 16px;
+            font-size: 12.5px;
+            color: #5c4a1f;
+            border-radius: 3px;
+        }
+        .workflow-note b { color: #3d3113; }
+
         /* ── PAGE ── */
         .page-wrap { padding: 20px 32px 48px; }
 
@@ -339,7 +352,7 @@
             * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             @page { size: 83mm 37mm; margin: 0; }
             body { background: #fff; }
-            .controls, .selection-bar { display: none !important; }
+            .controls, .workflow-note, .selection-bar { display: none !important; }
             .page-wrap { padding: 0; }
             .label-sheet { gap: 0; }
             .label-tag { border: none; margin: 0; page-break-after: always; break-after: page; }
@@ -381,6 +394,13 @@
     <span class="sel-count"><b id="selCount">{{ $invoice->items->count() }}</b> of {{ $invoice->items->count() }} selected</span>
 </div>
 
+<div class="workflow-note">
+    <b>How this label prints:</b> each 83×37mm sheet holds TWO items — one complete tag on the left half, one complete tag
+    on the right half. Each half has (top to bottom) the item #, gold/diamond/stone, a blank gap, then the barcode and
+    certificate #. Tear the sheet down the middle to separate the two items' tags, then fold each one at its blank gap
+    through a ring and press it to itself. Load your labels as usual and click <b>“Print Selected.”</b> Uncheck any items
+    you don't want to print in this batch — an unchecked item's half prints blank rather than shifting the layout.
+</div>
 @endif
 
 {{-- ── PAGE ── --}}
