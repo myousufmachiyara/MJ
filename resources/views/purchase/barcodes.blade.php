@@ -279,8 +279,8 @@
         .unit-select-wrap input { width: 14px; height: 14px; cursor: pointer; }
 
         .unit-barcode {
-            width: var(--barcode-w);
-            height: 20mm;
+            width: 100%;
+            height:100%;
             flex-shrink: 0;
             display: block;
             gap: 0mm;
