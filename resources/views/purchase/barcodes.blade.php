@@ -7,7 +7,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
     <style>
         :root {
             --ink:      #0a0a0a;
@@ -35,7 +34,7 @@
             --label-w:   83mm;
             --label-h:   37mm;
             --unit-w:    41.5mm;
-            --barcode-w: 18mm; /* the physical max this half-tag can hold (unit is 41.5mm minus 1.8mm padding each side); pushed to the ceiling to give the barcode every fraction of a mm it can get */
+            --barcode-w: 15mm; /* the physical max this half-tag can hold (unit is 41.5mm minus 1.8mm padding each side); pushed to the ceiling to give the barcode every fraction of a mm it can get */
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -287,7 +286,14 @@
         }
         .unit-barcode svg {
             width: 100%;
+            height: auto;
             display: block;
+            /* FIX (unscannable barcode): forces the browser/printer to keep
+               each bar's edges pixel-crisp instead of anti-aliasing them as
+               the SVG scales to fit --barcode-w. At the module widths this
+               18mm ceiling forces for a long barcode, any blur/soft edging
+               from scaling is often the difference between a scanner
+               locking on and not. */
             shape-rendering: crispEdges;
         }
         /* mirrored: right unit's barcode+cert hug the right edge instead
@@ -509,23 +515,42 @@
         const barcode = @json($item->barcode_number);
         if (el && barcode) {
             try {
-            const isPureEvenNumeric = /^\d+$/.test(barcode) && barcode.length % 2 === 0;
-
-            JsBarcode(el, barcode, {
-                format:       isPureEvenNumeric ? 'CODE128C' : 'CODE128',
-                width:        2,
-                height:       170,       // taller, then let mm-based CSS height constrain it
-                displayValue: false,
-                marginTop:    0,
-                marginBottom: 0,
-                marginLeft:   6,
-                marginRight:  6,
-                background:   '#ffffff',
-                lineColor:    '#0a0a0a',
-            });
-                el.setAttribute('width', '18mm');
-                el.removeAttribute('height');
-
+                JsBarcode(el, barcode, {
+                    format:       'CODE128',
+                    // FIX (unscannable barcode), two changes here:
+                    // 1. width bumped from 1.2 -> 2 (an integer). JsBarcode
+                    //    draws each bar this many SVG px wide; a fractional
+                    //    value (1.2) means bar edges land on fractional
+                    //    pixels, which the browser then anti-aliases/blurs
+                    //    when the SVG is scaled to fit --barcode-w. Integer
+                    //    widths keep every bar edge crisp through that scale.
+                    // 2. marginLeft/marginRight raised from 0 -> 10. A
+                    //    barcode needs a blank "quiet zone" on each side for
+                    //    a scanner to find where it starts/stops — at 0
+                    //    there was none at all, which on its own can be
+                    //    enough to make an otherwise-fine barcode unreadable.
+                    // Because --barcode-w scales the whole SVG to a fixed physical
+                    // width regardless of these pixel values, this quiet zone
+                    // is reserved as a proportion of that 18mm, not extra space
+                    // on top of it — some of the already-tight width now goes
+                    // to margin instead of bars. That's an unavoidable trade:
+                    // without it most scanners can't lock on at all. Note also
+                    // that at 18mm, a long barcode (12+ characters, e.g. the
+                    // legacy MJT-/MJ- format) is right at or below what a
+                    // typical label printer can resolve reliably — this change
+                    // gets it as scannable as this physical width allows, but
+                    // shorter barcode text (e.g. the newer {code}-00001 codes)
+                    // will scan more reliably than the long legacy ones.
+                    width:        2,
+                    height:       45,
+                    displayValue: false,
+                    marginTop:    0,
+                    marginBottom: 0,
+                    marginLeft:   10,
+                    marginRight:  10,
+                    background:   '#ffffff',
+                    lineColor:    '#0a0a0a',
+                });
             } catch (e) {
                 el.parentElement.innerHTML = '<div style="font-size:8px;color:#c00;text-align:center;">Invalid barcode</div>';
             }
