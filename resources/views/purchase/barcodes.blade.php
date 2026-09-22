@@ -158,6 +158,19 @@
         }
         .sel-count b { color: var(--ink); }
 
+        /* ── WORKFLOW NOTE ── */
+        .workflow-note {
+            margin: 12px 32px 0;
+            background: #fff8ec;
+            border: 1px solid #e8d9b5;
+            border-left: 4px solid #d6a03a;
+            padding: 10px 16px;
+            font-size: 12.5px;
+            color: #5c4a1f;
+            border-radius: 3px;
+        }
+        .workflow-note b { color: #3d3113; }
+
         /* ── PAGE ── */
         .page-wrap { padding: 20px 32px 48px; }
 
@@ -380,6 +393,8 @@
     <button type="button" class="sel-btn" onclick="selectAll(false)">Select None</button>
     <span class="sel-count"><b id="selCount">{{ $invoice->items->count() }}</b> of {{ $invoice->items->count() }} selected</span>
 </div>
+
+@endif
 
 {{-- ── PAGE ── --}}
 <div class="page-wrap">
