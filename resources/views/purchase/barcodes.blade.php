@@ -515,32 +515,17 @@
         const barcode = @json($item->barcode_number);
         if (el && barcode) {
             try {
+                // Use CODE128C (numeric-pair packing, ~2x denser) whenever the
+                // ENTIRE barcode is digits with an even length — this is the
+                // single biggest lever for fitting more data into the fixed
+                // 18mm width. CODE128C requires an even digit count; anything
+                // else (letters, odd-length numerics) falls back to plain
+                // CODE128, which still auto-switches to subset C internally
+                // for any numeric run it finds, just not as aggressively.
+                const isPureEvenNumeric = /^\d+$/.test(barcode) && barcode.length % 2 === 0;
+
                 JsBarcode(el, barcode, {
-                    format:       'CODE128',
-                    // FIX (unscannable barcode), two changes here:
-                    // 1. width bumped from 1.2 -> 2 (an integer). JsBarcode
-                    //    draws each bar this many SVG px wide; a fractional
-                    //    value (1.2) means bar edges land on fractional
-                    //    pixels, which the browser then anti-aliases/blurs
-                    //    when the SVG is scaled to fit --barcode-w. Integer
-                    //    widths keep every bar edge crisp through that scale.
-                    // 2. marginLeft/marginRight raised from 0 -> 10. A
-                    //    barcode needs a blank "quiet zone" on each side for
-                    //    a scanner to find where it starts/stops — at 0
-                    //    there was none at all, which on its own can be
-                    //    enough to make an otherwise-fine barcode unreadable.
-                    // Because --barcode-w scales the whole SVG to a fixed physical
-                    // width regardless of these pixel values, this quiet zone
-                    // is reserved as a proportion of that 18mm, not extra space
-                    // on top of it — some of the already-tight width now goes
-                    // to margin instead of bars. That's an unavoidable trade:
-                    // without it most scanners can't lock on at all. Note also
-                    // that at 18mm, a long barcode (12+ characters, e.g. the
-                    // legacy MJT-/MJ- format) is right at or below what a
-                    // typical label printer can resolve reliably — this change
-                    // gets it as scannable as this physical width allows, but
-                    // shorter barcode text (e.g. the newer {code}-00001 codes)
-                    // will scan more reliably than the long legacy ones.
+                    format:       isPureEvenNumeric ? 'CODE128C' : 'CODE128',
                     width:        2,
                     height:       45,
                     displayValue: false,
