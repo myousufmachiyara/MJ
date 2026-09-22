@@ -47,17 +47,6 @@
             min-height: 100vh;
         }
 
-        .qr-holder {
-            width: 14mm;
-            height: 14mm;
-            flex-shrink: 0;
-        }
-        .qr-holder svg {
-            width: 100%;
-            height: 100%;
-            display: block;
-            shape-rendering: crispEdges;
-        }
         /* ── SCREEN-ONLY CONTROLS ── */
         .controls {
             background: var(--accent);
@@ -430,7 +419,7 @@
                     <div class="tag-cert">
                         <b><span class="cert-lbl">{{ $item->tray_no ?: '—' }}</span></b>
                     </div>
-                    <div class="qr-holder" id="qr-{{ $item->id }}"></div>
+                    <svg id="bc-{{ $item->id }}"></svg>
                     <div class="tag-cert">
                         <b><span class="cert-lbl">Cert#: {{ $item->certificate_no ?: '—' }}</span></b>
                     </div>
@@ -523,21 +512,32 @@
     // ===== render barcodes =====
     @foreach($invoice->items as $item)
     (function() {
-        const el      = document.getElementById('qr-{{ $item->id }}');
+        const el      = document.getElementById('bc-{{ $item->id }}');
         const barcode = @json($item->barcode_number);
         if (el && barcode) {
             try {
-                // typeNumber 0 = auto-size to fit data; ecc 'M' = balanced
-                // error correction (good default for print/scan robustness)
-                const qr = qrcode(0, 'M');
-                qr.addData(barcode);
-                qr.make();
-                el.innerHTML = qr.createSvgTag({ scalable: true, margin: 1 });
+            const isPureEvenNumeric = /^\d+$/.test(barcode) && barcode.length % 2 === 0;
+
+            JsBarcode(el, barcode, {
+                format:       isPureEvenNumeric ? 'CODE128C' : 'CODE128',
+                width:        2,
+                height:       170,       // taller, then let mm-based CSS height constrain it
+                displayValue: false,
+                marginTop:    0,
+                marginBottom: 0,
+                marginLeft:   6,
+                marginRight:  6,
+                background:   '#ffffff',
+                lineColor:    '#0a0a0a',
+            });
+                el.setAttribute('width', '18mm');
+                el.removeAttribute('height');
+
             } catch (e) {
-                el.innerHTML = '<div style="font-size:6px;color:#c00;">QR error</div>';
+                el.parentElement.innerHTML = '<div style="font-size:8px;color:#c00;text-align:center;">Invalid barcode</div>';
             }
         } else if (el) {
-            el.innerHTML = '<div style="font-size:6px;color:#bbb;">No code</div>';
+            el.parentElement.innerHTML = '<div style="font-size:7px;color:#bbb;text-align:center;font-family:monospace;">No barcode</div>';
         }
     })();
     @endforeach
