@@ -364,7 +364,7 @@
             transform: translate(0,0) !important;
         }
         .unit-barcode svg{
-            width: 72px;
+            width: 100%;
             height: 20px;
         }
 
