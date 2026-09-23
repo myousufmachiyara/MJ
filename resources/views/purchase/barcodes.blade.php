@@ -364,8 +364,8 @@
             transform: translate(0,0) !important;
         }
         .unit-barcode rect{
-            height: 20px !important;
-            width: 72px !important;
+            height: 20 !important;
+            width: 72 !important;
         }
     </style>
 </head>
