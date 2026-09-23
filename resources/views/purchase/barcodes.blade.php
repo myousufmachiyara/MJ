@@ -360,6 +360,9 @@
             .unit-index, .unit-select-wrap { display: none !important; }
             .unit + .unit { border-left: none; } /* screen-only guide, nothing to print here */
         }
+        g{
+            transform: translate(0,0);
+        }
     </style>
 </head>
 <body>
