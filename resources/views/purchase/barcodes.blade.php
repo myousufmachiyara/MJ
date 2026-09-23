@@ -579,7 +579,7 @@
                     // shorter barcode text (e.g. the newer {code}-00001 codes)
                     // will scan more reliably than the long legacy ones.
                     width:        2,
-                    height:       60,
+                    height:       30,
                     displayValue: false,
                     marginTop:    0,
                     marginBottom: 0,
