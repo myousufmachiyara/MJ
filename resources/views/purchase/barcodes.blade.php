@@ -244,7 +244,7 @@
             align-items: flex-end;
             text-align: right;
             margin-left: auto;
-            margin-right: 0;
+            margin-right: 2px;
             width: fit-content;
         }
         .unit-info .tag-no {
