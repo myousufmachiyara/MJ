@@ -360,6 +360,14 @@
             .unit-index, .unit-select-wrap { display: none !important; }
             .unit + .unit { border-left: none; } /* screen-only guide, nothing to print here */
         }
+        g {
+            transform: inherit;
+        }
+        .unit-barcode svg{
+            width: 72px;
+            height: 20px;
+        }
+
     </style>
 </head>
 <body>
