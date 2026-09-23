@@ -269,7 +269,7 @@
            what you fold through a ring and press it to itself */
         .unit-fold {
             flex: 1;
-            min-height: 3mm;
+            min-height: 1mm;
             position: relative;
         }
         .unit-index {
@@ -435,11 +435,9 @@
                 </div>
 
                 <div class="unit-barcode">
-                    <div class="tag-cert">
-                        <b><span class="cert-lbl">{{ $item->tray_no ?: '—' }}</span></b>
-                    </div>
                     <svg id="bc-{{ $item->id }}"></svg>
                     <div class="tag-cert">
+                        <b><span class="cert-lbl">{{ $item->tray_no ?: '—' }}</span></b>
                         <b><span class="cert-lbl">Cert#: {{ $item->certificate_no ?: '—' }}</span></b>
                     </div>
                 </div>
