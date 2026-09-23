@@ -566,8 +566,8 @@
                     displayValue: false,
                     marginTop:    0,
                     marginBottom: 0,
-                    marginLeft:   10,
-                    marginRight:  6,
+                    marginLeft:   6,
+                    marginRight:  10,
                     background:   '#ffffff',
                     lineColor:    '#0a0a0a',
                 });
