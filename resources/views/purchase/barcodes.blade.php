@@ -316,7 +316,7 @@
            right-alignment regardless of the parent's own flex settings. */
         .unit:nth-child(2) .unit-barcode {
             margin-left: auto;
-            margin-right: 0;
+            margin-right: 2px;
             margin-bottom: 25mm;
         }
         .tag-cert {
@@ -328,7 +328,7 @@
             align-items: flex-end;
             width: fit-content;
             margin-left: auto;
-            margin-right: 0;
+            margin-right: 2px;
         }
         .tag-cert .cert-lbl {
             font-size: 1.5mm;
