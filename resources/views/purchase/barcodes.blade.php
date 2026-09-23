@@ -269,7 +269,7 @@
            what you fold through a ring and press it to itself */
         .unit-fold {
             flex: 1;
-            min-height: 3mm;
+            min-height: 1mm;
             position: relative;
         }
         .unit-index {
