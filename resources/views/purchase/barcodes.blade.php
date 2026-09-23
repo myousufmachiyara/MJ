@@ -561,7 +561,7 @@
                     // gets it as scannable as this physical width allows, but
                     // shorter barcode text (e.g. the newer {code}-00001 codes)
                     // will scan more reliably than the long legacy ones.
-                    width:        5,
+                    width:        10,
                     height:       60,
                     displayValue: false,
                     marginTop:    0,
