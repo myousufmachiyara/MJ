@@ -363,6 +363,10 @@
         g{
             transform: translate(0,0);
         }
+        .unit-barcode rect{
+            width: 72px;
+            height: 20px;
+        }
     </style>
 </head>
 <body>
