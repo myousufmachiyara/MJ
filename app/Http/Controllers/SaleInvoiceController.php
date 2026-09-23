@@ -65,6 +65,38 @@ class SaleInvoiceController extends Controller
             return response()->json(['success' => false, 'message' => 'No barcode provided.'], 422);
         }
 
+        // FIX (unscannable long barcodes): printed purchase labels
+        // (purchase/barcodes.blade.php) now encode a short, purely-numeric
+        // surrogate in the barcode SYMBOL itself — the item's own id,
+        // zero-padded to 6 digits (see
+        // PurchaseInvoiceItem::getScanCodeAttribute()) — instead of the
+        // full barcode_number text, because barcode_number can run
+        // 10-14+ characters once a subcategory code is involved, which is
+        // too dense to scan reliably at the label's fixed (12mm) barcode
+        // width. barcode_number itself is completely unchanged everywhere
+        // else (stored, displayed, on certificates) — this only decides
+        // how a SCAN is looked up.
+        //
+        // Every barcode_number format this app generates — legacy
+        // "MJ-…"/"MJT-…" and the newer "{SubcategoryCode}-00001" — always
+        // contains a letter or a dash, so a scan that comes in as pure
+        // digits can only ever be one of these short surrogate codes, and
+        // can never collide with a manually-typed barcode_number. Typing a
+        // real barcode_number by hand still works exactly as before, via
+        // the lookups further down.
+        if (ctype_digit($barcode)) {
+            $purchaseItem = PurchaseInvoiceItem::with('parts')->find((int) $barcode);
+
+            if ($purchaseItem) {
+                return $this->purchaseItemScanResponse($purchaseItem);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Scanned label not recognised (item #' . $barcode . ' not found — it may have been deleted).',
+            ], 404);
+        }
+
         $saleItem = SaleInvoiceItem::with('parts')
             ->where('barcode_number', $barcode)
             ->latest()
@@ -127,39 +159,50 @@ class SaleInvoiceController extends Controller
             }
         }
 
-        $purchaseItem = \App\Models\PurchaseInvoiceItem::with('parts')
+        $purchaseItem = PurchaseInvoiceItem::with('parts')
             ->where('barcode_number', $barcode)
             ->latest()
             ->first();
 
         if ($purchaseItem) {
-            return response()->json([
-                'success'          => true,
-                'source'           => 'purchase',
-                'barcode_number'   => $purchaseItem->barcode_number,
-                'item_name'        => $purchaseItem->item_name,
-                'item_description' => $purchaseItem->item_description,
-                'purity'           => $purchaseItem->purity,
-                'gross_weight'     => $purchaseItem->gross_weight,
-                'making_rate'      => $purchaseItem->making_rate,
-                'material_type'    => $purchaseItem->material_type,
-                'vat_percent'      => $purchaseItem->vat_percent,
-                'parts'            => $purchaseItem->parts->map(fn($p) => [
-                    'item_name'        => $p->item_name,
-                    'part_description' => $p->part_description,
-                    'qty'              => $p->qty,
-                    'rate'             => $p->rate,
-                    'stone_qty'        => $p->stone_qty,
-                    'stone_rate'       => $p->stone_rate,
-                    'total'            => $p->total,
-                ])->values()->toArray(),
-            ]);
+            return $this->purchaseItemScanResponse($purchaseItem);
         }
 
         return response()->json([
             'success' => false,
             'message' => 'Barcode "' . $barcode . '" not found in any record.',
         ], 404);
+    }
+
+    /**
+     * Shared JSON shape for a purchase-item scan result. Used by both the
+     * short numeric-surrogate fast path and the legacy barcode_number
+     * match above, so the two lookup routes can never drift into
+     * returning different fields for what is otherwise the same item.
+     */
+    private function purchaseItemScanResponse(PurchaseInvoiceItem $purchaseItem)
+    {
+        return response()->json([
+            'success'          => true,
+            'source'           => 'purchase',
+            'barcode_number'   => $purchaseItem->barcode_number,
+            'item_name'        => $purchaseItem->item_name,
+            'item_description' => $purchaseItem->item_description,
+            'purity'           => $purchaseItem->purity,
+            'gross_weight'     => $purchaseItem->gross_weight,
+            'making_rate'      => $purchaseItem->making_rate,
+            'material_type'    => $purchaseItem->material_type,
+            'vat_percent'      => $purchaseItem->vat_percent,
+            'parts'            => $purchaseItem->parts->map(fn($p) => [
+                'item_name'        => $p->item_name,
+                'part_description' => $p->part_description,
+                'qty'              => $p->qty,
+                'rate'             => $p->rate,
+                'stone_qty'        => $p->stone_qty,
+                'stone_rate'       => $p->stone_rate,
+                'total'            => $p->total,
+            ])->values()->toArray(),
+        ]);
     }
 
     // =========================================================================

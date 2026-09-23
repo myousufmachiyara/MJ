@@ -532,7 +532,24 @@
     @foreach($invoice->items as $item)
     (function() {
         const el      = document.getElementById('bc-{{ $item->id }}');
-        const barcode = @json($item->barcode_number);
+        // FIX (unscannable barcode): the SYMBOL now encodes a short numeric
+        // surrogate (this item's id, zero-padded — see
+        // PurchaseInvoiceItem::getScanCodeAttribute()) instead of the full
+        // barcode_number string. The printed tag-no text above (the
+        // {{ $item->barcode_number }} in .tag-no, and the tray/cert lines
+        // via $item->tray_no / $item->certificate_no) is completely
+        // unchanged — only what's inside the bars is shorter. At only
+        // --barcode-w: 12mm to work with, the full barcode_number (which
+        // can run 10-14+ characters once a subcategory code is involved,
+        // e.g. "EDWN-18K-00072") needs far more bar-modules than this
+        // width can resolve on a 203dpi label printer. A 6-digit numeric
+        // surrogate needs roughly a third as many modules — and CODE128
+        // encodes an all-digit string in its compact Code Set C (2 digits
+        // per bar-group) automatically, shrinking it further — giving the
+        // scanner a realistic chance at this label's fixed width.
+        // SaleInvoiceController::scanBarcode() resolves this short code
+        // back to the full item record when a barcode is scanned.
+        const barcode = @json($item->scan_code);
         if (el && barcode) {
             try {
                 JsBarcode(el, barcode, {
@@ -561,7 +578,7 @@
                     // gets it as scannable as this physical width allows, but
                     // shorter barcode text (e.g. the newer {code}-00001 codes)
                     // will scan more reliably than the long legacy ones.
-                    width:        10,
+                    width:        2,
                     height:       60,
                     displayValue: false,
                     marginTop:    0,

@@ -165,4 +165,37 @@ class PurchaseInvoiceItem extends Model
     {
         return (float) $this->parts->sum('stone_qty');
     }
+
+    /**
+     * FIX (unscannable barcode): short, purely-numeric surrogate encoded
+     * in the printed barcode SYMBOL (purchase/barcodes.blade.php) instead
+     * of the full barcode_number string.
+     *
+     * barcode_number can run 10-14+ characters once a subcategory code is
+     * involved (e.g. "EDWN-18K-00072"), which is too dense for a CODE128
+     * symbol to render reliably inside the label's fixed 18mm-wide
+     * barcode area — module width drops below what most scanners (and
+     * the printer's own dot pitch) can resolve. This does NOT change
+     * barcode_number itself, or anything displayed/stored/certified
+     * under that number anywhere else in the app — it only supplies a
+     * shorter value for the barcode symbol to encode.
+     *
+     * It's simply this item's own primary key, zero-padded to 6 digits:
+     *   - already unique, already exists — no new column needed.
+     *   - pure digits, so CODE128 encodes it in the compact Code Set C
+     *     (2 digits per bar-group) instead of Code Set B, roughly
+     *     HALVING the bar count versus the original alphanumeric
+     *     barcode_number for the same character count, on top of the
+     *     length reduction itself.
+     *   - can never collide with a manually-typed barcode_number: every
+     *     format this app generates (MJ-…, MJT-…, {SubcategoryCode}-00001)
+     *     always contains a letter or a dash, never pure digits — so
+     *     SaleInvoiceController::scanBarcode() can safely tell a scanned
+     *     surrogate code apart from a typed barcode_number just by
+     *     checking "is this all digits?".
+     */
+    public function getScanCodeAttribute(): string
+    {
+        return str_pad((string) $this->id, 6, '0', STR_PAD_LEFT);
+    }
 }
