@@ -298,7 +298,7 @@
             gap: 0mm;
         }
         .unit-barcode svg {
-            width: 100%;
+            width: auto;
             height: auto;
             display: block;
             /* FIX (unscannable barcode): forces the browser/printer to keep
