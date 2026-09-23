@@ -361,7 +361,7 @@
             .unit + .unit { border-left: none; } /* screen-only guide, nothing to print here */
         }
         g {
-            transform: inherit;
+            transform: translate(0,0) !important;
         }
         .unit-barcode svg{
             width: 72px;
