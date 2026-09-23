@@ -246,12 +246,6 @@
             margin-left: auto;
             margin-right: 2px;
             width: fit-content;
-            /* FIX (cert# alignment): see the .unit:nth-child(2) .unit-barcode
-               comment below — this block now visually renders LAST (bottom)
-               for the right-hand unit via `order`, instead of relying on a
-               hardcoded margin-bottom on the barcode block to fake that
-               position. */
-            order: 3;
         }
         .unit-info .tag-no {
             font-weight: 700;
@@ -277,12 +271,6 @@
             flex: 1;
             min-height: 1mm;
             position: relative;
-        }
-        .unit:nth-child(2) .unit-fold {
-            /* FIX (cert# alignment): keeps its place between the barcode
-               (now first) and the info block (now last) for the right unit —
-               see the .unit:nth-child(2) .unit-barcode comment below. */
-            order: 2;
         }
         .unit-index {
             position: absolute;
@@ -329,29 +317,7 @@
         .unit:nth-child(2) .unit-barcode {
             margin-left: auto;
             margin-right: 2px;
-            /* FIX (cert# out of alignment): this used to carry a hardcoded
-               `margin-bottom: 25mm` as a trick to shrink .unit-fold
-               (flex:1, the block above absorbs whatever space is left) so
-               this block would visually land near the TOP of the unit
-               instead of the bottom, faking the "mirrored" layout described
-               above without actually reordering anything.
-               That 25mm number was tuned for the OLD barcode rendering
-               (JsBarcode width:2/height:60 inside a narrower --barcode-w).
-               Now that the barcode has been resized (width:1/height:20,
-               --barcode-w:20mm — left untouched here, per instruction not
-               to touch the barcode generation itself) its rendered height
-               is different, so that same fixed 25mm margin no longer lines
-               up: it was pushing this whole block (barcode AND the
-               certificate # text inside it) down far enough to overflow
-               past the label's bottom edge, which is what was cutting off/
-               misaligning the Cert# line on the right-hand tag.
-               Fixed properly instead of re-tuning another magic number:
-               `order` now reorders the three stacked blocks for real
-               (barcode first/top, fold spacer in the middle, item-info
-               last/bottom — see the order:2/order:3 rules above), so this
-               block's position no longer depends on guessing a margin to
-               match whatever height the barcode happens to render at. */
-            order: 1;
+            margin-bottom: 25mm;
         }
         .tag-cert {
             display: flex;
