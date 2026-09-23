@@ -363,10 +363,6 @@
         g {
             transform: translate(0,0) !important;
         }
-        .unit-barcode svg{
-            width: 100%;
-            height: 20px;
-        }
 
     </style>
 </head>
