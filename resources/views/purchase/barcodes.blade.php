@@ -213,7 +213,7 @@
                bottom padding here reserves a little breathing room for BOTH
                halves uniformly, without changing the overall stacked
                item-info/fold/barcode structure. */
-            padding: 0mm 1.9mm 0mm;
+            padding: 0mm 1.8mm 2mm;
             font-family: var(--mono);
         }
         /* soft guide down the middle, screen only — this is where you tear
@@ -298,7 +298,7 @@
             gap: 0mm;
         }
         .unit-barcode svg {
-            width: 65%;
+            width: 100%;
             height: auto;
             display: block;
             /* FIX (unscannable barcode): forces the browser/printer to keep
