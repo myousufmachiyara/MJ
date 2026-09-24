@@ -592,7 +592,7 @@
                 });
                 el.setAttribute('viewBox', '0 0 70 20');
                 el.setAttribute('height', '20');
-                el.setAttribute('width', '70');
+                el.setAttribute('width', '60');
                 // el.setAttribute('viewBox', `0 0 ${el.getBBox().width} ${el.getBBox().height}`);
             } catch (e) {
                 el.parentElement.innerHTML = '<div style="font-size:8px;color:#c00;text-align:center;">Invalid barcode</div>';
