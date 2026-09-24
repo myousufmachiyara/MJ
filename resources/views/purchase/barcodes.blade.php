@@ -330,7 +330,7 @@
             margin-right: 5px;
         }
         .tag-cert .cert-lbl {
-            font-size: 1.5mm;
+            font-size: 2mm;
             color: #000000;
             white-space: nowrap;
         }
