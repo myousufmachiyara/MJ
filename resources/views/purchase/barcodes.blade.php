@@ -330,6 +330,11 @@
             margin-right: 5px;
         }
         .tag-cert .cert-lbl {
+            font-size: 1.7mm;
+            color: #000000;
+            white-space: nowrap;
+        }
+        .tag-cert .try-lbl {
             font-size: 2mm;
             color: #000000;
             white-space: nowrap;
@@ -440,7 +445,7 @@
 
                 <div class="unit-barcode">
                     <div class="tag-cert">
-                        <b><span class="cert-lbl">{{ $item->tray_no ?: '—' }}</span></b>
+                        <b><span class="try-lbl">{{ $item->tray_no ?: '—' }}</span></b>
                     </div>
                     <svg id="bc-{{ $item->id }}"></svg>
                     <div class="tag-cert">
