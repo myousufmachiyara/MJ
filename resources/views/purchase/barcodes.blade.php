@@ -441,7 +441,7 @@
                     <div class="tag-cert">
                         <b><span class="cert-lbl">{{ $item->tray_no ?: '—' }}</span></b>
                     </div>
-                    <svg height="20px" id="bc-{{ $item->id }}"></svg>
+                    <svg id="bc-{{ $item->id }}" height="20px"></svg>
                     <div class="tag-cert">
                         <b><span class="cert-lbl">Cert#: {{ $item->certificate_no ?: '—' }}</span></b>
                     </div>
