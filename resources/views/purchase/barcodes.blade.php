@@ -315,7 +315,7 @@
            cross-axis alignment, which is a more bulletproof way to force
            right-alignment regardless of the parent's own flex settings. */
         .unit:nth-child(2) .unit-barcode {
-            margin-left: 75px;
+            margin-left: auto;
             margin-bottom: 25mm;
         }
         .tag-cert {
