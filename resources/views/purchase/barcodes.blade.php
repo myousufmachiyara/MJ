@@ -340,7 +340,9 @@
             font-weight: 600;
             white-space: nowrap;
         }
-
+        .unit:nth-child(2) svg{
+            margin: 0px 0px 0px 15px;
+        }
         /* ── EMPTY STATE ── */
         .empty-state { text-align: center; padding: 80px 20px; color: #aaa; }
         .empty-state .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
