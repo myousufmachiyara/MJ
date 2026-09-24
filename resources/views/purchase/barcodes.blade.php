@@ -591,6 +591,8 @@
                     background:   '#ffffff',
                     lineColor:    '#0a0a0a',
                 });
+                // el.setAttribute('viewBox', '0 0 88 20');
+                el.setAttribute('viewBox', `0 0 ${el.getBBox().width} ${el.getBBox().height}`);
             } catch (e) {
                 el.parentElement.innerHTML = '<div style="font-size:8px;color:#c00;text-align:center;">Invalid barcode</div>';
             }
