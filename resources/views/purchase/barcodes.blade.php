@@ -299,7 +299,7 @@
         }
         .unit-barcode svg {
             width: 100%;
-            height: 20px;
+            height: 30px;
             display: block;
             /* FIX (unscannable barcode): forces the browser/printer to keep
                each bar's edges pixel-crisp instead of anti-aliasing them as
