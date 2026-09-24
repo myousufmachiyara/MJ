@@ -441,7 +441,7 @@
                     <div class="tag-cert">
                         <b><span class="cert-lbl">{{ $item->tray_no ?: '—' }}</span></b>
                     </div>
-                    <svg id="bc-{{ $item->id }}" height="20px"></svg>
+                    <svg id="bc-{{ $item->id }}"></svg>
                     <div class="tag-cert">
                         <b><span class="cert-lbl">Cert#: {{ $item->certificate_no ?: '—' }}</span></b>
                     </div>
@@ -592,6 +592,7 @@
                     lineColor:    '#0a0a0a',
                 });
                 el.setAttribute('viewBox', '0 0 88 20');
+                el.setAttribute('height', '20');
                 // el.setAttribute('viewBox', `0 0 ${el.getBBox().width} ${el.getBBox().height}`);
             } catch (e) {
                 el.parentElement.innerHTML = '<div style="font-size:8px;color:#c00;text-align:center;">Invalid barcode</div>';
