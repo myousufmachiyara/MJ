@@ -341,7 +341,7 @@
             white-space: nowrap;
         }
         .unit:nth-child(2) svg{
-            margin: 0px 0px 0px 15px;
+            margin: 0px 0px 0px 5px;
         }
         /* ── EMPTY STATE ── */
         .empty-state { text-align: center; padding: 80px 20px; color: #aaa; }
