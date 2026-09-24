@@ -591,7 +591,7 @@
                     background:   '#ffffff',
                     lineColor:    '#0a0a0a',
                 });
-                el.setAttribute('viewBox', '0 0 60 20');
+                el.setAttribute('viewBox', '0 0 88 20');
                 el.setAttribute('height', '20');
                 el.setAttribute('width', '60');
                 // el.setAttribute('viewBox', `0 0 ${el.getBBox().width} ${el.getBBox().height}`);
