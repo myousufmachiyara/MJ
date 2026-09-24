@@ -298,8 +298,8 @@
             gap: 0mm;
         }
         .unit-barcode svg {
-            width: 100%;
-            height: 30px;
+            width: auto;
+            height: auto;
             display: block;
             /* FIX (unscannable barcode): forces the browser/printer to keep
                each bar's edges pixel-crisp instead of anti-aliasing them as
@@ -441,7 +441,7 @@
                     <div class="tag-cert">
                         <b><span class="cert-lbl">{{ $item->tray_no ?: '—' }}</span></b>
                     </div>
-                    <svg width="72px" height="20px" id="bc-{{ $item->id }}"></svg>
+                    <svg id="bc-{{ $item->id }}"></svg>
                     <div class="tag-cert">
                         <b><span class="cert-lbl">Cert#: {{ $item->certificate_no ?: '—' }}</span></b>
                     </div>
