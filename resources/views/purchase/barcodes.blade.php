@@ -316,7 +316,6 @@
            right-alignment regardless of the parent's own flex settings. */
         .unit:nth-child(2) .unit-barcode {
             margin-left: auto;
-            margin-right: 2px;
             margin-bottom: 25mm;
         }
         .tag-cert {
