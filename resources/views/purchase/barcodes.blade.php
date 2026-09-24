@@ -299,7 +299,7 @@
         }
         .unit-barcode svg {
             width: auto;
-            height: auto;
+            height: 20px;
             display: block;
             /* FIX (unscannable barcode): forces the browser/printer to keep
                each bar's edges pixel-crisp instead of anti-aliasing them as
@@ -591,8 +591,8 @@
                     background:   '#ffffff',
                     lineColor:    '#0a0a0a',
                 });
-                // el.setAttribute('viewBox', '0 0 88 20');
-                el.setAttribute('viewBox', `0 0 ${el.getBBox().width} ${el.getBBox().height}`);
+                el.setAttribute('viewBox', '0 0 88 20');
+                // el.setAttribute('viewBox', `0 0 ${el.getBBox().width} ${el.getBBox().height}`);
             } catch (e) {
                 el.parentElement.innerHTML = '<div style="font-size:8px;color:#c00;text-align:center;">Invalid barcode</div>';
             }
