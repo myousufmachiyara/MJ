@@ -62,8 +62,16 @@ class DatabaseSeeder extends Seeder
             'purities',
             'purchase_invoices', 'purchase_return',
             'sale_invoices', 'sale_return',
+            // FEATURE (Sale Invoice POS): its own module — 'pos.index' gates
+            // opening the POS screen (see routes/web.php). Seeded with the
+            // full index/create/edit/delete/print set below, matching every
+            // other module, so it appears as its own block on the
+            // Roles/Permissions screen; only 'index' is actually enforced
+            // today (checkout still goes through the existing
+            // sale_invoices.create-gated store route).
+            'pos',
             'vouchers',
-            'consignments', 
+            'consignments',
         ];
 
         $managerModules = [
@@ -72,6 +80,7 @@ class DatabaseSeeder extends Seeder
             'purities',
             'purchase_invoices', 'purchase_return',
             'sale_invoices', 'sale_return',
+            'pos',
             'vouchers',
             'consignments',
         ];

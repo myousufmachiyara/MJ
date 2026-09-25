@@ -56,14 +56,19 @@ Route::middleware(['auth'])->group(function () {
     Route::get('sale-invoices/download-template', [App\Http\Controllers\SaleInvoiceController::class, 'downloadTemplate'])->name('sale.download_template');
 
     // ── Sale Invoice POS (barcode-driven counter-sale screen) ──────────────────
-    // Alternate UI/workflow for the existing Sale Invoice module — NOT a
-    // separate module, so it reuses the SAME permission that already gates
-    // the regular Sale Invoice create screen ('sale_invoices.create') rather
-    // than introducing a new 'pos' permission. Checkout submits to the
-    // existing sale_invoices.store route below (via the modules loop) —
-    // no separate store route is needed.
-    Route::get('/sale-invoices/pos',      [SaleInvoiceController::class, 'pos'])    ->middleware('check.permission:sale_invoices.create')->name('sale_invoices.pos');
-    Route::get('/sale-invoices/pos/scan', [SaleInvoiceController::class, 'posScan'])->middleware('check.permission:sale_invoices.create')->name('sale_invoices.pos_scan');
+    // POS is its own permission module ('pos.*' — seeded in DatabaseSeeder.php
+    // alongside every other module, so it shows up as its own grantable block
+    // on the Roles/Permissions screen: RoleController groups permissions by
+    // the text before the dot, so no extra UI work is needed). Access to the
+    // POS screen itself is gated by 'pos.index'. Checkout still submits to
+    // the existing sale_invoices.store route below (via the modules loop),
+    // which keeps its own 'sale_invoices.create' gate unchanged — so a user
+    // needs pos.index (to open POS) AND sale_invoices.create (to actually
+    // save the invoice it creates), exactly like the full Sale Invoice
+    // create screen already requires sale_invoices.create to save. No
+    // duplicate invoice-creation route/logic is introduced.
+    Route::get('/sale-invoices/pos',      [SaleInvoiceController::class, 'pos'])    ->middleware('check.permission:pos.index')->name('sale_invoices.pos');
+    Route::get('/sale-invoices/pos/scan', [SaleInvoiceController::class, 'posScan'])->middleware('check.permission:pos.index')->name('sale_invoices.pos_scan');
 
     // ── Sale Return Helper (AJAX — must be before the modules loop) ───────────
     Route::get('/sale-return/{invoiceId}/items', [SaleReturnController::class, 'getInvoiceItems'])->name('sale_return.invoice_items');

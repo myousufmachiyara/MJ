@@ -56,13 +56,18 @@ class SaleInvoiceController extends Controller
     // =========================================================================
     // POS — barcode-driven counter-sale screen (Sale Invoice, alternate UI)
     //
-    // This is NOT a separate sales system. It renders a simplified screen
-    // that still submits to the exact same store() action as sales.create —
-    // see routes/web.php (sale_invoices.pos route, gated by the same
-    // 'sale_invoices.create' permission as the regular create screen) and
-    // resources/views/sales/pos.blade.php. It only needs customers/banks —
-    // no products/purities/consignments, since POS never shows costing
-    // fields and always looks up purchased items by barcode via posScan().
+    // This is NOT a separate sales system — it still submits to the exact
+    // same store() action as sales.create. It IS its own permission module
+    // though ('pos.index', seeded in DatabaseSeeder.php) so it can be
+    // granted independently of the full Sale Invoice screens — see
+    // routes/web.php (sale_invoices.pos / sale_invoices.pos_scan routes)
+    // and resources/views/sales/pos.blade.php. Checkout itself still goes
+    // through the store route's own unchanged 'sale_invoices.create' gate,
+    // so a POS user needs both permissions: pos.index to open the screen,
+    // sale_invoices.create to save the invoice it produces. This screen
+    // only needs customers/banks — no products/purities/consignments,
+    // since POS never shows costing fields and always looks up purchased
+    // items by barcode via posScan().
     // =========================================================================
 
     public function pos()
