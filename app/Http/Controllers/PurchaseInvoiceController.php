@@ -1370,7 +1370,7 @@ class PurchaseInvoiceController extends Controller
                 'vat_amount'       => round($vatAmount, 2),
                 'item_total'       => round($itemTotal, 2),
                 'selling_price'    => $sellingPrice,
-                'barcode_number'   => $existingBarcode ?? $this->generateBarcodeNumber($invoice, $position, $subcategoryId),
+                'barcode_number'   => $existingBarcode ?? $this->generateBarcodeNumber($invoice, $position, $subcategoryId, $categoryId),
                 'certificate_no'   => $itemData['certificate_no'] ?? null,
                 'is_printed'       => $wasAlreadyPrinted,
             ]);
@@ -1894,25 +1894,38 @@ class PurchaseInvoiceController extends Controller
     // ── Barcode ───────────────────────────────────────────────────────────────
 
     /**
-     * NEW FORMAT: {SubcategoryCode}-{sequence no of that subcategory}, e.g.
-     * an item under subcategory code "RING" becomes "RING-00001", the next
-     * item ever assigned to that same subcategory becomes "RING-00002", etc.
-     * (the invoice number / is_taxable / item position are no longer part of
-     * the barcode at all once a subcategory is selected).
+     * FORMAT: {CategoryCode}-{sequence}-{SubcategoryCode}, e.g. a Gold Ring
+     * item (category code "GOLD", subcategory code "RING") becomes
+     * "GOLD-00001-RING". The sequence is scoped to the CATEGORY, not the
+     * subcategory — it's one running counter shared by every subcategory
+     * under that category, so the NEXT gold item, even a Chain instead of a
+     * Ring, continues the same count ("GOLD-00002-CHAI") rather than each
+     * subcategory keeping its own separate counter. (Earlier format was
+     * {SubcategoryCode}-{sequence}, scoped per subcategory — reformatted by
+     * the one-off `purchase-items:reformat-barcodes` console command; see
+     * app/Console/Commands/ReformatPurchaseItemBarcodes.php.)
      *
-     * FALLBACK: when the item row has no subcategory selected (subcategory
-     * is an additive field on top of the existing item-name/product entry —
-     * it was not made mandatory, so older-style rows can still be saved),
-     * this keeps generating the legacy MJ-/MJT-{invoiceNo}-{position} format
-     * exactly as before, so nothing breaks for invoices that don't use the
-     * new category/subcategory dropdowns.
+     * FALLBACK: when the item row has no category+subcategory resolvable
+     * (subcategory is an additive field on top of the existing
+     * item-name/product entry — it was not made mandatory, so older-style
+     * rows can still be saved), this keeps generating the legacy
+     * MJ-/MJT-{invoiceNo}-{position} format exactly as before, so nothing
+     * breaks for invoices that don't use the category/subcategory dropdowns.
      */
-    private function generateBarcodeNumber(PurchaseInvoice $invoice, int $itemPosition, ?int $subcategoryId = null): string
+    private function generateBarcodeNumber(PurchaseInvoice $invoice, int $itemPosition, ?int $subcategoryId = null, ?int $categoryId = null): string
     {
         if ($subcategoryId) {
             $subcategory = ProductSubcategory::find($subcategoryId);
             if ($subcategory && $subcategory->code) {
-                return $this->generateSubcategoryBarcodeNumber($subcategory->code);
+                // Prefer the category explicitly selected on this item row;
+                // fall back to the subcategory's own parent category if that
+                // wasn't set (the cascading Category/Subcategory dropdowns
+                // normally set both together, but this keeps generation
+                // resilient either way).
+                $category = $categoryId ? ProductCategory::find($categoryId) : $subcategory->category;
+                if ($category && $category->code) {
+                    return $this->generateCategoryBarcodeNumber($category->code, $subcategory->code);
+                }
             }
         }
 
@@ -1922,33 +1935,49 @@ class PurchaseInvoiceController extends Controller
     }
 
     /**
-     * Next sequential barcode number for a given subcategory code, in the
-     * form "{code}-00001". Uses the same REGEXP + MAX(...) + lockForUpdate()
-     * approach as generateInvoiceNo() so it is race-safe under concurrent
-     * saves and never bleeds into a different (but prefix-overlapping)
-     * subcategory's numbering — e.g. code "RING" will never match a
-     * "RINGX-00003" barcode belonging to a different subcategory.
+     * Next sequential barcode number for a given category, in the form
+     * "{categoryCode}-00001-{subcategoryCode}". The running sequence is
+     * scoped to the CATEGORY — shared across every subcategory under it —
+     * so this looks at every barcode starting with "{categoryCode}-",
+     * regardless of which subcategory it ends in, to find the next number.
+     *
+     * Uses the same REGEXP + MAX(...) + lockForUpdate() approach as
+     * generateInvoiceNo() so it is race-safe under concurrent saves, and
+     * never bleeds into a different (but prefix-overlapping) category's
+     * numbering — e.g. code "GOLD" will never match a "GOLDX-00003-RING"
+     * barcode belonging to a different category.
      *
      * MUST be called inside an active DB::beginTransaction() block —
      * createItems() (the only caller) is always invoked from inside
      * store()/update(), which already wrap it.
      */
-    private function generateSubcategoryBarcodeNumber(string $subcategoryCode): string
+    private function generateCategoryBarcodeNumber(string $categoryCode, string $subcategoryCode): string
     {
-        $prefix    = $subcategoryCode . '-';
+        $prefix    = $categoryCode . '-';
         $prefixLen = strlen($prefix);
 
+        // Matches "{categoryCode}-{digits}-{anything}" — the trailing
+        // "-[^-]+$" requires a subcategory suffix, so this never matches a
+        // bare "{categoryCode}-00001" with nothing after it (that shape
+        // belongs to the old per-subcategory format and is handled
+        // separately by the reformat command, never generated fresh here).
         $maxNo = PurchaseInvoiceItem::whereRaw(
                 'barcode_number REGEXP ?',
-                ['^' . preg_quote($prefix, '/') . '[0-9]+$']
+                ['^' . preg_quote($prefix, '/') . '[0-9]+-[^-]+$']
             )
             ->lockForUpdate()
-            ->selectRaw('MAX(CAST(SUBSTRING(barcode_number, ?) AS UNSIGNED)) as max_no', [$prefixLen + 1])
+            // Pull out just the digits between the two dashes: strip the
+            // "{categoryCode}-" prefix, then keep everything up to (but not
+            // including) the next "-".
+            ->selectRaw(
+                'MAX(CAST(SUBSTRING_INDEX(SUBSTRING(barcode_number, ?), \'-\', 1) AS UNSIGNED)) as max_no',
+                [$prefixLen + 1]
+            )
             ->value('max_no');
 
         $next = ((int) $maxNo) + 1;
 
-        return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
+        return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT) . '-' . $subcategoryCode;
     }
 
     // ── PDF helpers ───────────────────────────────────────────────────────────
