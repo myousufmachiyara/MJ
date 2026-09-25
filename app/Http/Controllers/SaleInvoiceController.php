@@ -54,6 +54,112 @@ class SaleInvoiceController extends Controller
     }
 
     // =========================================================================
+    // POS — barcode-driven counter-sale screen (Sale Invoice, alternate UI)
+    //
+    // This is NOT a separate sales system. It renders a simplified screen
+    // that still submits to the exact same store() action as sales.create —
+    // see routes/web.php (sale_invoices.pos route, gated by the same
+    // 'sale_invoices.create' permission as the regular create screen) and
+    // resources/views/sales/pos.blade.php. It only needs customers/banks —
+    // no products/purities/consignments, since POS never shows costing
+    // fields and always looks up purchased items by barcode via posScan().
+    // =========================================================================
+
+    public function pos()
+    {
+        $customers = ChartOfAccounts::where('account_type', 'customer')->get();
+        $banks     = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();
+
+        return view('sales.pos', compact('customers', 'banks'));
+    }
+
+    /**
+     * POS barcode lookup — Ajax endpoint.
+     *
+     * Deliberately separate from scanBarcode() (used by the full Sale
+     * Invoice create/edit screens) rather than reusing it, because the two
+     * have different sources of truth and different response shapes:
+     *   - scanBarcode() searches sale items, consignment items AND purchase
+     *     items, and returns full costing fields (making_rate/vat_percent/
+     *     parts/etc.) for the detailed invoice form.
+     *   - posScan() searches ONLY PurchaseInvoiceItem — "Purchase Items ARE
+     *     our Products," there is no separate Product Master — and returns
+     *     only the non-costing fields the POS screen is allowed to show
+     *     (Item, Code, Barcode, Category, Selling Price, Total/Gold/Diamond/
+     *     Stone Weight), plus two POS-specific guards neither scanBarcode()
+     *     nor the full Sale Invoice screen enforce today: refusing an item
+     *     with no Selling Price set, and refusing an item that has already
+     *     been sold on another Sale Invoice. (scanBarcode() intentionally
+     *     keeps its existing behavior — unchanged — since altering it is
+     *     out of scope for this feature.)
+     *
+     * Uses the same short numeric-surrogate vs. full barcode_number
+     * distinction as scanBarcode() (see that method's comment for why the
+     * printed label encodes a short numeric surrogate rather than the full
+     * barcode_number).
+     */
+    public function posScan(Request $request)
+    {
+        $barcode = trim((string) $request->get('barcode'));
+
+        if (!$barcode) {
+            return response()->json(['success' => false, 'message' => 'No barcode provided.'], 422);
+        }
+
+        // 'parts' eager-loaded because getDiamondTotalCtAttribute()/
+        // getStoneTotalCtAttribute() (PurchaseInvoiceItem) sum over it.
+        $purchaseItem = ctype_digit($barcode)
+            ? PurchaseInvoiceItem::with(['category', 'subcategory', 'parts'])->find((int) $barcode)
+            : PurchaseInvoiceItem::with(['category', 'subcategory', 'parts'])
+                ->where('barcode_number', $barcode)
+                ->latest()
+                ->first();
+
+        if (!$purchaseItem) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Barcode "' . $barcode . '" not found.',
+            ], 404);
+        }
+
+        // FEATURE (Sale Invoice POS): a purchased item that already appears
+        // on a Sale Invoice has already been sold and is no longer in
+        // stock. Reuses the existing barcode_number field/relationship —
+        // no new stock table or stock-calculation logic.
+        $alreadySold = SaleInvoiceItem::where('barcode_number', $purchaseItem->barcode_number)->exists();
+        if ($alreadySold) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Item "' . $purchaseItem->barcode_number . '" has already been sold.',
+            ], 409);
+        }
+
+        // FEATURE (Sale Invoice POS): the selling price is a manually
+        // defined value saved on the purchased item (Purchase Invoice
+        // create/edit screens) — POS only ever retrieves it, never
+        // calculates it. Refuse rather than silently sell at 0.
+        if ($purchaseItem->selling_price === null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Selling price is not set for this item.',
+            ], 422);
+        }
+
+        return response()->json([
+            'success'          => true,
+            'barcode_number'   => $purchaseItem->barcode_number,
+            'item_name'        => $purchaseItem->item_name,
+            'category'         => $purchaseItem->subcategory->name ?? $purchaseItem->category->name ?? null,
+            'material_type'    => $purchaseItem->material_type,
+            'gross_weight'     => $purchaseItem->gross_weight,
+            'net_weight'       => $purchaseItem->net_weight,
+            'diamond_total_ct' => $purchaseItem->diamond_total_ct,
+            'stone_total_ct'   => $purchaseItem->stone_total_ct,
+            'selling_price'    => $purchaseItem->selling_price,
+        ]);
+    }
+
+    // =========================================================================
     // BARCODE SCAN — Ajax endpoint
     // =========================================================================
 
@@ -945,11 +1051,35 @@ class SaleInvoiceController extends Controller
             $vatPercent  = $invoice->is_taxable ? (float) ($itemData['vat_percent'] ?? 0) : 0.0;
             $matType     = $itemData['material_type'] ?? 'gold';
 
-            $purityWeight  = $grossWeight * $purity;
-            $col995        = $purityWeight > 0 ? $purityWeight / 0.995 : 0;
-            $makingValue   = $grossWeight * $makingRate;
-            $rate          = $matType === 'gold' ? $goldRateAedGram : $diamondRateAed;
-            $materialValue = $rate * $purityWeight;
+            $purityWeight = $grossWeight * $purity;
+            $col995       = $purityWeight > 0 ? $purityWeight / 0.995 : 0;
+
+            // FEATURE (Sale Invoice POS): items[] coming from the POS screen
+            // (resources/views/sales/pos.blade.php) carry a flat, manually-set
+            // selling_price instead of the rate/making-rate inputs the full
+            // Sale Invoice screen uses. That price IS the item's full value,
+            // verbatim — never derived from purity_weight x rate, a making
+            // rate, or any margin/markup calculation (per the requirement
+            // that POS never computes price from cost). Routing it through
+            // $materialValue (rather than adding a parallel pricing path)
+            // means createSaleAccountingEntries() below needs ZERO changes:
+            // it still credits 401001/401002 Sales Revenue by material_type
+            // exactly like every other Sale Invoice item, and the existing
+            // invoice-level VAT mechanism (invoice_vat_percent) still applies
+            // normally on top of the invoice total.
+            $isPosFlatPrice = isset($itemData['selling_price'])
+                && $itemData['selling_price'] !== ''
+                && $itemData['selling_price'] !== null;
+
+            if ($isPosFlatPrice) {
+                $rate          = 0.0;
+                $makingValue   = 0.0;
+                $materialValue = round((float) $itemData['selling_price'], 2);
+            } else {
+                $makingValue   = $grossWeight * $makingRate;
+                $rate          = $matType === 'gold' ? $goldRateAedGram : $diamondRateAed;
+                $materialValue = $rate * $purityWeight;
+            }
 
             $partsData      = $itemData['parts'] ?? [];
             $partsTotal     = 0.0;
@@ -1127,6 +1257,10 @@ class SaleInvoiceController extends Controller
             'items.*.making_rate'      => 'required|numeric|min:0',
             'items.*.material_type'    => 'required|in:gold,diamond',
             'items.*.vat_percent'      => 'required|numeric|min:0',
+            // FEATURE (Sale Invoice POS): optional flat retail price coming
+            // from the POS screen — see createItems() for how it overrides
+            // the normal rate x purity_weight calculation.
+            'items.*.selling_price'    => 'nullable|numeric|min:0',
             'material_given_by'        => ['nullable', 'string', 'required_if:payment_method,material+making cost', 'required_if:payment_method,material'],
             'material_received_by'     => ['nullable', 'string', 'required_if:payment_method,material+making cost', 'required_if:payment_method,material'],
             'cash_amount_paid'         => 'nullable|numeric|min:0',

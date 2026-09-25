@@ -211,6 +211,7 @@
                     <th rowspan="2">VAT %</th>
                     <th rowspan="2">VAT Amt</th>
                     <th rowspan="2">Gross Total</th>
+                    <th width="7%" rowspan="2">Selling Price<br><small class="text-muted">(Optional — used by POS)</small></th>
                     <th rowspan="2" width="4%">Img</th>
                     <th width="6%" rowspan="2">Action</th>
                   </tr>
@@ -752,6 +753,12 @@ $(document).ready(function () {
         const vatPct  = data.vat_percent      || 0;
         const certNo  = data.certificate_no   || '';
         const trayNo  = data.tray_no          || '';
+        // FIX (POS Selling Price): kept as a plain empty string (not 0) when
+        // unset, same treatment as certNo/trayNo above — 0 is a real,
+        // different value (a free/zero-priced item) from "not set yet",
+        // and posScan() on the POS side specifically distinguishes those
+        // two cases (null => "selling price not set" error).
+        const sellingPrice = (data.selling_price ?? '') === null ? '' : (data.selling_price ?? '');
 
         const purityOptions = `@foreach($purities as $p)<option value="{{ $p->value }}" ${purity == {{ $p->value }} ? 'selected' : ''}>{{ $p->label }}</option>@endforeach`;
 
@@ -795,6 +802,15 @@ $(document).ready(function () {
             <td><input type="number" name="items[${index}][vat_percent]" class="form-control vat-percent" step="any" value="${vatPct}"></td>
             <td><input type="number" name="items[${index}][vat_amount]" step="any" value="${data.vat_amount || 0}" class="form-control vat-amount" readonly></td>
             <td><input type="number" name="items[${index}][item_total]" step="any" value="${data.item_total || 0}" class="form-control item-total" readonly></td>
+            {{--
+                FIX (POS Selling Price): independent of every costing column
+                to its left — never computed from purity/making/material rate
+                and doesn't feed into any of them either. See
+                PurchaseInvoiceItem::selling_price and
+                PurchaseInvoiceController::createItems(). Optional: leave
+                blank to decide the price later, from this same screen.
+            --}}
+            <td><input type="number" name="items[${index}][selling_price]" step="any" min="0" value="${sellingPrice}" class="form-control selling-price" placeholder="Optional"></td>
             <td class="item-img-cell" style="text-align:center;vertical-align:middle;padding:4px;">${
                 data.image_url
                     ? `<img src="${data.image_url}" alt="${name || ''}" title="${name || ''}"
@@ -809,7 +825,7 @@ $(document).ready(function () {
           </td>
         </tr>
         <tr class="parts-row" style="display:none;background:#efefef">
-            <td colspan="18">
+            <td colspan="19">
                 <div class="parts-wrapper">
                     <table class="table table-sm table-bordered parts-table">
                         <thead>

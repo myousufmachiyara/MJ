@@ -156,6 +156,7 @@
                     <th rowspan="2">VAT %</th>
                     <th rowspan="2">VAT Amt</th>
                     <th rowspan="2">Gross Total</th>
+                    <th width="7%" rowspan="2">Selling Price<br><small class="text-muted">(Optional — used by POS)</small></th>
                     <th rowspan="2" width="4%">Img</th>
                     <th width="5%" rowspan="2">Action</th>
                   </tr>
@@ -209,6 +210,20 @@
                     <td><input type="number" name="items[0][vat_percent]" class="form-control vat-percent" step="any" value="0"></td>
                     <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
                     <td><input type="number" class="form-control item-total" readonly></td>
+                    {{--
+                        FIX (POS Selling Price): a purchased item IS the sellable
+                        product in this app (there is no separate Product Master
+                        the POS pulls from) — see PurchaseInvoiceItem::selling_price
+                        and PurchaseInvoiceController::createItems(). This is
+                        completely independent of the costing columns to its
+                        left: it is never computed from purity/making/material
+                        rate, and none of those values feed into it. Optional —
+                        leave blank if the selling price isn't decided yet; it
+                        can be set/edited later from this same invoice's Edit
+                        screen, and the POS simply won't sell an item that has
+                        no selling price set.
+                    --}}
+                    <td><input type="number" name="items[0][selling_price]" step="any" min="0" class="form-control selling-price" placeholder="Optional"></td>
                     <td class="item-img-cell" style="text-align:center;vertical-align:middle;padding:4px;"></td>
                     <td>
                       <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
@@ -216,7 +231,7 @@
                     </td>
                   </tr>
                   <tr class="parts-row" style="display:none;background:#efefef">
-                    <td colspan="18">
+                    <td colspan="19">
                       <div class="parts-wrapper">
                         <table class="table table-sm table-bordered parts-table">
                           <thead>
@@ -761,6 +776,7 @@
             <td><input type="number" name="items[${nextIndex}][vat_percent]" class="form-control vat-percent" step="any" value="0"></td>
             <td><input type="number" step="any" class="form-control vat-amount" readonly></td>
             <td><input type="number" class="form-control item-total" readonly></td>
+            <td><input type="number" name="items[${nextIndex}][selling_price]" step="any" min="0" class="form-control selling-price" placeholder="Optional"></td>
             <td class="item-img-cell" style="text-align:center;vertical-align:middle;padding:4px;"></td>
             <td>
                 <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)"><i class="fas fa-times"></i></button>
@@ -768,7 +784,7 @@
             </td>
         </tr>
         <tr class="parts-row" style="display:none;background:#efefef">
-            <td colspan="18">
+            <td colspan="19">
                 <div class="parts-wrapper">
                     <table class="table table-sm table-bordered parts-table">
                         <thead>

@@ -264,6 +264,12 @@ class PurchaseInvoiceController extends Controller
                 'taxable_amount'   => $item->taxable_amount,
                 'vat_amount'       => $item->vat_amount,
                 'item_total'       => $item->item_total,
+                // FEATURE (Sale Invoice POS): the flat, manually-set retail
+                // price for this exact purchased item/unit. Independent of
+                // every costing field above — populating it here is what lets
+                // purchase/edit.blade.php's buildItemRowHtml() prefill the
+                // already-saved Selling Price when the invoice is reopened.
+                'selling_price'    => $item->selling_price,
                 'parts' => $item->parts->map(function ($part) {
                     return [
                         'item_name'             => $part->item_name,
@@ -1275,6 +1281,16 @@ class PurchaseInvoiceController extends Controller
             $categoryId    = !empty($itemData['category_id'])    ? (int) $itemData['category_id']    : null;
             $productId     = !empty($itemData['product_id'])     ? (int) $itemData['product_id']     : null;
 
+            // FEATURE (Sale Invoice POS): optional flat retail price for this
+            // purchased item — completely separate from the costing/rate
+            // fields computed above. Left as PHP null (not 0) when not
+            // supplied, so "not yet priced" stays distinguishable from
+            // "priced at zero" all the way through to SaleInvoiceController's
+            // POS scan lookup.
+            $sellingPrice = (isset($itemData['selling_price']) && $itemData['selling_price'] !== '' && $itemData['selling_price'] !== null)
+                ? (float) $itemData['selling_price']
+                : null;
+
             $invoiceItem = $invoice->items()->create([
                 'item_name'        => $itemData['item_name']        ?? null,
                 'product_id'       => $productId,
@@ -1298,6 +1314,7 @@ class PurchaseInvoiceController extends Controller
                 'vat_percent'      => $vatPercent,
                 'vat_amount'       => round($vatAmount, 2),
                 'item_total'       => round($itemTotal, 2),
+                'selling_price'    => $sellingPrice,
                 'barcode_number'   => $existingBarcode ?? $this->generateBarcodeNumber($invoice, $position, $subcategoryId),
                 'certificate_no'   => $itemData['certificate_no'] ?? null,
                 'is_printed'       => $wasAlreadyPrinted,
@@ -1429,6 +1446,11 @@ class PurchaseInvoiceController extends Controller
             'items.*.material_type'  => 'required|in:gold,diamond',
             'items.*.vat_percent'    => 'required|numeric|min:0',
             'items.*.certificate_no' => 'nullable|string|max:191',
+            // FEATURE (Sale Invoice POS): optional flat retail price for this
+            // purchased item. Deliberately has no relation to the costing
+            // fields above (material_rate/making_rate/vat_percent/etc.) — it
+            // is a manually-entered number, validated only for shape here.
+            'items.*.selling_price'  => 'nullable|numeric|min:0',
             'material_given_by'      => ['nullable', 'string', 'required_if:payment_method,material+making cost', 'required_if:payment_method,material'],
             'material_received_by'   => ['nullable', 'string', 'required_if:payment_method,material+making cost', 'required_if:payment_method,material'],
             'cash_amount_paid'       => 'nullable|numeric|min:0',

@@ -31,6 +31,7 @@ class PurchaseInvoiceItem extends Model
         'vat_percent',
         'vat_amount',
         'item_total',
+        'selling_price',
         'gold_rate',
         'diamond_rate',
         'remarks',
@@ -55,6 +56,12 @@ class PurchaseInvoiceItem extends Model
         'vat_percent'    => 'float',
         'vat_amount'     => 'float',
         'item_total'     => 'float',
+        // FEATURE (Sale Invoice POS): kept nullable — see the migration
+        // that added this column. Casting only applies when the value is
+        // non-null, so an unset selling_price still reads back as PHP null
+        // (not 0.0), which is exactly what distinguishes "not priced yet"
+        // from "priced at zero" throughout the POS flow.
+        'selling_price'  => 'float',
         'gold_rate'      => 'float',
         'diamond_rate'   => 'float',
         'is_printed'     => 'boolean',

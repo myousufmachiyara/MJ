@@ -44,16 +44,26 @@ Route::middleware(['auth'])->group(function () {
     // ── Purchase Helpers ──────────────────────────────────────────────────────
     Route::get('/product/{product}/invoices',          [PurchaseInvoiceController::class, 'getProductInvoices']);
     Route::get('/purchase-invoices/download-template', [PurchaseInvoiceController::class, 'downloadTemplate'])->name('purchase.download_template');
-    Route::get('/purchase-invoices/{id}/barcodes',     [PurchaseInvoiceController::class, 'printBarcodes'])->name('purchase_invoices.barcodes');
+    Route::get('/purchase-invoices/{id}/barcodes',      [PurchaseInvoiceController::class, 'printBarcodes'])->name('purchase_invoices.barcodes');
+    Route::post('/purchase-invoices/{id}/mark-printed', [PurchaseInvoiceController::class, 'markPrinted'])->name('purchase_invoices.mark_printed');
     Route::get('/purchase-return/{invoiceId}/items',   [PurchaseReturnController::class,  'getInvoiceItems'])->name('purchase_return.invoice_items');
-    Route::post('purchase-invoices/{id}/mark-printed', [PurchaseInvoiceController::class, 'markPrinted'])->name('purchase_invoices.mark_printed');
-    
+
     // ── Sale Helpers ──────────────────────────────────────────────────────────
     Route::get('/sale-invoices/scan-barcode',      [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
     Route::get('/sale-invoices/{id}/print-simple', [SaleInvoiceController::class, 'printSimple'])->middleware('check.permission:sale_invoices.print')->name('sale_invoices.print_simple');
     Route::get('/sale-invoices/scan-barcode',      [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
     Route::get('/sale-invoices/search-by-name',    [SaleInvoiceController::class, 'searchByName'])->name('sale.search_by_name');
     Route::get('sale-invoices/download-template', [App\Http\Controllers\SaleInvoiceController::class, 'downloadTemplate'])->name('sale.download_template');
+
+    // ── Sale Invoice POS (barcode-driven counter-sale screen) ──────────────────
+    // Alternate UI/workflow for the existing Sale Invoice module — NOT a
+    // separate module, so it reuses the SAME permission that already gates
+    // the regular Sale Invoice create screen ('sale_invoices.create') rather
+    // than introducing a new 'pos' permission. Checkout submits to the
+    // existing sale_invoices.store route below (via the modules loop) —
+    // no separate store route is needed.
+    Route::get('/sale-invoices/pos',      [SaleInvoiceController::class, 'pos'])    ->middleware('check.permission:sale_invoices.create')->name('sale_invoices.pos');
+    Route::get('/sale-invoices/pos/scan', [SaleInvoiceController::class, 'posScan'])->middleware('check.permission:sale_invoices.create')->name('sale_invoices.pos_scan');
 
     // ── Sale Return Helper (AJAX — must be before the modules loop) ───────────
     Route::get('/sale-return/{invoiceId}/items', [SaleReturnController::class, 'getInvoiceItems'])->name('sale_return.invoice_items');

@@ -142,7 +142,10 @@
           @endif
 
           {{-- Sale --}}
-          @if(auth()->user()->can('sale_invoices.index') || auth()->user()->can('sale_return.index'))
+          {{-- FIX (POS nav): also show this parent menu for a user who only has
+               sale_invoices.create (e.g. counter staff without list access), so
+               the POS link below isn't hidden behind the Invoices-list permission. --}}
+          @if(auth()->user()->can('sale_invoices.index') || auth()->user()->can('sale_invoices.create') || auth()->user()->can('sale_return.index'))
           <li class="nav-parent {{ request()->routeIs('sale_invoices.*') || request()->routeIs('sale_return.*') ? 'nav-expanded nav-active' : '' }}">
             <a class="nav-link" href="#">
               <i class="fa fa-cash-register"></i>
@@ -150,8 +153,14 @@
             </a>
             <ul class="nav nav-children">
               @can('sale_invoices.index')
-                <li class="{{ request()->routeIs('sale_invoices.*') ? 'active' : '' }}">
+                <li class="{{ request()->routeIs('sale_invoices.*') && !request()->routeIs('sale_invoices.pos*') ? 'active' : '' }}">
                   <a class="nav-link" href="{{ route('sale_invoices.index') }}">Invoices</a>
+                </li>
+              @endcan
+              {{-- POS: same permission as the regular create screen — it's an alternate UI for the same Sale Invoice workflow, not a separate module. --}}
+              @can('sale_invoices.create')
+                <li class="{{ request()->routeIs('sale_invoices.pos*') ? 'active' : '' }}">
+                  <a class="nav-link" href="{{ route('sale_invoices.pos') }}">POS</a>
                 </li>
               @endcan
               @can('sale_return.index')
