@@ -592,6 +592,49 @@ $(document).ready(function () {
         $(this).closest('tr').next('.parts-row').fadeToggle(200);
     });
 
+    // ===== QUICK SELLING PRICE SAVE =====
+    // FEATURE (quick Selling Price save): PUTs just this one item's
+    // selling_price — see routes/web.php (purchase_invoice_items.update_selling_price)
+    // and PurchaseInvoiceController::updateSellingPrice() for why this exists
+    // instead of resubmitting the entire "Update Invoice" form.
+    const SELLING_PRICE_SAVE_URL_BASE = '{{ url("/purchase-invoice-items") }}';
+    const CSRF_TOKEN = $('meta[name="csrf-token"]').attr('content');
+
+    $(document).on('click', '.selling-price-save-btn', function() {
+        const btn      = $(this);
+        const itemId   = btn.data('item-id');
+        const row      = btn.closest('tr.item-row');
+        const input    = row.find('input[name*="[selling_price]"]');
+        const statusEl = row.find('.selling-price-save-status');
+        const rawVal   = input.val();
+
+        const originalIcon = btn.html();
+        btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+        statusEl.removeClass('text-success text-danger').text('');
+
+        $.ajax({
+            url: SELLING_PRICE_SAVE_URL_BASE + '/' + itemId + '/selling-price',
+            method: 'PUT',
+            headers: { 'X-CSRF-TOKEN': CSRF_TOKEN },
+            data: { selling_price: rawVal === '' ? null : rawVal },
+            success: function(res) {
+                input.val(res.selling_price === null ? '' : res.selling_price);
+                statusEl.addClass('text-success')
+                    .html('<i class="fas fa-check-circle"></i> Saved');
+                clearTimeout(row.data('_sp_status_timer'));
+                row.data('_sp_status_timer', setTimeout(() => statusEl.text(''), 3000));
+            },
+            error: function(xhr) {
+                const msg = (xhr.responseJSON && (xhr.responseJSON.message || (xhr.responseJSON.errors && Object.values(xhr.responseJSON.errors)[0][0])))
+                    || 'Save failed.';
+                statusEl.addClass('text-danger').html('<i class="fas fa-times-circle"></i> ' + msg);
+            },
+            complete: function() {
+                btn.prop('disabled', false).html(originalIcon);
+            }
+        });
+    });
+
     // ===== CURRENCY BOX =====
     function initCurrencyBox() {
         const isUSD = $('#currency').val() === 'USD';
@@ -759,11 +802,18 @@ $(document).ready(function () {
         // and posScan() on the POS side specifically distinguishes those
         // two cases (null => "selling price not set" error).
         const sellingPrice = (data.selling_price ?? '') === null ? '' : (data.selling_price ?? '');
+        // FEATURE (quick Selling Price save): only an already-persisted item
+        // (loaded from existingItems, which now carries its own id — see
+        // PurchaseInvoiceController::edit()) has a row to PATCH. A row just
+        // added in this edit session has no id yet — it doesn't exist in the
+        // database until this whole form is submitted once — so no
+        // quick-save button is rendered for it (see below).
+        const itemId = data.id || null;
 
         const purityOptions = `@foreach($purities as $p)<option value="{{ $p->value }}" ${purity == {{ $p->value }} ? 'selected' : ''}>{{ $p->label }}</option>@endforeach`;
 
         return `
-        <tr class="item-row" data-item-index="${index}">
+        <tr class="item-row" data-item-index="${index}" data-item-id="${itemId || ''}">
             <td>
                 <div class="product-wrapper">
                     <input type="text" name="items[${index}][item_name]" class="form-control item-name-input" placeholder="Product Name" value="${name}" required>
@@ -809,8 +859,31 @@ $(document).ready(function () {
                 PurchaseInvoiceItem::selling_price and
                 PurchaseInvoiceController::createItems(). Optional: leave
                 blank to decide the price later, from this same screen.
+
+                FEATURE (quick Selling Price save): the Save icon next to it
+                PUTs just this one field to purchase_invoice_items.{id}/
+                selling-price (PurchaseInvoiceController::updateSellingPrice())
+                instead of requiring the big "Update Invoice" submit below,
+                which would otherwise re-save the whole invoice — master
+                info, every item/part, totals, and accounting — just to
+                change a price. Only shown for an already-saved item (it has
+                an id to target); a row just added in this session has to be
+                saved once via the normal form first.
             --}}
-            <td><input type="number" name="items[${index}][selling_price]" step="any" min="0" value="${sellingPrice}" class="form-control selling-price" placeholder="Optional"></td>
+            <td>
+                <div class="input-group input-group-sm">
+                    <input type="number" name="items[${index}][selling_price]" step="any" min="0" value="${sellingPrice}" class="form-control selling-price" placeholder="Optional">
+                    ${itemId ? `
+                    <button type="button" class="btn btn-outline-success selling-price-save-btn" data-item-id="${itemId}"
+                            title="Save Selling Price only — does not resubmit the whole invoice">
+                        <i class="fas fa-save"></i>
+                    </button>` : ''}
+                </div>
+                ${itemId
+                    ? `<small class="text-muted selling-price-save-status d-block" style="min-height:1em;"></small>`
+                    : `<small class="text-muted d-block">Save invoice once to enable quick-save.</small>`
+                }
+            </td>
             <td class="item-img-cell" style="text-align:center;vertical-align:middle;padding:4px;">${
                 data.image_url
                     ? `<img src="${data.image_url}" alt="${name || ''}" title="${name || ''}"

@@ -46,6 +46,14 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/purchase-invoices/download-template', [PurchaseInvoiceController::class, 'downloadTemplate'])->name('purchase.download_template');
     Route::get('/purchase-invoices/{id}/barcodes',      [PurchaseInvoiceController::class, 'printBarcodes'])->name('purchase_invoices.barcodes');
     Route::post('/purchase-invoices/{id}/mark-printed', [PurchaseInvoiceController::class, 'markPrinted'])->name('purchase_invoices.mark_printed');
+    // FEATURE (quick Selling Price save): updates ONE purchase_invoice_items
+    // row's selling_price only — no master info, no other items/parts, no
+    // totals/accounting recalculation. See PurchaseInvoiceController::
+    // updateSellingPrice() for why this exists as its own endpoint instead
+    // of going through the full purchase_invoices.update route. Reuses the
+    // existing purchase_invoices.edit permission — setting an item's price
+    // is part of editing the invoice, not a separate capability.
+    Route::put('/purchase-invoice-items/{id}/selling-price', [PurchaseInvoiceController::class, 'updateSellingPrice'])->middleware('check.permission:purchase_invoices.edit')->name('purchase_invoice_items.update_selling_price');
     Route::get('/purchase-return/{invoiceId}/items',   [PurchaseReturnController::class,  'getInvoiceItems'])->name('purchase_return.invoice_items');
 
     // ── Sale Helpers ──────────────────────────────────────────────────────────

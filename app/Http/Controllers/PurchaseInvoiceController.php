@@ -238,6 +238,12 @@ class PurchaseInvoiceController extends Controller
 
         $itemsData = $purchaseInvoice->items->map(function ($item) {
             return [
+                // FEATURE (quick Selling Price save): this row's own primary
+                // key — lets the edit screen PATCH just its selling_price
+                // via updateSellingPrice() below instead of resubmitting the
+                // entire invoice (master info + every item/part + totals +
+                // accounting) just to change one field on one item.
+                'id'               => $item->id,
                 'item_name'        => $item->item_name,
                 'barcode_number'   => $item->barcode_number,
                 'certificate_no'   => $item->certificate_no,
@@ -290,6 +296,55 @@ class PurchaseInvoiceController extends Controller
             'purchaseInvoice', 'vendors', 'banks', 'products', 'categories', 'subcategories',
             'itemsData', 'goldAedOunce', 'diamondAedCt', 'purities'
         ));
+    }
+
+    // =========================================================================
+    // QUICK SELLING PRICE UPDATE — Ajax endpoint
+    //
+    // FEATURE (Sale Invoice POS): a Selling Price is often decided well
+    // after the purchase — the item just sits unpriced until someone gets
+    // around to it. Routing that through update() (the full "Update
+    // Invoice" save) would re-validate and re-save the invoice's master
+    // info, DELETE AND RECREATE every item and part on the invoice (see
+    // update()'s `$invoice->items()->delete()` + createItems()), recompute
+    // all totals, and delete/recreate the whole accounting voucher — just
+    // to change one column on one row. Beyond being wasteful, recreating
+    // the item rows would silently change their primary keys, which would
+    // invalidate any barcode label ALREADY PRINTED for this item (the
+    // printed barcode SYMBOL encodes this row's own id — see
+    // PurchaseInvoiceItem::getScanCodeAttribute()) even though
+    // barcode_number itself is preserved.
+    //
+    // This endpoint instead does exactly one thing: update selling_price on
+    // exactly one already-persisted PurchaseInvoiceItem row, by its own id.
+    // Selling Price has no relationship to this invoice's totals or
+    // accounting entries (it isn't summed into net_amount/item_total and
+    // was never part of createSaleAccountingEntries()'s purchase-side
+    // counterpart), so nothing else on the invoice needs to change.
+    // =========================================================================
+
+    public function updateSellingPrice(Request $request, $id)
+    {
+        $request->validate([
+            'selling_price' => 'nullable|numeric|min:0',
+        ]);
+
+        $item = PurchaseInvoiceItem::findOrFail($id);
+
+        $sellingPrice = ($request->selling_price !== null && $request->selling_price !== '')
+            ? round((float) $request->selling_price, 2)
+            : null;
+
+        $item->update(['selling_price' => $sellingPrice]);
+
+        return response()->json([
+            'success'        => true,
+            'id'             => $item->id,
+            'selling_price'  => $item->selling_price,
+            'message'        => $sellingPrice === null
+                ? 'Selling price cleared.'
+                : 'Selling price saved.',
+        ]);
     }
 
     // =========================================================================
