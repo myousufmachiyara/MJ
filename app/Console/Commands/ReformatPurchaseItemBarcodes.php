@@ -10,39 +10,52 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * One-off data migration: reformats purchase_invoice_items.barcode_number
- * from the old {SubcategoryCode}-{sequence} shape (sequence scoped per
- * subcategory) to the new {CategoryCode}-{sequence}-{SubcategoryCode} shape
- * (sequence scoped per category) — see PurchaseInvoiceController::
- * generateCategoryBarcodeNumber() for the generator that now produces this
- * format for every NEW item going forward. This command only fixes up rows
- * that already exist from before that change.
+ * to {CategoryCode}-{sequence}-{SubcategoryCode} (sequence scoped per
+ * category) — see PurchaseInvoiceController::generateCategoryBarcodeNumber()
+ * for the generator that produces this format for every NEW item going
+ * forward. This command only fixes up rows that already exist from before
+ * that change, or that were categorized after the fact.
  *
- * MATCHING STRATEGY: a first version of this command matched candidates via
- * the item's own category_id/subcategory_id columns. That undercounted (or
- * missed entirely) on data where those FK columns aren't reliably populated
- * on older rows — those columns were added in a LATER migration than the
- * subcategory-based barcode format itself, so plenty of items can carry a
- * perfectly good "{SubcategoryCode}-{seq}" barcode with a null
- * subcategory_id/category_id. This version instead decodes the
- * barcode_number TEXT directly: it strips the trailing "-{digits}" and
- * checks whether what's left is a currently-known ProductSubcategory code.
- * This only depends on the subcategory still existing with the same code —
- * not on the item's own FK columns — and is naturally safe to re-run
- * (already-reformatted barcodes end in a subcategory CODE, not digits, so
- * they never match the "ends in digits" check below and are left alone).
+ * MATCHING STRATEGY — two ways an item can be recognised as convertible,
+ * tried in order:
+ *
+ *   (A) TEXT DECODE: the barcode_number itself is the old
+ *       "{SubcategoryCode}-{digits}" shape — strip the trailing
+ *       "-{digits}" and check whether what's left is a currently-known
+ *       ProductSubcategory code. Doesn't depend on the item's own
+ *       category_id/subcategory_id columns at all.
+ *
+ *   (B) FK FALLBACK: the barcode_number DIDN'T decode (most commonly
+ *       because it's still in the original legacy "MJ-/MJT-{invoiceNo}-
+ *       {position}" format), but the item row itself now has a
+ *       subcategory_id set — e.g. someone opened an old Purchase Invoice,
+ *       assigned a Category/Subcategory to its items, and saved. Saving
+ *       does NOT regenerate barcode_number for an item that already has
+ *       one (see PurchaseInvoiceController::createItems() — an existing
+ *       barcode is always preserved, never replaced), so the item ends up
+ *       correctly categorized but still carrying its old barcode text
+ *       forever unless a command like this one fixes it up. This is the
+ *       path invoice items go through when categorized well after they
+ *       were first purchased.
+ *
+ * Either way, an item whose barcode_number ALREADY matches the new
+ * "{anything}-{5 digits}-{anything}" three-part shape is left alone before
+ * either check even runs — that's what makes this command idempotent /
+ * safe to run repeatedly without re-numbering already-correct barcodes.
  *
  * Also conservative about what it touches:
- *   - Legacy MJ-/MJT-{invoiceNo}-{position} rows and any manually-typed/
- *     custom barcode text that doesn't decode to a known subcategory code
- *     are left completely alone.
+ *   - Anything that doesn't decode via (A) and has no subcategory_id for
+ *     (B) to use is left completely alone (e.g. genuinely uncategorized
+ *     legacy items).
  *   - Any Sale Invoice item already recorded against one of the OLD
  *     barcode values (i.e. that purchased item has already been sold) has
  *     its own barcode_number copy updated to match, in the same
  *     transaction, so the purchase<->sale link by barcode_number text
  *     stays intact instead of silently breaking.
- *   - If an item's own category_id/subcategory_id is null, this also fills
- *     it in from the subcategory the barcode decoded to (a null column is
- *     only ever filled in, never overwritten if it already has a value).
+ *   - If an item's own category_id is null but subcategory_id resolves to
+ *     a subcategory with a parent category, category_id is filled in too
+ *     (a null column is only ever filled in, never overwritten if it
+ *     already has a value).
  *   - The printed barcode SYMBOL on any label already printed for these
  *     items is UNAFFECTED by this command: it encodes the item's own row
  *     id (PurchaseInvoiceItem::getScanCodeAttribute()), not barcode_number
@@ -52,23 +65,24 @@ use Illuminate\Support\Facades\DB;
  *     matters for your workflow.
  *
  * Usage:
- *   php artisan purchase-items:reformat-barcodes --dry-run   (preview only, always safe)
- *   php artisan purchase-items:reformat-barcodes             (asks to confirm, then applies)
+ *   php artisan purchase-items:reformat-barcodes --dry-run                    (preview everything, always safe)
+ *   php artisan purchase-items:reformat-barcodes --invoice=140 --dry-run      (preview just one invoice's items)
+ *   php artisan purchase-items:reformat-barcodes --invoice=140                (apply to just one invoice)
+ *   php artisan purchase-items:reformat-barcodes                              (apply to everything, asks to confirm)
  */
 class ReformatPurchaseItemBarcodes extends Command
 {
-    protected $signature = 'purchase-items:reformat-barcodes {--dry-run : Preview the changes without writing anything}';
+    protected $signature = 'purchase-items:reformat-barcodes
+        {--dry-run : Preview the changes without writing anything}
+        {--invoice= : Only process items belonging to this Purchase Invoice ID}';
 
-    protected $description = 'Reformat purchase_invoice_items.barcode_number from {SubcategoryCode}-{seq} to {CategoryCode}-{seq}-{SubcategoryCode}, sequence now scoped per category';
+    protected $description = 'Reformat purchase_invoice_items.barcode_number to {CategoryCode}-{seq}-{SubcategoryCode} for items that decode from the old format or are now categorized';
 
     public function handle(): int
     {
-        $dryRun = (bool) $this->option('dry-run');
+        $dryRun     = (bool) $this->option('dry-run');
+        $invoiceId  = $this->option('invoice');
 
-        // Every currently-defined subcategory code (with a resolvable
-        // parent category code), used to recognise the OLD
-        // "{SubcategoryCode}-{digits}" shape straight from the
-        // barcode_number TEXT. Keyed by code for O(1) lookups below.
         $subcategoriesByCode = ProductSubcategory::with('category')
             ->get()
             ->filter(fn ($s) => !empty($s->code) && $s->category && !empty($s->category->code))
@@ -80,40 +94,67 @@ class ReformatPurchaseItemBarcodes extends Command
         }
         $this->line($subcategoriesByCode->count() . ' subcategory code(s) loaded to match against.');
 
-        $allItems = PurchaseInvoiceItem::query()
+        $query = PurchaseInvoiceItem::query()
             ->whereNotNull('barcode_number')
-            ->orderBy('id') // preserve original creation/purchase order within each category
-            ->get();
+            ->with(['subcategory.category'])
+            ->orderBy('id'); // preserve original creation/purchase order within each category
 
-        $this->line($allItems->count() . ' purchase_invoice_items have a barcode_number set — scanning each one\'s TEXT against those codes.');
+        if ($invoiceId !== null) {
+            $query->where('purchase_invoice_id', $invoiceId);
+            $this->line('Scoped to purchase_invoice_id = ' . $invoiceId . '.');
+        }
+
+        $allItems = $query->get();
+        $this->line($allItems->count() . ' purchase_invoice_items have a barcode_number set — checking each one.');
 
         // New sequence is scoped per CATEGORY code (shared across every
         // subcategory under it) — running counter starts at 1 and
         // increments in original creation order (oldest item first).
+        //
+        // NOTE: when --invoice is used, this only counts items within that
+        // scoped set, so the sequence restarts rather than continuing from
+        // that category's true running count across the whole database. Do
+        // a full (unscoped) dry-run first if you need the real next number
+        // — --invoice is meant for previewing/applying to one invoice's
+        // items in isolation, not for partial batches of a larger run.
         $nextSeqByCategoryCode = [];
-        $updates          = []; // ['item' => ..., 'old' => ..., 'new' => ..., 'subcategory' => ...]
+        $updates          = []; // ['item' => ..., 'old' => ..., 'new' => ..., 'subcategory' => ..., 'via' => 'text'|'fk']
         $alreadyNewFormat = 0;
         $unrecognised     = [];
 
         foreach ($allItems as $item) {
             $barcode = trim((string) $item->barcode_number);
 
-            // Must end in "-{1 to 6 digits}" to even be a candidate — this
-            // is what naturally excludes already-reformatted barcodes
-            // (which end in a subcategory CODE, not digits) and most
-            // legacy MJ-/MJT- rows (whose "{something}" before the digits
-            // won't match a real subcategory code below).
-            if (!preg_match('/^(.+)-(\d{1,6})$/', $barcode, $m)) {
-                if (preg_match('/-[A-Za-z]/', $barcode)) {
-                    $alreadyNewFormat++; // ends in letters — plausibly already new-format, don't flag as unrecognised noise
-                } else {
-                    $unrecognised[] = $barcode;
-                }
+            // Guard FIRST, before either matching strategy: already
+            // "{anything}-{5 digits}-{anything}" (our new 3-part shape) —
+            // leave it alone. This is what makes the command safe to
+            // re-run without re-numbering already-correct barcodes.
+            if (preg_match('/^.+-\d{5}-.+$/', $barcode)) {
+                $alreadyNewFormat++;
                 continue;
             }
 
-            $codeGuess   = $m[1];
-            $subcategory = $subcategoriesByCode->get($codeGuess);
+            $subcategory = null;
+            $via         = null;
+
+            // (A) TEXT DECODE — old "{SubcategoryCode}-{digits}" shape.
+            if (preg_match('/^(.+)-(\d{1,6})$/', $barcode, $m)) {
+                $codeGuess = $m[1];
+                if ($subcategoriesByCode->has($codeGuess)) {
+                    $subcategory = $subcategoriesByCode->get($codeGuess);
+                    $via         = 'text';
+                }
+            }
+
+            // (B) FK FALLBACK — barcode text didn't decode (typically still
+            // legacy MJ-/MJT-{invoiceNo}-{position}), but the item itself
+            // has since been assigned a subcategory with a resolvable
+            // parent category.
+            if (!$subcategory && $item->subcategory && $item->subcategory->code
+                && $item->subcategory->category && $item->subcategory->category->code) {
+                $subcategory = $item->subcategory;
+                $via         = 'fk';
+            }
 
             if (!$subcategory) {
                 $unrecognised[] = $barcode;
@@ -131,12 +172,14 @@ class ReformatPurchaseItemBarcodes extends Command
                 continue; // already correct — skip
             }
 
-            $updates[] = ['item' => $item, 'old' => $barcode, 'new' => $new, 'subcategory' => $subcategory];
+            $updates[] = ['item' => $item, 'old' => $barcode, 'new' => $new, 'subcategory' => $subcategory, 'via' => $via];
         }
 
         $this->newLine();
         $this->line('Already new-format (skipped): ' . $alreadyNewFormat);
-        $this->line('Not recognised as any known subcategory code (left alone): ' . count($unrecognised));
+        $this->line('Matched via barcode text decode: ' . collect($updates)->where('via', 'text')->count());
+        $this->line('Matched via item\'s own category/subcategory (barcode text was legacy): ' . collect($updates)->where('via', 'fk')->count());
+        $this->line('Not recognised — no decodable text and no subcategory assigned (left alone): ' . count($unrecognised));
         if (!empty($unrecognised)) {
             $this->line('  Sample: ' . implode(', ', array_slice(array_unique($unrecognised), 0, 15)));
         }
@@ -148,8 +191,8 @@ class ReformatPurchaseItemBarcodes extends Command
 
         $this->newLine();
         $this->table(
-            ['Item ID', 'Old barcode_number', 'New barcode_number'],
-            collect($updates)->map(fn ($u) => [$u['item']->id, $u['old'], $u['new']])->toArray()
+            ['Item ID', 'Old barcode_number', 'New barcode_number', 'Matched via'],
+            collect($updates)->map(fn ($u) => [$u['item']->id, $u['old'], $u['new'], $u['via']])->toArray()
         );
 
         if ($dryRun) {
@@ -159,8 +202,8 @@ class ReformatPurchaseItemBarcodes extends Command
 
         if (!$this->confirm(
             count($updates) . ' item(s) will be updated. Any Sale Invoice item already recorded against an OLD ' .
-            'barcode will be updated to the NEW one too, to keep that link intact. A null category_id/subcategory_id ' .
-            'on an item will also be filled in from the match (existing values are never overwritten). Continue?'
+            'barcode will be updated to the NEW one too, to keep that link intact. A null category_id on an item ' .
+            'will also be filled in from its subcategory (existing values are never overwritten). Continue?'
         )) {
             $this->info('Cancelled — nothing was changed.');
             return self::SUCCESS;
@@ -178,10 +221,10 @@ class ReformatPurchaseItemBarcodes extends Command
                 $fillData = ['barcode_number' => $u['new']];
                 if ($item->subcategory_id === null) {
                     $fillData['subcategory_id'] = $subcategory->id;
-                    $fksFilledIn++;
                 }
                 if ($item->category_id === null) {
                     $fillData['category_id'] = $subcategory->category_id;
+                    $fksFilledIn++;
                 }
 
                 $item->update($fillData);
@@ -192,7 +235,7 @@ class ReformatPurchaseItemBarcodes extends Command
 
             $this->info(count($updates) . ' purchase item barcode(s) reformatted.');
             if ($fksFilledIn > 0) {
-                $this->info($fksFilledIn . ' item(s) had a null category_id/subcategory_id filled in from the match.');
+                $this->info($fksFilledIn . ' item(s) had a null category_id filled in from their subcategory.');
             }
             if ($saleItemsUpdated > 0) {
                 $this->info($saleItemsUpdated . ' matching Sale Invoice item(s) updated to keep the barcode link intact.');
