@@ -555,9 +555,24 @@ $(document).ready(function () {
      * real category_id/subcategory_id selections on that item row, entirely
      * from the preloaded `categories`/`subcategories` arrays (no AJAX, so a
      * bulk import of many rows doesn't fire dozens of concurrent requests).
-     * Subcategory Code takes priority for deriving the category — a code
-     * alone is enough since subcategory codes are unique — falling back to
-     * Category Code alone when no Subcategory Code is given or matched.
+     *
+     * An explicit Category Code column ALWAYS wins when it resolves to a
+     * real category — that's what the person filling in the sheet typed for
+     * THIS row. The Subcategory Code's own stored parent category is only
+     * used to derive the category when no Category Code was given (or it
+     * didn't match anything).
+     *
+     * FIX (was: subcategory-derived category silently overrode an explicit,
+     * correctly-matched Category Code): if a Subcategory Code's own parent
+     * category in the DB doesn't agree with the Category Code column, that
+     * disagreement is now surfaced as a warning instead of silently
+     * overwriting the explicit column — a mismatch there almost always means
+     * a Product Subcategory is filed under the wrong Product Category (e.g.
+     * several subcategories still pointing at one placeholder/default
+     * category from initial setup), and blindly trusting it was producing
+     * the same wrong category for every row that used one of those
+     * subcategories, regardless of what Category Code said.
+     *
      * Anything that doesn't match a known code is pushed onto `warnings`
      * (by row label) instead of failing the import.
      */
@@ -566,19 +581,33 @@ $(document).ready(function () {
         const subcategoryCode = normalizeCode(subcategoryCodeRaw);
         if (!categoryCode && !subcategoryCode) return;
 
-        const matchedSubcategory = subcategoryCode ? findSubcategoryByCode(subcategoryCode) : null;
-        let   matchedCategory    = categoryCode ? findCategoryByCode(categoryCode) : null;
+        const matchedSubcategory    = subcategoryCode ? findSubcategoryByCode(subcategoryCode) : null;
+        const matchedCategoryByCode = categoryCode ? findCategoryByCode(categoryCode) : null;
 
         if (subcategoryCode && !matchedSubcategory) {
             warnings.push(`${itemLabel}: Subcategory Code "${subcategoryCode}" not found`);
         }
-        if (categoryCode && !matchedCategory) {
+        if (categoryCode && !matchedCategoryByCode) {
             warnings.push(`${itemLabel}: Category Code "${categoryCode}" not found`);
         }
 
+        let matchedCategory = matchedCategoryByCode;
+
         if (matchedSubcategory) {
-            matchedCategory = categories.find(c => c.id == matchedSubcategory.category_id) || matchedCategory;
+            const subcategoryParentCategory = categories.find(c => c.id == matchedSubcategory.category_id) || null;
+
+            if (!matchedCategory) {
+                matchedCategory = subcategoryParentCategory;
+            } else if (subcategoryParentCategory && subcategoryParentCategory.id !== matchedCategory.id) {
+                warnings.push(
+                    `${itemLabel}: Subcategory Code "${subcategoryCode}" belongs to category ` +
+                    `"${subcategoryParentCategory.name}" (${subcategoryParentCategory.code || 'no code'}) in Product ` +
+                    `Subcategories, not "${matchedCategory.name}" (${matchedCategory.code}) from Category Code — ` +
+                    `used Category Code "${matchedCategory.code}". Check that subcategory's category in Product Subcategories.`
+                );
+            }
         }
+
         if (!matchedCategory) return;
 
         itemRow.find('.category-select').val(matchedCategory.id);
