@@ -213,7 +213,7 @@
                bottom padding here reserves a little breathing room for BOTH
                halves uniformly, without changing the overall stacked
                item-info/fold/barcode structure. */
-            padding: 0mm 1.8mm 2mm;
+            padding: 1mm 1mm 1mm 1mm;
             font-family: var(--mono);
         }
         /* soft guide down the middle, screen only — this is where you tear
