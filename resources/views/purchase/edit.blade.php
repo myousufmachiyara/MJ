@@ -532,10 +532,29 @@ $(document).ready(function () {
         return categories.find(c => normalizeCode(c.code).toLowerCase() === norm) || null;
     }
 
-    function findSubcategoryByCode(code) {
+    // FIX (root cause of the "G-" bug, confirmed against real data): a
+    // Subcategory Code is NOT actually unique system-wide in this database —
+    // e.g. code "DWN" exists once per category (Ring, Necklace, Earrings,
+    // Pendant, Chain, Bracelet, Bangle all have their own "...DWN" row).
+    // A plain find-by-code therefore silently returns whichever one happens
+    // to come first once loaded (alphabetically by name here — "BANGLE..."
+    // sorts before "NECKLACE...", "RING...", etc.), which is how a Necklace
+    // row ended up filed under Bangle (category code "G") no matter what
+    // Category Code its own row actually said. This now returns EVERY
+    // matching row so the caller can disambiguate using the row's own
+    // Category Code instead of guessing.
+    function findSubcategoriesByCode(code) {
         const norm = normalizeCode(code).toLowerCase();
-        if (!norm) return null;
-        return subcategories.find(sc => normalizeCode(sc.code).toLowerCase() === norm) || null;
+        if (!norm) return [];
+        return subcategories.filter(sc => normalizeCode(sc.code).toLowerCase() === norm);
+    }
+
+    function describeCategoryOwners(subcategoryCandidates) {
+        return subcategoryCandidates
+            .map(sc => categories.find(c => c.id == sc.category_id))
+            .filter(Boolean)
+            .map(c => `${c.name} (${c.code})`)
+            .join(', ');
     }
 
     function subcategoryOptionsHtmlForCategory(categoryId, selectedId) {
@@ -556,54 +575,71 @@ $(document).ready(function () {
      * from the preloaded `categories`/`subcategories` arrays (no AJAX, so a
      * bulk import of many rows doesn't fire dozens of concurrent requests).
      *
-     * An explicit Category Code column ALWAYS wins when it resolves to a
-     * real category — that's what the person filling in the sheet typed for
-     * THIS row. The Subcategory Code's own stored parent category is only
-     * used to derive the category when no Category Code was given (or it
-     * didn't match anything).
+     * FIX (root cause of the "G-" bug): this system's Subcategory Codes are
+     * NOT guaranteed unique across categories (confirmed against production
+     * data — several categories each have their own subcategory sharing the
+     * same code, e.g. "DWN"). A code-only lookup can therefore match several
+     * different rows, one per category. The matching here now works like
+     * this:
      *
-     * FIX (was: subcategory-derived category silently overrode an explicit,
-     * correctly-matched Category Code): if a Subcategory Code's own parent
-     * category in the DB doesn't agree with the Category Code column, that
-     * disagreement is now surfaced as a warning instead of silently
-     * overwriting the explicit column — a mismatch there almost always means
-     * a Product Subcategory is filed under the wrong Product Category (e.g.
-     * several subcategories still pointing at one placeholder/default
-     * category from initial setup), and blindly trusting it was producing
-     * the same wrong category for every row that used one of those
-     * subcategories, regardless of what Category Code said.
+     *   - Category Code given + Subcategory Code given: the subcategory MUST
+     *     belong to that exact category — every OTHER same-coded subcategory
+     *     under a different category is ignored. If none matches under that
+     *     category, the category from Category Code is still applied, but
+     *     the subcategory is left for manual selection and a warning names
+     *     which categories DO have that code.
+     *   - Category Code given, no Subcategory Code: just applies the
+     *     category.
+     *   - No Category Code, Subcategory Code given and unambiguous (only one
+     *     category has that code): applies both, deriving the category from
+     *     it — same shortcut as before.
+     *   - No Category Code, Subcategory Code given but ambiguous (more than
+     *     one category shares that code): there is no safe way to guess
+     *     which one was meant, so NEITHER is set — a warning lists the
+     *     categories that share the code and asks for a Category Code on
+     *     that row instead of silently picking one (which is exactly how
+     *     "DWN" used to always resolve to the alphabetically-first category,
+     *     "BANGLE" / code "G", regardless of the item's real category).
      *
-     * Anything that doesn't match a known code is pushed onto `warnings`
-     * (by row label) instead of failing the import.
+     * Anything that doesn't match a known code, or that stays unresolved for
+     * one of the ambiguity reasons above, is pushed onto `warnings` (by row
+     * label) instead of failing the import.
      */
     function applyCategorySubcategoryFromCodes(itemRow, categoryCodeRaw, subcategoryCodeRaw, itemLabel, warnings) {
         const categoryCode    = normalizeCode(categoryCodeRaw);
         const subcategoryCode = normalizeCode(subcategoryCodeRaw);
         if (!categoryCode && !subcategoryCode) return;
 
-        const matchedSubcategory    = subcategoryCode ? findSubcategoryByCode(subcategoryCode) : null;
-        const matchedCategoryByCode = categoryCode ? findCategoryByCode(categoryCode) : null;
-
-        if (subcategoryCode && !matchedSubcategory) {
-            warnings.push(`${itemLabel}: Subcategory Code "${subcategoryCode}" not found`);
-        }
-        if (categoryCode && !matchedCategoryByCode) {
+        let matchedCategory = categoryCode ? findCategoryByCode(categoryCode) : null;
+        if (categoryCode && !matchedCategory) {
             warnings.push(`${itemLabel}: Category Code "${categoryCode}" not found`);
         }
 
-        let matchedCategory = matchedCategoryByCode;
+        let matchedSubcategory = null;
 
-        if (matchedSubcategory) {
-            const subcategoryParentCategory = categories.find(c => c.id == matchedSubcategory.category_id) || null;
+        if (subcategoryCode) {
+            const candidates = findSubcategoriesByCode(subcategoryCode);
 
-            if (!matchedCategory) {
-                matchedCategory = subcategoryParentCategory;
-            } else if (subcategoryParentCategory && subcategoryParentCategory.id !== matchedCategory.id) {
+            if (candidates.length === 0) {
+                warnings.push(`${itemLabel}: Subcategory Code "${subcategoryCode}" not found`);
+            } else if (matchedCategory) {
+                matchedSubcategory = candidates.find(sc => sc.category_id == matchedCategory.id) || null;
+                if (!matchedSubcategory) {
+                    warnings.push(
+                        `${itemLabel}: Subcategory Code "${subcategoryCode}" is not defined under category ` +
+                        `"${matchedCategory.name}" (${matchedCategory.code}) — that code exists under: ` +
+                        `${describeCategoryOwners(candidates) || 'no category with a resolvable code'}. Category kept as ` +
+                        `"${matchedCategory.code}" from Category Code; please pick the Subcategory manually for this item.`
+                    );
+                }
+            } else if (candidates.length === 1) {
+                matchedSubcategory = candidates[0];
+                matchedCategory    = categories.find(c => c.id == matchedSubcategory.category_id) || null;
+            } else {
                 warnings.push(
-                    `${itemLabel}: Subcategory Code "${subcategoryCode}" belongs to category ` +
-                    `"${subcategoryParentCategory.name}" (${subcategoryParentCategory.code || 'no code'}) in Product ` +
-                    `Subcategories, not "${matchedCategory.name}" (${matchedCategory.code}) from Category Code — ` +
-                    `used Category Code "${matchedCategory.code}". Check that subcategory's category in Product Subcategories.`
+                    `${itemLabel}: Subcategory Code "${subcategoryCode}" is used by more than one category ` +
+                    `(${describeCategoryOwners(candidates)}) and no Category Code was given on this row, so it can't be ` +
+                    `resolved automatically — add a Category Code for this item and re-import, or pick both manually.`
                 );
             }
         }

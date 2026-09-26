@@ -69,8 +69,18 @@ class PurchaseInvoiceController extends Controller
         // already set up under Product Categories / Product Subcategories
         // (not a name) — e.g. "RING" / "RING-A" below are illustrative
         // only, replace with your own codes. Either can be left blank; if
-        // only Subcategory Code is given, its Category is resolved from it
-        // automatically since subcategory codes are unique in the system.
+        // only Subcategory Code is given AND that code exists under exactly
+        // one Category, its Category is resolved from it automatically.
+        //
+        // FIX: Subcategory Codes are NOT required to be globally unique in
+        // this system — the same code can legitimately exist under more than
+        // one Category (e.g. a "DWN" subcategory defined separately under
+        // Ring, Necklace, Earrings, etc.). When a Subcategory Code like that
+        // is used, ALWAYS also fill in Category Code on that row so the
+        // import knows which one you mean — otherwise it can't guess safely
+        // and will leave that row's Category/Subcategory blank for you to
+        // set manually (you'll see it listed in the "please check manually"
+        // warning after import instead of it silently picking the wrong one).
         //
         // 'Tray No' is free text (e.g. "T-101") identifying the physical
         // tray the item is stored in. Optional, read as-is, no matching.
