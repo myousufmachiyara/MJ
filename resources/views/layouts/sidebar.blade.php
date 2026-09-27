@@ -120,8 +120,12 @@
           @endif
 
           {{-- Purchase --}}
-          @if(auth()->user()->can('purchase_invoices.index') || auth()->user()->can('purchase_return.index'))
-          <li class="nav-parent {{ request()->routeIs('purchase_invoices.*') || request()->routeIs('purchase_return.*') ? 'nav-expanded nav-active' : '' }}">
+          {{-- FIX (Selling Price nav): also show this parent menu for a user
+               who only has purchase_invoices.edit (e.g. someone granted just
+               enough access to update Selling Price) so that link below
+               isn't hidden behind the Invoices-list permission. --}}
+          @if(auth()->user()->can('purchase_invoices.index') || auth()->user()->can('purchase_invoices.edit') || auth()->user()->can('purchase_return.index'))
+          <li class="nav-parent {{ request()->routeIs('purchase_invoices.*') || request()->routeIs('purchase_return.*') || request()->routeIs('selling_price.*') ? 'nav-expanded nav-active' : '' }}">
             <a class="nav-link" href="#">
               <i class="fa fa-shopping-cart"></i>
               <span>Purchase</span>
@@ -130,6 +134,16 @@
               @can('purchase_invoices.index')
                 <li class="{{ request()->routeIs('purchase_invoices.*') ? 'active' : '' }}">
                   <a class="nav-link" href="{{ route('purchase_invoices.index') }}">Invoices</a>
+                </li>
+              @endcan
+              {{-- FEATURE (bulk Selling Price update): its own standalone
+                   screen — see SellingPriceController and routes/web.php
+                   ('selling_price.index'). Reuses the existing
+                   'purchase_invoices.edit' permission, no new permission
+                   module introduced for this. --}}
+              @can('purchase_invoices.edit')
+                <li class="{{ request()->routeIs('selling_price.*') ? 'active' : '' }}">
+                  <a class="nav-link" href="{{ route('selling_price.index') }}">Selling Price</a>
                 </li>
               @endcan
               @can('purchase_return.index')

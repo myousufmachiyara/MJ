@@ -56,6 +56,15 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/purchase-invoice-items/{id}/selling-price', [PurchaseInvoiceController::class, 'updateSellingPrice'])->middleware('check.permission:purchase_invoices.edit')->name('purchase_invoice_items.update_selling_price');
     Route::get('/purchase-return/{invoiceId}/items',   [PurchaseReturnController::class,  'getInvoiceItems'])->name('purchase_return.invoice_items');
 
+    // FEATURE (bulk Selling Price update): a standalone screen listing every
+    // unsold purchased item (across ALL invoices) so Selling Price can be
+    // set/updated for many items at once — see SellingPriceController's own
+    // doc-comment. Reuses the existing 'purchase_invoices.edit' permission
+    // (same gate the per-item quick-save route above already uses) rather
+    // than introducing a brand new permission module for this.
+    Route::get('/selling-price',              [App\Http\Controllers\SellingPriceController::class, 'index'])      ->middleware('check.permission:purchase_invoices.edit')->name('selling_price.index');
+    Route::post('/selling-price/bulk-update', [App\Http\Controllers\SellingPriceController::class, 'bulkUpdate']) ->middleware('check.permission:purchase_invoices.edit')->name('selling_price.bulk_update');
+
     // ── Sale Helpers ──────────────────────────────────────────────────────────
     Route::get('/sale-invoices/scan-barcode',      [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
     Route::get('/sale-invoices/{id}/print-simple', [SaleInvoiceController::class, 'printSimple'])->middleware('check.permission:sale_invoices.print')->name('sale_invoices.print_simple');
