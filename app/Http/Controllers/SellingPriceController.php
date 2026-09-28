@@ -129,4 +129,68 @@ class SellingPriceController extends Controller
             'skipped' => $skipped, // barcode_number(s) skipped because already sold
         ]);
     }
+
+    /**
+     * FEATURE (export selected items): CSV export of just the checked rows
+     * on the Bulk Selling Price screen — Excel opens a CSV natively, so
+     * this follows PurchaseInvoiceController::downloadTemplate()'s existing
+     * streamDownload()+fputcsv() pattern instead of pulling in a new
+     * xlsx-writing dependency for something Excel already reads fine.
+     *
+     * Exactly the 5 fields asked for, read straight off the purchased item
+     * (and its parts, for the diamond ct total) — nothing calculated or
+     * guessed:
+     *   - Gold Weight  → gross_weight (the same column the Purchase Invoice
+     *     create/edit screens themselves label "Gold Gross Wt")
+     *   - Diamond (ct) → diamond_total_ct accessor (sum of this item's
+     *     parts' qty — see PurchaseInvoiceItem::getDiamondTotalCtAttribute())
+     *   - Selling Price → selling_price
+     *   - Certificate No → certificate_no
+     *   - Barcode Number → barcode_number
+     * Barcode Number, Item Name and Certificate No are included as the
+     * first three columns purely so each row is identifiable in the sheet;
+     * Item Name wasn't explicitly asked for but costs nothing to include
+     * and every other export/template in this app leads with an
+     * identifying column the same way.
+     */
+    public function export(Request $request)
+    {
+        $validated = $request->validate([
+            'item_ids'   => 'required|array|min:1',
+            'item_ids.*' => 'integer|exists:purchase_invoice_items,id',
+        ]);
+
+        $items = PurchaseInvoiceItem::whereIn('id', $validated['item_ids'])
+            ->with('parts') // diamond_total_ct sums over this
+            ->orderBy('id')
+            ->get();
+
+        $filename = 'selling_price_export_' . now()->format('Y-m-d_His') . '.csv';
+
+        $rows = [
+            ['Barcode Number', 'Item Name', 'Certificate No', 'Gold Weight (gms)', 'Diamond (ct)', 'Selling Price'],
+        ];
+
+        foreach ($items as $item) {
+            $rows[] = [
+                $item->barcode_number,
+                $item->item_name,
+                $item->certificate_no,
+                number_format((float) $item->gross_weight, 3, '.', ''),
+                number_format((float) $item->diamond_total_ct, 3, '.', ''),
+                $item->selling_price !== null ? number_format((float) $item->selling_price, 2, '.', '') : '',
+            ];
+        }
+
+        return response()->streamDownload(function () use ($rows) {
+            $handle = fopen('php://output', 'w');
+            foreach ($rows as $row) {
+                fputcsv($handle, $row);
+            }
+            fclose($handle);
+        }, $filename, [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
 }

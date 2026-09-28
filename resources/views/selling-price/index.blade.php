@@ -18,6 +18,12 @@
       - "Save All Changed" — POSTs every row whose value you've edited
         since page load (or since the last save) in one request, to
         SellingPriceController::bulkUpdate().
+
+    FEATURE (export selected items): a checkbox column lets you pick a
+    subset of rows and download a CSV of just those (barcode, item name,
+    certificate no, gold weight, diamond ct, selling price) via
+    SellingPriceController::export(). Purely a read/export — it never
+    changes any data, so it's independent of the two save paths above.
 --}}
 <div class="row">
   <div class="col">
@@ -37,6 +43,9 @@
         </div>
         <div class="d-flex align-items-center gap-2">
           <span id="dirtyStatus" class="text-muted small"></span>
+          <button type="button" id="exportSelectedBtn" class="btn btn-outline-primary" disabled>
+            <i class="fas fa-file-export"></i> Export Selected (<span id="selectedCount">0</span>)
+          </button>
           <button type="button" id="saveAllBtn" class="btn btn-success" disabled>
             <i class="fas fa-save"></i> Save All Changed (<span id="dirtyCount">0</span>)
           </button>
@@ -57,6 +66,7 @@
           <table class="table table-bordered table-striped" id="sellingPriceTable">
             <thead>
               <tr>
+                <th width="3%"><input type="checkbox" id="selectAllCheckbox" title="Select all (filtered rows)"></th>
                 <th>#</th>
                 <th>Barcode / Item Code</th>
                 <th>Item Name</th>
@@ -72,6 +82,7 @@
             <tbody>
               @forelse ($items as $index => $item)
                 <tr class="item-row" data-item-id="{{ $item->id }}">
+                  <td><input type="checkbox" class="row-select-checkbox" value="{{ $item->id }}"></td>
                   <td>{{ $index + 1 }}</td>
                   <td><span class="fw-bold text-primary">{{ $item->barcode_number }}</span></td>
                   <td>{{ $item->item_name }}</td>
@@ -104,7 +115,7 @@
                 </tr>
               @empty
                 <tr>
-                  <td colspan="10" class="text-center text-muted">No unsold purchased items found.</td>
+                  <td colspan="11" class="text-center text-muted">No unsold purchased items found.</td>
                 </tr>
               @endforelse
             </tbody>
@@ -121,12 +132,13 @@ $(document).ready(function () {
     const CSRF_TOKEN                   = $('meta[name="csrf-token"]').attr('content');
     const SELLING_PRICE_SAVE_URL_BASE  = '{{ url("/purchase-invoice-items") }}';
     const BULK_UPDATE_URL              = '{{ route("selling_price.bulk_update") }}';
+    const EXPORT_URL                   = '{{ route("selling_price.export") }}';
 
     const table = $('#sellingPriceTable').DataTable({
         pageLength: 50,
-        order: [[0, 'desc']],
+        order: [[1, 'desc']],
         columnDefs: [
-            { orderable: false, targets: [8, 9] } // Selling Price / Save columns
+            { orderable: false, targets: [0, 9, 10] } // Select / Selling Price / Save columns
         ],
     });
 
@@ -136,6 +148,64 @@ $(document).ready(function () {
     // DataTables' global search already matches against).
     $('#itemSearchBox').on('keyup', function () {
         table.search(this.value).draw();
+    });
+
+    // ── Row selection (for Export Selected) ──────────────────────────────
+    function updateSelectedState() {
+        const count = $('.row-select-checkbox:checked').length;
+        $('#selectedCount').text(count);
+        $('#exportSelectedBtn').prop('disabled', count === 0);
+    }
+
+    $(document).on('change', '.row-select-checkbox', function () {
+        updateSelectedState();
+        // Keep the header "select all" checkbox in sync: checked only when
+        // every currently-filtered row is checked, indeterminate when some
+        // (but not all) of them are.
+        const visibleBoxes = table.rows({ search: 'applied' }).nodes().to$().find('.row-select-checkbox');
+        const checkedVisible = visibleBoxes.filter(':checked').length;
+        $('#selectAllCheckbox').prop({
+            checked: visibleBoxes.length > 0 && checkedVisible === visibleBoxes.length,
+            indeterminate: checkedVisible > 0 && checkedVisible < visibleBoxes.length,
+        });
+    });
+
+    // Selects/deselects only the rows the current search has left visible —
+    // never a row that's filtered out of view, so "select all" can't
+    // silently pick up items you can't currently see.
+    $('#selectAllCheckbox').on('change', function () {
+        const checked = $(this).is(':checked');
+        table.rows({ search: 'applied' }).nodes().to$().find('.row-select-checkbox').prop('checked', checked);
+        $(this).prop('indeterminate', false);
+        updateSelectedState();
+    });
+
+    // Re-sync the header checkbox whenever the search/filter changes, since
+    // "all visible" can change without any checkbox itself being clicked.
+    table.on('search.dt draw.dt', function () {
+        const visibleBoxes = table.rows({ search: 'applied' }).nodes().to$().find('.row-select-checkbox');
+        const checkedVisible = visibleBoxes.filter(':checked').length;
+        $('#selectAllCheckbox').prop({
+            checked: visibleBoxes.length > 0 && checkedVisible === visibleBoxes.length,
+            indeterminate: checkedVisible > 0 && checkedVisible < visibleBoxes.length,
+        });
+    });
+
+    // ── Export Selected — real browser download via a throwaway hidden
+    // form POST (not AJAX/fetch), so the server's file response triggers
+    // a normal download instead of arriving as JSON in an XHR handler. ──
+    $('#exportSelectedBtn').on('click', function () {
+        const ids = $('.row-select-checkbox:checked').map(function () { return this.value; }).get();
+        if (ids.length === 0) return;
+
+        const form = $('<form>', { method: 'POST', action: EXPORT_URL, style: 'display:none;' });
+        form.append($('<input>', { type: 'hidden', name: '_token', value: CSRF_TOKEN }));
+        ids.forEach(function (id) {
+            form.append($('<input>', { type: 'hidden', name: 'item_ids[]', value: id }));
+        });
+        $('body').append(form);
+        form.trigger('submit');
+        form.remove();
     });
 
     function updateDirtyState() {

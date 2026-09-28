@@ -64,6 +64,9 @@ Route::middleware(['auth'])->group(function () {
     // than introducing a brand new permission module for this.
     Route::get('/selling-price',              [App\Http\Controllers\SellingPriceController::class, 'index'])      ->middleware('check.permission:purchase_invoices.edit')->name('selling_price.index');
     Route::post('/selling-price/bulk-update', [App\Http\Controllers\SellingPriceController::class, 'bulkUpdate']) ->middleware('check.permission:purchase_invoices.edit')->name('selling_price.bulk_update');
+    // FEATURE (export selected items): CSV of just the checked rows — see
+    // SellingPriceController::export() for the exact columns.
+    Route::post('/selling-price/export',      [App\Http\Controllers\SellingPriceController::class, 'export'])     ->middleware('check.permission:purchase_invoices.edit')->name('selling_price.export');
 
     // ── Sale Helpers ──────────────────────────────────────────────────────────
     Route::get('/sale-invoices/scan-barcode',      [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
