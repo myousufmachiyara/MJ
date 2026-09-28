@@ -301,6 +301,7 @@ class SaleInvoiceController extends Controller
             'item_description' => $purchaseItem->item_description,
             'purity'           => $purchaseItem->purity,
             'gross_weight'     => $purchaseItem->gross_weight,
+            'net_weight'        => $purchaseItem->net_weight,
             'making_rate'      => $purchaseItem->making_rate,
             'material_type'    => $purchaseItem->material_type,
             'vat_percent'      => $purchaseItem->vat_percent,

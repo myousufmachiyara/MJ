@@ -688,7 +688,7 @@ $(document).ready(function () {
                 let nearestOpt = null, minDiff = Infinity;
                 newRow.find('.purity option').each(function() { const diff = Math.abs(parseFloat($(this).val()) - pur); if (diff < minDiff) { minDiff = diff; nearestOpt = $(this).val(); } });
                 if (nearestOpt) newRow.find('.purity').val(nearestOpt);
-                newRow.find('.base-gross-weight').val((parseFloat(data.gross_weight) || 0).toFixed(3));
+                newRow.find('.base-gross-weight').val((parseFloat(data.net_weight) || 0).toFixed(3));
                 newRow.find('.making-rate').val(data.making_rate || 0);
                 newRow.find('.material-type').val(data.material_type || 'gold');
                 newRow.find('.vat-percent').val(data.vat_percent || 0);
@@ -737,7 +737,7 @@ $(document).ready(function () {
         });
         if (nearestOpt) newRow.find('.purity').val(nearestOpt);
 
-        newRow.find('.base-gross-weight').val((parseFloat(data.gross_weight) || 0).toFixed(3));
+        newRow.find('.base-gross-weight').val((parseFloat(data.net_weight) || 0).toFixed(3));
         newRow.find('.making-rate').val(data.making_rate || 0);
         newRow.find('.material-type').val(data.material_type || 'gold');
         newRow.find('.vat-percent').val(data.vat_percent || 0);
@@ -1057,7 +1057,7 @@ $(document).ready(function () {
         });
         if (nearestOpt) newRow.find('.purity').val(nearestOpt);
 
-        newRow.find('.base-gross-weight').val((parseFloat(item.gross_weight) || 0).toFixed(3));
+        newRow.find('.base-gross-weight').val((parseFloat(item.net_weight) || 0).toFixed(3));
         newRow.find('.making-rate').val(item.making_rate || 0);
         newRow.find('.material-type').val(item.material_type || 'gold');
         newRow.find('.vat-percent').val(item.vat_percent || 0);
