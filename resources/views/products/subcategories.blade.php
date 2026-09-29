@@ -6,6 +6,37 @@
 <div class="row">
   <div class="col">
     <section class="card">
+
+      {{--
+          FIX (update "silently" not working): this view had no error
+          display at all, so a validation failure (e.g. the `code` field
+          colliding with another subcategory's code — see
+          ProductSubcategoryController::store()/update()) just closed the
+          modal with nothing saved and no indication anything went wrong.
+          Laravel's default validation-failure redirect always flashes
+          `errors` and the old input, regardless of which field/controller
+          failed — this renders whatever it finds, for any future failure
+          here too, not just this one.
+      --}}
+      @if ($errors->any())
+        <div class="alert alert-danger alert-dismissible fade show m-3 mb-0" role="alert">
+          <strong>Please fix the following:</strong>
+          <ul class="mb-0">
+            @foreach ($errors->all() as $error)
+              <li>{{ $error }}</li>
+            @endforeach
+          </ul>
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      @endif
+
+      @if (session('success'))
+        <div class="alert alert-success alert-dismissible fade show m-3 mb-0" role="alert">
+          {{ session('success') }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      @endif
+
       <header class="card-header">
         <div style="display: flex; justify-content: space-between;">
           <h2 class="card-title">All Subcategories</h2>
