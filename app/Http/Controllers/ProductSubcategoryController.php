@@ -67,10 +67,13 @@ class ProductSubcategoryController extends Controller
             ->route('product_subcategories.index')
             ->with('success', 'Subcategory updated successfully.');
     }
-
-    public function destroy(ProductSubcategory $productSubcategory)
+    
+    public function destroy(string $id)
     {
+        $productSubcategory = ProductSubcategory::findOrFail($id);
         $productSubcategory->delete();
+
         return redirect()->route('product_subcategories.index')->with('success', 'Subcategory deleted successfully.');
     }
+
 }
