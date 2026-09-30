@@ -67,6 +67,9 @@ Route::middleware(['auth'])->group(function () {
     // FEATURE (export selected items): CSV of just the checked rows — see
     // SellingPriceController::export() for the exact columns.
     Route::post('/selling-price/export',      [App\Http\Controllers\SellingPriceController::class, 'export'])     ->middleware('check.permission:purchase_invoices.edit')->name('selling_price.export');
+    // FEATURE (bulk Selling Price import, AED + USD): CSV upload counterpart
+    // to export() above — see SellingPriceController::import().
+    Route::post('/selling-price/import',      [App\Http\Controllers\SellingPriceController::class, 'import'])     ->middleware('check.permission:purchase_invoices.edit')->name('selling_price.import');
 
     // ── Sale Helpers ──────────────────────────────────────────────────────────
     Route::get('/sale-invoices/scan-barcode',      [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');

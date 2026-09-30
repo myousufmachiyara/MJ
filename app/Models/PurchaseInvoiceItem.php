@@ -32,6 +32,10 @@ class PurchaseInvoiceItem extends Model
         'vat_amount',
         'item_total',
         'selling_price',
+        // FEATURE (bulk Selling Price import, AED + USD): independent of
+        // selling_price (AED) — see migration
+        // 2026_09_30_000001_add_selling_price_usd_to_purchase_invoice_items_table.php.
+        'selling_price_usd',
         'gold_rate',
         'diamond_rate',
         'remarks',
@@ -62,6 +66,8 @@ class PurchaseInvoiceItem extends Model
         // (not 0.0), which is exactly what distinguishes "not priced yet"
         // from "priced at zero" throughout the POS flow.
         'selling_price'  => 'float',
+        // Same nullable-stays-null reasoning as selling_price above.
+        'selling_price_usd' => 'float',
         'gold_rate'      => 'float',
         'diamond_rate'   => 'float',
         'is_printed'     => 'boolean',
