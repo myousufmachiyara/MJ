@@ -105,7 +105,11 @@ class SaleInvoiceController extends Controller
      */
     public function posScan(Request $request)
     {
-        $barcode = trim((string) $request->get('barcode'));
+        $barcode  = trim((string) $request->get('barcode'));
+        $currency = strtoupper(trim((string) $request->get('currency', 'AED')));
+        if (!in_array($currency, ['AED', 'USD'], true)) {
+            $currency = 'AED';
+        }
 
         if (!$barcode) {
             return response()->json(['success' => false, 'message' => 'No barcode provided.'], 422);
@@ -140,13 +144,23 @@ class SaleInvoiceController extends Controller
         }
 
         // FEATURE (Sale Invoice POS): the selling price is a manually
-        // defined value saved on the purchased item (Purchase Invoice
-        // create/edit screens) — POS only ever retrieves it, never
-        // calculates it. Refuse rather than silently sell at 0.
-        if ($purchaseItem->selling_price === null) {
+        // defined value saved on the purchased item — POS only ever
+        // retrieves it, never calculates it. Refuse rather than silently
+        // sell at 0.
+        $price      = $currency === 'USD' ? $purchaseItem->selling_price_usd : $purchaseItem->selling_price;
+        $otherPrice = $currency === 'USD' ? $purchaseItem->selling_price     : $purchaseItem->selling_price_usd;
+        $otherLabel = $currency === 'USD' ? 'AED' : 'USD';
+
+        if ($price === null) {
+            $message = 'Selling price (' . $currency . ') is not set for this item.';
+            if ($otherPrice !== null) {
+                $message .= ' It is priced in ' . $otherLabel . ' (' . number_format((float) $otherPrice, 2)
+                    . ') — switch the POS currency to ' . $otherLabel . ', or set the ' . $currency . ' price on the Selling Price screen.';
+            }
+
             return response()->json([
                 'success' => false,
-                'message' => 'Selling price is not set for this item.',
+                'message' => $message,
             ], 422);
         }
 
@@ -160,7 +174,8 @@ class SaleInvoiceController extends Controller
             'net_weight'       => $purchaseItem->net_weight,
             'diamond_total_ct' => $purchaseItem->diamond_total_ct,
             'stone_total_ct'   => $purchaseItem->stone_total_ct,
-            'selling_price'    => $purchaseItem->selling_price,
+            'currency'         => $currency,
+            'selling_price'    => $price,
         ]);
     }
 
