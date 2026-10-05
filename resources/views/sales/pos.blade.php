@@ -19,9 +19,24 @@
         Cost Price, Profit/Margin, Net Weight-as-cost-input) that the full
         Sale Invoice screen shows. See SaleInvoiceController::posScan().
       - The Selling Price shown/used here is the flat, manually-set price
-        already saved on the purchased item (Purchase Invoice create/edit
-        screens) — POS only ever retrieves it, never calculates it from
-        rate/purity/making charges.
+        already saved on the purchased item (Selling Price screen / Purchase
+        Invoice screens) — POS only ever retrieves it, never calculates it
+        from rate/purity/making charges.
+
+    FIX (USD selling price not picked up): POS used to be hard-wired to AED
+    (a hidden currency=AED input, and posScan() only ever read the AED
+    `selling_price` column), so an item priced only in USD
+    (`selling_price_usd`) was rejected with "Selling price is not set".
+    There is now a Currency selector in the header:
+      - AED (default) — exactly the previous behavior, reads selling_price.
+      - USD — reads selling_price_usd, and the invoice is saved with
+        currency=USD plus the Exchange Rate entered here, which is the same
+        currency/exchange_rate path the full Sale Invoice screen already
+        uses for USD invoices (SaleInvoiceController::store() computes
+        net_amount_aed from it).
+    The two prices are independent — no AED<->USD conversion is ever
+    applied to an item's price — and the currency can only be switched
+    while the cart is empty, so one invoice never mixes currencies.
 
     Kept intentionally simple: no is_taxable/VAT%, no gold/diamond rate
     inputs, no parts — those only matter for the detailed costing the POS
@@ -48,7 +63,6 @@
 
       {{-- Fields the full Sale Invoice screen exposes but POS intentionally hides — fixed, sane defaults. --}}
       <input type="hidden" name="is_taxable" value="0">
-      <input type="hidden" name="currency" value="AED">
       <input type="hidden" name="invoice_vat_percent" value="0">
       <input type="hidden" name="net_amount" id="net_amount" value="0">
 
@@ -75,6 +89,18 @@
                   <option value="{{ $customer->id }}">{{ $customer->name }}</option>
                 @endforeach
               </select>
+            </div>
+            <div class="col-md-1">
+              <label class="fw-bold">Currency</label>
+              <select name="currency" id="pos_currency" class="form-control" required>
+                <option value="AED" selected>AED</option>
+                <option value="USD">USD</option>
+              </select>
+            </div>
+            <div class="col-md-2 d-none" id="pos_exchange_rate_wrap">
+              <label class="fw-bold">Exchange Rate (AED per USD)</label>
+              <input type="number" step="any" min="0" name="exchange_rate" id="pos_exchange_rate"
+                     class="form-control" value="3.6725" disabled>
             </div>
             <div class="col-auto ms-auto">
               <a href="{{ route('sale_invoices.index') }}" class="btn btn-outline-secondary">
@@ -119,7 +145,7 @@
                     <th>Gold Wt (g)</th>
                     <th>Diamond (Ct)</th>
                     <th>Stone (Ct)</th>
-                    <th>Selling Price</th>
+                    <th>Selling Price (<span class="pos-currency-label">AED</span>)</th>
                     <th width="5%">Action</th>
                   </tr>
                 </thead>
@@ -154,7 +180,7 @@
                 </tbody>
               </table>
               <div class="d-flex justify-content-between align-items-center p-2 bg-light border rounded mb-3">
-                <span class="fw-bold">Total Selling Price</span>
+                <span class="fw-bold">Total Selling Price (<span class="pos-currency-label">AED</span>)</span>
                 <span class="fw-bold fs-4 text-success" id="pos_summary_price">0.00</span>
               </div>
 
@@ -223,6 +249,11 @@ $(document).ready(function () {
     // or weight math happens here, everything is just retrieved/displayed.
     let cart = [];
 
+    // Currency the cart is currently priced in. posScan() is asked for
+    // this currency's price, and the form submits it as the invoice's
+    // currency. Only changeable while the cart is empty (see below).
+    let activeCurrency = 'AED';
+
     $('.select2-js').select2({ width: '100%' });
 
     function focusScanInput() {
@@ -284,7 +315,9 @@ $(document).ready(function () {
     // createItems() already expects from the full Sale Invoice screen —
     // purity/making_rate/vat_percent are sent as 0 because a POS item's
     // full value comes entirely from selling_price (see createItems()'s
-    // POS branch), not from any rate calculation.
+    // POS branch), not from any rate calculation. selling_price here is
+    // already in the invoice's currency (AED or USD), as returned by
+    // posScan() for the active currency.
     function renderHiddenInputs() {
         const wrap = $('#posHiddenInputs').empty();
         cart.forEach((item, idx) => {
@@ -320,6 +353,40 @@ $(document).ready(function () {
         $('#pos_checkout_btn').prop('disabled', totalItems === 0 || !$('#customer_id').val());
     }
 
+    // ── Currency selector ────────────────────────────────────────────────
+    function applyCurrencyUi(currency) {
+        $('.pos-currency-label').text(currency);
+        if (currency === 'USD') {
+            $('#pos_exchange_rate_wrap').removeClass('d-none');
+            $('#pos_exchange_rate').prop('disabled', false);
+        } else {
+            $('#pos_exchange_rate_wrap').addClass('d-none');
+            // disabled inputs aren't submitted, so AED invoices send no
+            // exchange_rate at all (nullable on the server for AED).
+            $('#pos_exchange_rate').prop('disabled', true);
+        }
+    }
+
+    $('#pos_currency').on('change', function () {
+        const newCurrency = $(this).val();
+
+        // Prices already in the cart were fetched in the previous currency,
+        // so switching mid-sale would leave a mixed-currency invoice.
+        if (cart.length > 0) {
+            $(this).val(activeCurrency);
+            showScanResult(
+                '<i class="fas fa-exclamation-triangle"></i> Remove all items from the cart before changing the currency.',
+                'warning'
+            );
+            focusScanInput();
+            return;
+        }
+
+        activeCurrency = newCurrency;
+        applyCurrencyUi(activeCurrency);
+        focusScanInput();
+    });
+
     function handleScan() {
         const barcode = $('#pos_barcode_input').val().trim();
         if (!barcode) { focusScanInput(); return; }
@@ -339,7 +406,7 @@ $(document).ready(function () {
         $.ajax({
             url: POS_SCAN_URL,
             method: 'GET',
-            data: { barcode },
+            data: { barcode: barcode, currency: activeCurrency },
             success: function (data) {
                 if (!data.success) {
                     showScanResult('<i class="fas fa-times-circle"></i> ' + data.message, 'danger');
@@ -397,8 +464,14 @@ $(document).ready(function () {
             showScanResult('<i class="fas fa-exclamation-triangle"></i> Please select a customer.', 'warning');
             return;
         }
+        if (activeCurrency === 'USD' && !(parseFloat($('#pos_exchange_rate').val()) > 0)) {
+            e.preventDefault();
+            showScanResult('<i class="fas fa-exclamation-triangle"></i> Enter an Exchange Rate (AED per USD) for a USD sale.', 'warning');
+            return;
+        }
     });
 
+    applyCurrencyUi(activeCurrency);
     renderCart();
     focusScanInput();
 });
