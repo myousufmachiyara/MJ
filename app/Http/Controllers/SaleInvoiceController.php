@@ -1155,7 +1155,7 @@ class SaleInvoiceController extends Controller
         foreach ($widths as $col => $w) {
             $sheet->getColumnDimension($col)->setWidth($w);
         }
-        $sheet->getSheetView()->setShowGridLines(false);
+        $sheet->setShowGridlines(false); // Worksheet method (SheetView has no such setter)
 
         // ── header: logo (left) + company details (right) ─────────────────
         for ($r = 1; $r <= 4; $r++) {
