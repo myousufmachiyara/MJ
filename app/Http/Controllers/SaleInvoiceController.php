@@ -233,6 +233,8 @@ class SaleInvoiceController extends Controller
                 'making_rate'      => $saleItem->making_rate,
                 'material_type'    => $saleItem->material_type,
                 'vat_percent'      => $saleItem->vat_percent,
+                'selling_price_aed' => $this->sellingPricesFor($saleItem->barcode_number)[0],
+                'selling_price_usd' => $this->sellingPricesFor($saleItem->barcode_number)[1],
                 'parts'            => $saleItem->parts->map(fn($p) => [
                     'item_name'        => $p->item_name,
                     'part_description' => $p->part_description,
@@ -294,6 +296,26 @@ class SaleInvoiceController extends Controller
     }
 
     /**
+     * The stored [AED, USD] selling prices of the purchased item carrying
+     * this barcode (null = not priced / not a purchased item). Display only.
+     */
+    private function sellingPricesFor($barcode): array
+    {
+        if (!$barcode) {
+            return [null, null];
+        }
+
+        $p = PurchaseInvoiceItem::where('barcode_number', $barcode)
+            ->latest()
+            ->first(['selling_price', 'selling_price_usd']);
+
+        return [
+            $p && $p->selling_price !== null ? (float) $p->selling_price : null,
+            $p && $p->selling_price_usd !== null ? (float) $p->selling_price_usd : null,
+        ];
+    }
+
+    /**
      * Shared JSON shape for a purchase-item scan result. Used by both the
      * short numeric-surrogate fast path and the legacy barcode_number
      * match above, so the two lookup routes can never drift into
@@ -312,6 +334,10 @@ class SaleInvoiceController extends Controller
             'making_rate'      => $purchaseItem->making_rate,
             'material_type'    => $purchaseItem->material_type,
             'vat_percent'      => $purchaseItem->vat_percent,
+            // FEATURE (selling price shown on the Sale Invoice screens):
+            // reference only — AED and USD are independent, never converted.
+            'selling_price_aed' => $purchaseItem->selling_price !== null ? (float) $purchaseItem->selling_price : null,
+            'selling_price_usd' => $purchaseItem->selling_price_usd !== null ? (float) $purchaseItem->selling_price_usd : null,
             'parts'            => $purchaseItem->parts->map(fn($p) => [
                 'item_name'        => $p->item_name,
                 'part_description' => $p->part_description,
@@ -483,10 +509,23 @@ class SaleInvoiceController extends Controller
             ->orderByDesc('id')
             ->get();
 
-        $itemsData = $saleInvoice->items->map(function ($item) {
+        // FEATURE (selling price shown on the Sale Invoice screens): current
+        // stored AED / USD selling price of each line's purchased item.
+        $sellingPrices = PurchaseInvoiceItem::whereIn(
+                'barcode_number',
+                $saleInvoice->items->pluck('barcode_number')->filter()->unique()->values()
+            )
+            ->orderBy('id')
+            ->get(['barcode_number', 'selling_price', 'selling_price_usd'])
+            ->keyBy('barcode_number');
+
+        $itemsData = $saleInvoice->items->map(function ($item) use ($sellingPrices) {
+            $sp = $sellingPrices->get($item->barcode_number);
             return [
                 'item_name'        => $item->item_name,
                 'barcode_number'   => $item->barcode_number,
+                'selling_price_aed' => $sp && $sp->selling_price !== null ? (float) $sp->selling_price : null,
+                'selling_price_usd' => $sp && $sp->selling_price_usd !== null ? (float) $sp->selling_price_usd : null,
                 'is_printed'       => $item->is_printed,
                 'product_id'       => $item->product_id,
                 'item_description' => $item->item_description,
@@ -2544,6 +2583,9 @@ class SaleInvoiceController extends Controller
             'material_type'    => $item->material_type,
             'material_value'   => (float) ($item->material_value ?? 0),
             'vat_percent'      => $item->vat_percent,
+            // reference selling prices (purchase item with the same barcode)
+            'selling_price_aed' => $source === 'consignment' ? null : $this->sellingPricesFor($item->barcode_number)[0],
+            'selling_price_usd' => $source === 'consignment' ? null : $this->sellingPricesFor($item->barcode_number)[1],
             'invoice_no'       => $invoiceNo,
             'invoice_date'     => $invoiceDate,
             'party_name'       => $partyName,

@@ -204,6 +204,7 @@
                     <th rowspan="2">VAT %</th>
                     <th rowspan="2">VAT Amt</th>
                     <th rowspan="2">Item Total</th>
+                    <th rowspan="2" style="min-width:105px;">Selling Price<br><small class="fw-normal text-muted" style="font-size:.65rem;">(reference)</small></th>
                     <th rowspan="2" class="text-warning fw-bold" style="min-width:85px;">
                       Target<br>Profit %
                       <br><small class="fw-normal text-muted" style="font-size:.65rem;">type→sets MC</small>
@@ -549,6 +550,20 @@ $(document).ready(function () {
     $('#invoice_discount_type').on('change', calculateTotals);
     $('.select2-js').select2({ width: '100%' });
 
+    // ===== SELLING PRICE (reference) =====
+    // The stored selling prices of the purchased item (AED and USD are two
+    // independent prices — nothing is converted). Display only: they are not
+    // submitted and do not change the invoice calculation.
+    function fmtSellingPrice(v) {
+        if (v === null || v === undefined || v === '') return '—';
+        const n = parseFloat(v);
+        return isNaN(n) ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function setSellingPrice(row, aed, usd) {
+        row.find('.sp-aed').text(fmtSellingPrice(aed));
+        row.find('.sp-usd').text(fmtSellingPrice(usd));
+    }
+
     // ===== DISCOUNT HELPERS (mirror SaleInvoiceController::resolveDiscount / createItems) =====
     function round2(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
     function isMaterialPay() { return String($('#payment_method').val() || '').indexOf('material') !== -1; }
@@ -675,6 +690,7 @@ $(document).ready(function () {
                 newRow.find('.making-rate').val(data.making_rate || 0);
                 newRow.find('.material-type').val(data.material_type || 'gold');
                 newRow.find('.vat-percent').val(data.vat_percent || 0);
+                setSellingPrice(newRow, data.selling_price_aed, data.selling_price_usd);
                 if (data.parts && data.parts.length > 0) {
                     const partsRow = newRow.next('.parts-row');
                     partsRow.show();
@@ -718,6 +734,7 @@ $(document).ready(function () {
         newRow.find('.making-rate').val(data.making_rate || 0);
         newRow.find('.material-type').val(data.material_type || 'gold');
         newRow.find('.vat-percent').val(data.vat_percent || 0);
+        setSellingPrice(newRow, data.selling_price_aed, data.selling_price_usd);
 
         if (data.parts && data.parts.length > 0) {
             const partsRow  = newRow.next('.parts-row');
@@ -819,6 +836,7 @@ $(document).ready(function () {
               $panel.html(`
                   <div><strong>Making Rate:</strong> ${parseFloat(r.making_rate || 0).toFixed(2)}</div>
                   <div><strong>Material Value:</strong> ${parseFloat(r.material_value || 0).toFixed(2)}</div>
+                  <div><strong>Selling Price:</strong> AED ${fmtSellingPrice(r.selling_price_aed)} &nbsp;/&nbsp; USD ${fmtSellingPrice(r.selling_price_usd)}</div>
                   <div><strong>VAT %:</strong> ${r.vat_percent || 0}</div>
                   ${partsHtml}
                   <div class="result-img mt-1"></div>
@@ -954,6 +972,7 @@ $(document).ready(function () {
                 row.find('.making-rate').val(r.making_rate || 0);
                 row.find('.material-type').val(r.material_type || 'gold');
                 row.find('.vat-percent').val(r.vat_percent || 0);
+                setSellingPrice(row, r.selling_price_aed, r.selling_price_usd);
 
                 if (r.parts && r.parts.length > 0) {
                     const partsRow  = row.next('.parts-row');
@@ -1155,6 +1174,7 @@ $(document).ready(function () {
         newRow.find('.making-rate').val(item.making_rate || 0);
         newRow.find('.material-type').val(item.material_type || 'gold');
         newRow.find('.vat-percent').val(item.vat_percent || 0);
+        setSellingPrice(newRow, item.selling_price_aed, item.selling_price_usd);
 
         if (item.parts && item.parts.length > 0) {
             const partsRow = newRow.next('.parts-row');
@@ -1244,6 +1264,10 @@ $(document).ready(function () {
             <td><input type="number" name="items[${index}][vat_percent]" class="form-control vat-percent" step="any" value="${data.vat_percent || 0}"></td>
             <td><input type="number" name="items[${index}][vat_amount]" step="any" value="${data.vat_amount || 0}" class="form-control vat-amount" readonly></td>
             <td><input type="number" name="items[${index}][item_total]" step="any" value="${data.item_total || 0}" class="form-control item-total" readonly></td>
+            <td class="sp-cell text-nowrap" style="min-width:105px;">
+                <div class="small"><span class="text-muted">AED</span> <b class="sp-aed">${fmtSellingPrice(data.selling_price_aed)}</b></div>
+                <div class="small"><span class="text-muted">USD</span> <b class="sp-usd">${fmtSellingPrice(data.selling_price_usd)}</b></div>
+            </td>
             <td>
                 <input type="number" step="0.01" class="form-control target-profit-pct fw-bold text-center"
                        placeholder="%" title="Type target profit % → auto-sets making rate"
@@ -1255,7 +1279,7 @@ $(document).ready(function () {
             </td>
         </tr>
         <tr class="parts-row" style="display:none;background:#efefef">
-            <td colspan="19"><div class="parts-wrapper">
+            <td colspan="20"><div class="parts-wrapper">
                 <table class="table table-sm table-bordered parts-table">
                     <thead><tr><th>Part</th><th>Description</th><th>Diamond Ct.</th><th>Rate</th><th>Stone Ct.</th><th>Stone Rate</th><th>Total</th><th></th></tr></thead>
                     <tbody></tbody>

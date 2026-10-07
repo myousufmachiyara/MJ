@@ -123,7 +123,7 @@
 
           <section class="card mb-3 border-primary shadow-sm">
             <div class="card-body py-3 bg-primary bg-opacity-10">
-              <label class="text-light fw-bold small mb-1"><i class="fas fa-barcode"></i> Scan Barcode</label>
+              <label class="text-dark fw-bold small mb-1"><i class="fas fa-barcode"></i> Scan Barcode</label>
               <div class="input-group input-group-lg">
                 <input type="text" id="pos_barcode_input" class="form-control" autocomplete="off"
                        placeholder="Scan item barcode…" autofocus>
@@ -153,12 +153,14 @@
                     <th>Stone (Ct)</th>
                     <th class="pos-col-aed">Price (AED)</th>
                     <th class="pos-col-usd">Price (USD)</th>
+                    <th class="text-danger" style="min-width:150px;">Discount<br><small class="fw-normal text-muted">Amt or %</small></th>
+                    <th>Net (<span class="pos-currency-label">AED</span>)</th>
                     <th width="5%">Action</th>
                   </tr>
                 </thead>
                 <tbody id="posCartBody">
                   <tr id="posCartEmptyRow">
-                    <td colspan="11" class="text-center text-muted py-4">
+                    <td colspan="13" class="text-center text-muted py-4">
                       <i class="fas fa-barcode fa-2x d-block mb-2 opacity-25"></i>
                       No items scanned yet
                     </td>
@@ -187,15 +189,40 @@
                 </tbody>
               </table>
               <div id="pos_total_aed_box" class="d-flex justify-content-between align-items-center p-2 border rounded mb-2">
-                <span class="fw-bold text-light">Total (AED)</span>
-                <span class="fw-bold fs-5 text-light" id="pos_summary_aed">0.00</span>
+                <span class="fw-bold">Total (AED)</span>
+                <span class="fw-bold fs-5" id="pos_summary_aed">0.00</span>
               </div>
               <div id="pos_total_usd_box" class="d-flex justify-content-between align-items-center p-2 border rounded mb-2">
-                <span class="fw-bold text-light">Total (USD)</span>
-                <span class="fw-bold fs-5 text-light" id="pos_summary_usd">0.00</span>
+                <span class="fw-bold">Total (USD)</span>
+                <span class="fw-bold fs-5" id="pos_summary_usd">0.00</span>
               </div>
               <div class="small text-muted mb-1">Billing in <b class="pos-currency-label">AED</b> — change the Currency at the top to bill in the other.</div>
               <div id="pos_missing_price_msg" class="alert alert-danger py-2 px-3 small d-none mb-3"></div>
+
+              {{-- ===== DISCOUNTS (item discounts are in the cart; this is the overall one) ===== --}}
+              <table class="table table-sm mb-2">
+                <tbody>
+                  <tr><td class="text-danger">Item Discounts</td><td class="text-end fw-bold text-danger" id="pos_summary_item_disc">0.00</td></tr>
+                  <tr><td>Subtotal</td><td class="text-end" id="pos_summary_subtotal">0.00</td></tr>
+                </tbody>
+              </table>
+              <label class="fw-bold text-danger">Invoice Discount <small class="text-muted fw-normal">(overall)</small></label>
+              <div class="input-group mb-1">
+                <input type="number" step="any" min="0" name="invoice_discount_value" id="pos_invoice_discount_value"
+                       class="form-control border-danger" value="0" placeholder="0">
+                <select name="invoice_discount_type" id="pos_invoice_discount_type" class="form-select border-danger" style="max-width:90px;flex:0 0 90px;">
+                  <option value="amount">Amount</option>
+                  <option value="percent">%</option>
+                </select>
+              </div>
+              <div class="d-flex justify-content-between small mb-2">
+                <span class="text-muted">Invoice discount</span>
+                <span class="fw-bold text-danger" id="pos_summary_inv_disc">0.00</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center p-2 bg-success bg-opacity-10 border border-success rounded mb-3">
+                <span class="fw-bold">Net Payable (<span class="pos-currency-label">AED</span>)</span>
+                <span class="fw-bold fs-4 text-success" id="pos_summary_net">0.00</span>
+              </div>
 
               <label class="fw-bold">Payment Method <span class="text-danger">*</span></label>
               <select name="payment_method" id="payment_method" class="form-control mb-2" required>
@@ -274,6 +301,21 @@ $(document).ready(function () {
         return (v === null || v === undefined || v === '') ? null : parseFloat(v);
     }
 
+    // ── Discounts (mirror SaleInvoiceController::resolveDiscount) ────────
+    // Each cart item carries discount_type ('amount' | 'percent') and
+    // discount_value, entered in the invoice's billing currency. The server
+    // recalculates everything; this is only for the on-screen totals.
+    function round2(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
+    function resolveDiscountJs(type, value, base) {
+        value = Math.max(0, parseFloat(value) || 0);
+        if ((type !== 'amount' && type !== 'percent') || value <= 0 || base <= 0) return 0;
+        const amount = type === 'percent' ? base * Math.min(value, 100) / 100 : value;
+        return round2(Math.min(amount, base));
+    }
+    function itemBase(item) { return priceIn(item, activeCurrency) || 0; }
+    function itemDiscount(item) { return resolveDiscountJs(item.discount_type, item.discount_value, itemBase(item)); }
+    function itemNet(item) { return itemBase(item) - itemDiscount(item); }
+
     $('.select2-js').select2({ width: '100%' });
 
     function focusScanInput() {
@@ -300,7 +342,7 @@ $(document).ready(function () {
 
         if (cart.length === 0) {
             body.append(
-                '<tr id="posCartEmptyRow"><td colspan="11" class="text-center text-muted py-4">' +
+                '<tr id="posCartEmptyRow"><td colspan="13" class="text-center text-muted py-4">' +
                 '<i class="fas fa-barcode fa-2x d-block mb-2 opacity-25"></i>No items scanned yet</td></tr>'
             );
         }
@@ -330,6 +372,16 @@ $(document).ready(function () {
                     '<td class="text-end">' + fmt(item.stone_total_ct) + '</td>' +
                     cell(aed, 'AED') +
                     cell(usd, 'USD') +
+                    '<td style="min-width:150px;">' +
+                        '<div class="input-group input-group-sm">' +
+                            '<input type="number" step="any" min="0" class="form-control pos-disc-value" data-idx="' + idx + '" value="' + (parseFloat(item.discount_value) || 0) + '">' +
+                            '<select class="form-select pos-disc-type" data-idx="' + idx + '" style="max-width:62px;flex:0 0 62px;">' +
+                                '<option value="amount"' + (item.discount_type !== 'percent' ? ' selected' : '') + '>Amt</option>' +
+                                '<option value="percent"' + (item.discount_type === 'percent' ? ' selected' : '') + '>%</option>' +
+                            '</select>' +
+                        '</div>' +
+                    '</td>' +
+                    '<td class="text-end fw-bold pos-net-cell" data-idx="' + idx + '">' + fmt(itemNet(item), 2) + '</td>' +
                     '<td class="text-center">' +
                         '<button type="button" class="btn btn-sm btn-outline-danger pos-remove-item" data-idx="' + idx + '">' +
                             '<i class="fas fa-trash"></i>' +
@@ -363,7 +415,9 @@ $(document).ready(function () {
                 '<input type="hidden" name="items[' + idx + '][purity]" value="0">' +
                 '<input type="hidden" name="items[' + idx + '][making_rate]" value="0">' +
                 '<input type="hidden" name="items[' + idx + '][vat_percent]" value="0">' +
-                '<input type="hidden" name="items[' + idx + '][selling_price]" value="' + billed + '">'
+                '<input type="hidden" name="items[' + idx + '][selling_price]" value="' + billed + '">' +
+                '<input type="hidden" name="items[' + idx + '][discount_type]" value="' + (item.discount_type === 'percent' ? 'percent' : 'amount') + '">' +
+                '<input type="hidden" name="items[' + idx + '][discount_value]" value="' + (parseFloat(item.discount_value) || 0) + '">'
             );
         });
     }
@@ -398,7 +452,18 @@ $(document).ready(function () {
         $('#pos_summary_gold').text(totalGold.toFixed(3) + ' g');
         $('#pos_summary_diamond').text(totalDiamond.toFixed(3) + ' Ct');
         $('#pos_summary_stone').text(totalStone.toFixed(3) + ' Ct');
-        $('#net_amount').val(totalPrice.toFixed(2));
+
+        // Discounts: item discounts first, then the overall invoice discount
+        // on the remaining subtotal.
+        const itemDiscTotal = cart.reduce((s, i) => s + itemDiscount(i), 0);
+        const subtotal      = totalPrice - itemDiscTotal;
+        const invDisc       = resolveDiscountJs($('#pos_invoice_discount_type').val(), $('#pos_invoice_discount_value').val(), subtotal);
+        const netPayable    = round2(subtotal - invDisc);
+        $('#pos_summary_item_disc').text(itemDiscTotal.toFixed(2));
+        $('#pos_summary_subtotal').text(subtotal.toFixed(2));
+        $('#pos_summary_inv_disc').text(invDisc.toFixed(2));
+        $('#pos_summary_net').text(netPayable.toFixed(2));
+        $('#net_amount').val(netPayable.toFixed(2));
 
         $('#pos_checkout_btn').prop('disabled', totalItems === 0 || !$('#customer_id').val() || missing.length > 0);
     }
@@ -419,6 +484,10 @@ $(document).ready(function () {
 
     $('#pos_currency').on('change', function () {
         activeCurrency = $(this).val();
+        // Fixed-amount discounts were typed in the previous currency, so they
+        // are cleared on a switch (percent discounts carry over unchanged).
+        cart.forEach(function (i) { if (i.discount_type !== 'percent') i.discount_value = 0; });
+        if ($('#pos_invoice_discount_type').val() !== 'percent') $('#pos_invoice_discount_value').val(0);
         applyCurrencyUi(activeCurrency);
         renderCart(); // re-price every line from its two stored prices
         focusScanInput();
@@ -469,6 +538,23 @@ $(document).ready(function () {
         if (e.key === 'Enter') { e.preventDefault(); handleScan(); }
     });
     $('#pos_scan_btn').on('click', handleScan);
+
+    // Discount edits: update that cart line + totals WITHOUT re-rendering the
+    // table (a re-render would drop the focus while typing).
+    function onItemDiscountChange(el) {
+        const idx  = parseInt($(el).data('idx'), 10);
+        const item = cart[idx];
+        if (!item) return;
+        const row = $(el).closest('tr');
+        item.discount_value = parseFloat(row.find('.pos-disc-value').val()) || 0;
+        item.discount_type  = row.find('.pos-disc-type').val() === 'percent' ? 'percent' : 'amount';
+        row.find('.pos-net-cell').text(fmt(itemNet(item), 2));
+        renderHiddenInputs();
+        updateSummary();
+    }
+    $(document).on('input change', '.pos-disc-value, .pos-disc-type', function () { onItemDiscountChange(this); });
+    $('#pos_invoice_discount_value').on('input', updateSummary);
+    $('#pos_invoice_discount_type').on('change', updateSummary);
 
     $(document).on('click', '.pos-remove-item', function () {
         cart.splice($(this).data('idx'), 1);
