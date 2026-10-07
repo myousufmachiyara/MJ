@@ -123,7 +123,7 @@
 
           <section class="card mb-3 border-primary shadow-sm">
             <div class="card-body py-3 bg-primary bg-opacity-10">
-              <label class="text-dark fw-bold small mb-1"><i class="fas fa-barcode"></i> Scan Barcode</label>
+              <label class="text-light fw-bold small mb-1"><i class="fas fa-barcode"></i> Scan Barcode</label>
               <div class="input-group input-group-lg">
                 <input type="text" id="pos_barcode_input" class="form-control" autocomplete="off"
                        placeholder="Scan item barcode…" autofocus>
@@ -189,11 +189,11 @@
                 </tbody>
               </table>
               <div id="pos_total_aed_box" class="d-flex justify-content-between align-items-center p-2 border rounded mb-2">
-                <span class="fw-bold">Total (AED)</span>
+                <span class="fw-bold text-light">Total (AED)</span>
                 <span class="fw-bold fs-5" id="pos_summary_aed">0.00</span>
               </div>
               <div id="pos_total_usd_box" class="d-flex justify-content-between align-items-center p-2 border rounded mb-2">
-                <span class="fw-bold">Total (USD)</span>
+                <span class="fw-bold text-light">Total (USD)</span>
                 <span class="fw-bold fs-5" id="pos_summary_usd">0.00</span>
               </div>
               <div class="small text-muted mb-1">Billing in <b class="pos-currency-label">AED</b> — change the Currency at the top to bill in the other.</div>
