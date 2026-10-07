@@ -104,7 +104,7 @@
                        title="Simple Receipt (Walk-in Customer)">
                       <i class="fas fa-receipt"></i>
                     </a>
-                    <a href="{{ route('sale_invoices.export_excel', $invoice->id) }}" class="text-success" title="Export to Excel"><i class="fas fa-file-excel"></i></a>
+                    <a href="{{ route('sale_invoices.export_excel', $invoice->id) }}" class="btn btn-outline-success text-success" title="Export to Excel"><i class="fas fa-file-excel"></i></a>
 
                     {{-- Delete --}}
                     <form method="POST" action="{{ route('sale_invoices.destroy', $invoice->id) }}"
