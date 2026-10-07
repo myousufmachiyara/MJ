@@ -188,7 +188,7 @@
               </table>
               <div id="pos_total_aed_box" class="d-flex justify-content-between align-items-center p-2 border rounded mb-2">
                 <span class="fw-bold text-light">Total (AED)</span>
-                <span class="fw-bold fs-5" id="pos_summary_aed">0.00</span>
+                <span class="fw-bold fs-5 text-light" id="pos_summary_aed">0.00</span>
               </div>
               <div id="pos_total_usd_box" class="d-flex justify-content-between align-items-center p-2 border rounded mb-2">
                 <span class="fw-bold">Total (USD)</span>
