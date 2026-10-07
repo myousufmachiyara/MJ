@@ -123,7 +123,7 @@
 
           <section class="card mb-3 border-primary shadow-sm">
             <div class="card-body py-3 bg-primary bg-opacity-10">
-              <label class="text-dark fw-bold small mb-1"><i class="fas fa-barcode"></i> Scan Barcode</label>
+              <label class="text-dark fw-bold small mb-1 text-light"><i class="fas fa-barcode"></i> Scan Barcode</label>
               <div class="input-group input-group-lg">
                 <input type="text" id="pos_barcode_input" class="form-control" autocomplete="off"
                        placeholder="Scan item barcode…" autofocus>
