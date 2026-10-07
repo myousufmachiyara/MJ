@@ -74,6 +74,7 @@ Route::middleware(['auth'])->group(function () {
     // ── Sale Helpers ──────────────────────────────────────────────────────────
     Route::get('/sale-invoices/scan-barcode',      [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
     Route::get('/sale-invoices/{id}/print-simple', [SaleInvoiceController::class, 'printSimple'])->middleware('check.permission:sale_invoices.print')->name('sale_invoices.print_simple');
+    Route::get('/sale-invoices/{id}/export-excel', [SaleInvoiceController::class, 'exportExcel'])->middleware('check.permission:sale_invoices.print')->name('sale_invoices.export_excel');
     Route::get('/sale-invoices/scan-barcode',      [SaleInvoiceController::class, 'scanBarcode'])->name('sale.scan_barcode');
     Route::get('/sale-invoices/search-by-name',    [SaleInvoiceController::class, 'searchByName'])->name('sale.search_by_name');
     Route::get('sale-invoices/download-template', [App\Http\Controllers\SaleInvoiceController::class, 'downloadTemplate'])->name('sale.download_template');

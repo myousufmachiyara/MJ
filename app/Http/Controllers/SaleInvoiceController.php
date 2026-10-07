@@ -105,11 +105,7 @@ class SaleInvoiceController extends Controller
      */
     public function posScan(Request $request)
     {
-        $barcode  = trim((string) $request->get('barcode'));
-        $currency = strtoupper(trim((string) $request->get('currency', 'AED')));
-        if (!in_array($currency, ['AED', 'USD'], true)) {
-            $currency = 'AED';
-        }
+        $barcode = trim((string) $request->get('barcode'));
 
         if (!$barcode) {
             return response()->json(['success' => false, 'message' => 'No barcode provided.'], 422);
@@ -143,39 +139,36 @@ class SaleInvoiceController extends Controller
             ], 409);
         }
 
-        // FEATURE (Sale Invoice POS): the selling price is a manually
-        // defined value saved on the purchased item — POS only ever
-        // retrieves it, never calculates it. Refuse rather than silently
-        // sell at 0.
-        $price      = $currency === 'USD' ? $purchaseItem->selling_price_usd : $purchaseItem->selling_price;
-        $otherPrice = $currency === 'USD' ? $purchaseItem->selling_price     : $purchaseItem->selling_price_usd;
-        $otherLabel = $currency === 'USD' ? 'AED' : 'USD';
+        // FIX (POS reads BOTH prices): an item carries two independent,
+        // manually-set prices — selling_price (AED) and selling_price_usd
+        // (USD); nothing is converted between them. POS now returns BOTH so
+        // the screen can show both side by side and bill in whichever
+        // currency is selected. The item is only refused when NEITHER price
+        // is set (never silently sold at 0); a missing price in just the
+        // currency currently selected is flagged by the POS screen itself,
+        // which lets the cashier switch currency instead of losing the scan.
+        $priceAed = $purchaseItem->selling_price;
+        $priceUsd = $purchaseItem->selling_price_usd;
 
-        if ($price === null) {
-            $message = 'Selling price (' . $currency . ') is not set for this item.';
-            if ($otherPrice !== null) {
-                $message .= ' It is priced in ' . $otherLabel . ' (' . number_format((float) $otherPrice, 2)
-                    . ') — switch the POS currency to ' . $otherLabel . ', or set the ' . $currency . ' price on the Selling Price screen.';
-            }
-
+        if ($priceAed === null && $priceUsd === null) {
             return response()->json([
                 'success' => false,
-                'message' => $message,
+                'message' => 'Selling price is not set for this item (neither AED nor USD).',
             ], 422);
         }
 
         return response()->json([
-            'success'          => true,
-            'barcode_number'   => $purchaseItem->barcode_number,
-            'item_name'        => $purchaseItem->item_name,
-            'category'         => $purchaseItem->subcategory->name ?? $purchaseItem->category->name ?? null,
-            'material_type'    => $purchaseItem->material_type,
-            'gross_weight'     => $purchaseItem->gross_weight,
-            'net_weight'       => $purchaseItem->net_weight,
-            'diamond_total_ct' => $purchaseItem->diamond_total_ct,
-            'stone_total_ct'   => $purchaseItem->stone_total_ct,
-            'currency'         => $currency,
-            'selling_price'    => $price,
+            'success'           => true,
+            'barcode_number'    => $purchaseItem->barcode_number,
+            'item_name'         => $purchaseItem->item_name,
+            'category'          => $purchaseItem->subcategory->name ?? $purchaseItem->category->name ?? null,
+            'material_type'     => $purchaseItem->material_type,
+            'gross_weight'      => $purchaseItem->gross_weight,
+            'net_weight'        => $purchaseItem->net_weight,
+            'diamond_total_ct'  => $purchaseItem->diamond_total_ct,
+            'stone_total_ct'    => $purchaseItem->stone_total_ct,
+            'selling_price_aed' => $priceAed,
+            'selling_price_usd' => $priceUsd,
         ]);
     }
 
@@ -316,7 +309,6 @@ class SaleInvoiceController extends Controller
             'item_description' => $purchaseItem->item_description,
             'purity'           => $purchaseItem->purity,
             'gross_weight'     => $purchaseItem->gross_weight,
-            'net_weight'        => $purchaseItem->net_weight,
             'making_rate'      => $purchaseItem->making_rate,
             'material_type'    => $purchaseItem->material_type,
             'vat_percent'      => $purchaseItem->vat_percent,
@@ -405,7 +397,11 @@ class SaleInvoiceController extends Controller
 
             [$totals] = $this->createItems($invoice, $request->items, $request);
 
-            $calculatedNet    = $invoice->items()->sum('item_total');
+            // FEATURE (discount): item-level discounts are already inside each
+            // item_total (see createItems()); this applies the optional
+            // invoice-level discount on top and returns the matching
+            // (discount-scaled) accounting totals.
+            [$calculatedNet, $totals] = $this->applyInvoiceLevelDiscount($invoice, $totals, $request);
             $calculatedNetAed = $request->currency === 'USD'
                 ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
                 : $calculatedNet;
@@ -498,6 +494,12 @@ class SaleInvoiceController extends Controller
                 'gross_weight'     => $item->gross_weight,
                 'making_rate'      => $item->making_rate,
                 'material_type'    => $item->material_type,
+                // FEATURE (discount): prefill what was entered (type + value).
+                // The invoice-level discount is read straight off $saleInvoice
+                // in the view: discount_type / discount_value / discount_amount.
+                'discount_type'    => $item->discount_type ?? null,
+                'discount_value'   => (float) ($item->discount_value ?? 0),
+                'discount_amount'  => (float) ($item->discount_amount ?? 0),
                 'vat_percent'      => $item->vat_percent,
                 'purity_weight'    => $item->purity_weight,
                 'col_995'          => $item->col_995,
@@ -616,7 +618,11 @@ class SaleInvoiceController extends Controller
 
             [$totals] = $this->createItems($invoice, $request->items, $request, preservePrinted: true);
 
-            $calculatedNet    = $invoice->items()->sum('item_total');
+            // FEATURE (discount): item-level discounts are already inside each
+            // item_total (see createItems()); this applies the optional
+            // invoice-level discount on top and returns the matching
+            // (discount-scaled) accounting totals.
+            [$calculatedNet, $totals] = $this->applyInvoiceLevelDiscount($invoice, $totals, $request);
             $calculatedNetAed = $request->currency === 'USD'
                 ? round($calculatedNet * ($request->exchange_rate ?? 1), 2)
                 : $calculatedNet;
@@ -706,7 +712,18 @@ class SaleInvoiceController extends Controller
             return $item->parts->sum('total');
         });
 
+        // FEATURE (discount): item-wise discounts (sale_invoice_items.discount_amount)
+        // plus the optional invoice-level one (sale_invoices.discount_amount).
+        $totalItemDiscount    = (float) $invoice->items->sum(fn ($i) => (float) ($i->discount_amount ?? 0));
+        $invoiceDiscount      = (float) ($invoice->discount_amount ?? 0);
+        $totalDiscount        = $totalItemDiscount + $invoiceDiscount;
+
         $totalCurrencyPayable = $totalMakingAed + $totalPartsAed + $totalVatAed;
+        // Material-payment invoices: the discount comes off the currency
+        // portion only (the metal handed over is by weight) — see createItems().
+        if (str_contains((string) $invoice->payment_method, 'material')) {
+            $totalCurrencyPayable -= $totalDiscount;
+        }
 
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
@@ -813,6 +830,18 @@ class SaleInvoiceController extends Controller
                     <td width="7%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
                 </tr>';
 
+            // FEATURE (discount, item-wise): shown as its own sub-row so the
+            // 14-column table layout is unchanged.
+            if ((float) ($item->discount_amount ?? 0) > 0) {
+                $discLabel = ($item->discount_type ?? '') === 'percent'
+                    ? 'Discount (' . rtrim(rtrim(number_format((float) $item->discount_value, 2), '0'), '.') . '%)'
+                    : 'Discount';
+                $html .= '<tr style="background-color:#fff8e6;font-style:italic;font-size:7px;">
+                            <td></td><td colspan="11" align="right"><b>' . $discLabel . ' (already deducted from Item Total):</b></td>
+                            <td colspan="2" align="right">-' . number_format((float) $item->discount_amount, 2) . '</td>
+                          </tr>';
+            }
+
             if ($hasParts) {
                 $html .= '<tr style="background-color:#f9f9f9;font-style:italic;font-size:7px;">
                             <td></td><td colspan="13"><b>Parts Detail:</b></td>
@@ -906,7 +935,10 @@ class SaleInvoiceController extends Controller
                         <tr><td>Diamond Parts Val.</td>                      <td align="right">' . number_format($totalDiamondVal, 2) . '</td></tr>
                         <tr><td>Stone Parts Val.</td>                        <td align="right">' . number_format($totalStoneVal, 2) . '</td></tr>
                         <tr><td>Making Charges (MC)</td>                     <td align="right">' . number_format($totalMakingAed, 2) . '</td></tr>
-                        <tr><td>VAT on MC</td>                               <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>
+                        <tr><td>VAT on MC</td>                               <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>'
+                        . ($totalItemDiscount > 0 ? '<tr><td>Item Discounts</td><td align="right">-' . number_format($totalItemDiscount, 2) . '</td></tr>' : '')
+                        . ($invoiceDiscount   > 0 ? '<tr><td>Invoice Discount' . (($invoice->discount_type ?? '') === 'percent' ? ' (' . rtrim(rtrim(number_format((float) $invoice->discount_value, 2), '0'), '.') . '%)' : '') . '</td><td align="right">-' . number_format($invoiceDiscount, 2) . '</td></tr>' : '')
+                        . '
                         <tr style="font-weight:bold;background-color:#ddeeee;">
                             <td>Currency Payable (MC + Parts + VAT)</td>
                             <td align="right">' . number_format($totalCurrencyPayable, 2) . '</td>
@@ -978,6 +1010,388 @@ class SaleInvoiceController extends Controller
         $pdf->Cell(50, 5, "Authorized Signature", 0, 0, 'C');
 
         return $pdf->Output($invoice->invoice_no . '.pdf', 'I');
+    }
+
+    // =========================================================================
+    // EXPORT EXCEL — same layout as the detailed PDF invoice (print())
+    //
+    // FEATURE (Sale Invoice Excel export): one .xlsx per invoice that mirrors
+    // the PDF printout block for block — company header, title, customer +
+    // invoice/rates box, the items table (with the same two-row "Making"
+    // header, Parts Detail sub-rows, per-item discount sub-row and Net
+    // Invoice Amount row), then Payment Details and Summary side by side,
+    // amount in words and the terms. Numbers are real numeric cells (with
+    // number formats), so they can be summed/filtered in Excel.
+    //
+    // Needs phpoffice/phpspreadsheet — already installed as a dependency of
+    // maatwebsite/excel. If it is ever missing, the user gets a clear message
+    // instead of a crash.
+    // =========================================================================
+
+    public function exportExcel($id)
+    {
+        if (!class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
+            return back()->with('error', 'Excel export needs the phpoffice/phpspreadsheet package. Run: composer require phpoffice/phpspreadsheet');
+        }
+
+        $invoice = SaleInvoice::with([
+            'customer',
+            'items',
+            'items.product.measurementUnit',
+            'items.parts',
+            'items.parts.product.measurementUnit',
+            'bank',
+            'transferBank',
+        ])->findOrFail($id);
+
+        try {
+            $spreadsheet = $this->buildInvoiceSpreadsheet($invoice);
+        } catch (\Throwable $e) {
+            Log::error('Sale Invoice Excel Export Error', [
+                'invoice_id' => $invoice->id,
+                'message'    => $e->getMessage(),
+                'line'       => $e->getLine(),
+                'file'       => $e->getFile(),
+            ]);
+            return back()->with('error', 'Excel export failed: ' . $e->getMessage());
+        }
+
+        $filename = preg_replace('/[^A-Za-z0-9._-]/', '_', (string) $invoice->invoice_no) . '.xlsx';
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $writer->save('php://output');
+            $spreadsheet->disconnectWorksheets();
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    private function buildInvoiceSpreadsheet(SaleInvoice $invoice)
+    {
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet       = $spreadsheet->getActiveSheet();
+        $sheet->setTitle(substr(preg_replace('/[\\\\\/\?\*\[\]:]/', '-', (string) $invoice->invoice_no), 0, 31) ?: 'Invoice');
+
+        // ── totals — identical to print() ───────────────────────────────────
+        $totalMaterial = (float) $invoice->items->sum('material_value');
+        $totalMaking   = (float) $invoice->items->sum('making_value');
+        $totalVat      = (float) $invoice->items->sum('vat_amount');
+        $totalDiamond  = (float) $invoice->items->sum(fn ($i) => $i->parts->sum(fn ($p) => $p->qty * $p->rate));
+        $totalStone    = (float) $invoice->items->sum(fn ($i) => $i->parts->sum(fn ($p) => ($p->stone_qty ?? 0) * ($p->stone_rate ?? 0)));
+        $totalParts    = (float) $invoice->items->sum(fn ($i) => $i->parts->sum('total'));
+
+        $totalItemDiscount = (float) $invoice->items->sum(fn ($i) => (float) ($i->discount_amount ?? 0));
+        $invoiceDiscount   = (float) ($invoice->discount_amount ?? 0);
+        $totalDiscount     = $totalItemDiscount + $invoiceDiscount;
+
+        $currencyPayable = $totalMaking + $totalParts + $totalVat;
+        if (str_contains((string) $invoice->payment_method, 'material')) {
+            $currencyPayable -= $totalDiscount;
+        }
+
+        $aedAmount  = $invoice->currency === 'USD' ? $invoice->net_amount_aed : $invoice->net_amount;
+        $grandTotal = ($invoice->invoice_vat_amount ?? 0) > 0 ? ($invoice->grand_total ?? $aedAmount) : $aedAmount;
+
+        $diamondRateDisplay = $invoice->currency === 'USD' ? $invoice->diamond_rate_usd : $invoice->diamond_rate_aed;
+
+        // ── styling helpers ────────────────────────────────────────────────
+        $thin = ['borders' => ['allBorders' => [
+            'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+            'color'       => ['rgb' => '808080'],
+        ]]];
+        $headFill = ['fill' => [
+            'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+            'startColor' => ['rgb' => 'F5F5F5'],
+        ]];
+        $totalFill = ['fill' => [
+            'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+            'startColor' => ['rgb' => 'EEEEEE'],
+        ]];
+        $center = ['alignment' => [
+            'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
+            'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+            'wrapText'   => true,
+        ]];
+        $left = ['alignment' => [
+            'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT,
+            'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+            'wrapText'   => true,
+        ]];
+        $right = ['alignment' => [
+            'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT,
+            'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+            'wrapText'   => true,
+        ]];
+        $bold   = ['font' => ['bold' => true]];
+        $italic = ['font' => ['italic' => true, 'size' => 8]];
+
+        $FMT_MONEY = '#,##0.00';
+        $FMT_WT    = '0.000';
+
+        // put(): write a value into a cell or merged range and optionally
+        // style / number-format it. Strings are always written as text.
+        $put = function (string $range, $value, array $styles = [], ?string $fmt = null) use ($sheet) {
+            $first = explode(':', $range)[0];
+            if (str_contains($range, ':')) {
+                $sheet->mergeCells($range);
+            }
+            if (is_string($value)) {
+                $sheet->setCellValueExplicit($first, $value, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            } else {
+                $sheet->setCellValue($first, $value);
+            }
+            foreach ($styles as $style) {
+                $sheet->getStyle($range)->applyFromArray($style);
+            }
+            if ($fmt !== null) {
+                $sheet->getStyle($range)->getNumberFormat()->setFormatCode($fmt);
+            }
+        };
+
+        // 14 columns A–N, matching the PDF's 14-column items table.
+        $widths = ['A' => 5, 'B' => 22, 'C' => 24, 'D' => 10, 'E' => 9, 'F' => 10, 'G' => 9,
+                   'H' => 10, 'I' => 11, 'J' => 10, 'K' => 12, 'L' => 10, 'M' => 8, 'N' => 13];
+        foreach ($widths as $col => $w) {
+            $sheet->getColumnDimension($col)->setWidth($w);
+        }
+        $sheet->getSheetView()->setShowGridLines(false);
+
+        // ── header: logo (left) + company details (right) ─────────────────
+        for ($r = 1; $r <= 4; $r++) {
+            $sheet->getRowDimension($r)->setRowHeight(18);
+        }
+        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        if (file_exists($logoPath)) {
+            try {
+                $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+                $drawing->setName('Logo');
+                $drawing->setPath($logoPath);
+                $drawing->setHeight(60);
+                $drawing->setCoordinates('A1');
+                $drawing->setWorksheet($sheet);
+            } catch (\Throwable $e) {
+                // logo is cosmetic — never let it break the export
+            }
+        }
+        $put('H1:N4',
+            "MUSFIRA JEWELRY L.L.C\nSuite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai\nTRN No: 104902647700003",
+            [$right]);
+
+        // ── title ─────────────────────────────────────────────────────────
+        $put('A6:N6', $invoice->is_taxable ? 'TAX INVOICE (SALE)' : 'SALE INVOICE', [$center, $bold]);
+        $sheet->getStyle('A6')->getFont()->setSize(13);
+        $sheet->getRowDimension(6)->setRowHeight(22);
+
+        // ── customer (left) + invoice / rates box (right) ─────────────────
+        $customer = $invoice->customer;
+        $put('A8:F13',
+            "To:\n" . ($customer->name ?? '-') . "\n" . ($customer->address ?? '-') .
+            "\nContact: " . ($customer->contact_no ?? '-') . "\nTRN: " . ($customer->trn ?? '-'),
+            [$left]);
+        $sheet->getStyle('A8:F13')->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP);
+
+        $metaRows = [
+            ['Date',                                     \Carbon\Carbon::parse($invoice->invoice_date)->format('d.m.Y'), null],
+            ['Invoice No',                               (string) $invoice->invoice_no,                                   null],
+            ['Gold Rate (USD/oz)',                       (float) ($invoice->gold_rate_usd ?? 0),                          $FMT_MONEY],
+            ['Gold Rate (AED/oz)',                       (float) ($invoice->gold_rate_aed_ounce ?? 0),                    $FMT_MONEY],
+            ['Gold Rate (AED/g)',                        (float) ($invoice->gold_rate_aed ?? 0),                          '0.0000'],
+            ['Diamond Rate (' . $invoice->currency . '/Ct)', (float) ($diamondRateDisplay ?? 0),                          $FMT_MONEY],
+        ];
+        $r = 8;
+        foreach ($metaRows as [$label, $value, $fmt]) {
+            $put("I{$r}:K{$r}", $label, [$thin, $bold, $left]);
+            $put("L{$r}:N{$r}", $value, [$thin, $right], $fmt);
+            $r++;
+        }
+
+        // ── items table header (two rows, "Making" spans Rate + Value) ─────
+        $hr = 15;
+        $headers = [
+            'A' => '#', 'B' => 'Item Name', 'C' => 'Description', 'D' => 'Gross Wt', 'E' => 'Purity',
+            'F' => 'Purity Wt', 'G' => '995', 'J' => 'Material', 'K' => 'Material Val',
+            'L' => 'MC', 'M' => 'VAT%', 'N' => 'Item Total',
+        ];
+        foreach ($headers as $col => $text) {
+            $put("{$col}{$hr}:{$col}" . ($hr + 1), $text, [$thin, $headFill, $bold, $center]);
+        }
+        $put("H{$hr}:I{$hr}", 'Making', [$thin, $headFill, $bold, $center]);
+        $put('H' . ($hr + 1), 'Rate',  [$thin, $headFill, $bold, $center]);
+        $put('I' . ($hr + 1), 'Value', [$thin, $headFill, $bold, $center]);
+
+        // ── item rows ─────────────────────────────────────────────────────
+        $row = $hr + 2;
+        foreach ($invoice->items as $index => $item) {
+            $itemRow = $row;
+            $put("A{$row}", $index + 1, [$thin, $center]);
+            $put("B{$row}", (string) ($item->item_name ?: ($item->product->name ?? '-')), [$thin, $left]);
+            $put("C{$row}", (string) ($item->item_description ?? '-'), [$thin, $left]);
+            $put("D{$row}", (float) $item->gross_weight,  [$thin, $center], $FMT_WT);
+            $put("E{$row}", (float) $item->purity,        [$thin, $center], $FMT_WT);
+            $put("F{$row}", (float) $item->purity_weight, [$thin, $center], $FMT_WT);
+            $put("G{$row}", (float) ($item->col_995 ?? 0), [$thin, $center], $FMT_WT);
+            $put("H{$row}", (float) ($item->making_rate ?? 0), [$thin, $center], $FMT_MONEY);
+            $put("I{$row}", (float) $item->making_value,  [$thin, $center], $FMT_MONEY);
+            $put("J{$row}", ucfirst((string) $item->material_type), [$thin, $center]);
+            $put("K{$row}", (float) $item->material_value, [$thin, $center], $FMT_MONEY);
+            $put("L{$row}", (float) $item->taxable_amount, [$thin, $center], $FMT_MONEY);
+            $put("M{$row}", (float) $item->vat_percent / 100, [$thin, $center], '0%');
+            $put("N{$row}", (float) $item->item_total,    [$thin, $center, $bold], $FMT_MONEY);
+            $row++;
+
+            // per-item discount sub-row (same as the PDF)
+            if ((float) ($item->discount_amount ?? 0) > 0) {
+                $discLabel = ($item->discount_type ?? '') === 'percent'
+                    ? 'Discount (' . rtrim(rtrim(number_format((float) $item->discount_value, 2), '0'), '.') . '%) — already deducted from Item Total:'
+                    : 'Discount — already deducted from Item Total:';
+                $put("B{$row}:L{$row}", $discLabel, [$thin, $italic, $right]);
+                $put("M{$row}:N{$row}", -1 * (float) $item->discount_amount, [$thin, $italic, $right], $FMT_MONEY);
+                $sheet->getStyle("A{$row}:N{$row}")->applyFromArray(['fill' => [
+                    'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => 'FFF8E6'],
+                ]]);
+                $row++;
+            }
+
+            // parts detail (same as the PDF)
+            if ($item->parts && $item->parts->count() > 0) {
+                $put("B{$row}:N{$row}", 'Parts Detail:', [$thin, $italic, $left]);
+                $row++;
+
+                foreach ($item->parts as $part) {
+                    $partName = $part->item_name ?: ($part->product->name ?? 'Part');
+                    $put("B{$row}", (string) $partName, [$thin, $italic, $left]);
+                    $put("C{$row}", (string) ($part->part_description ?? ''), [$thin, $italic, $left]);
+                    $put("D{$row}:E{$row}", (float) $part->qty, [$thin, $italic, $center], '0.000" Ct"');
+                    $put("F{$row}:G{$row}", (float) $part->rate, [$thin, $italic, $center], '"Rate: "#,##0.00');
+                    $put("H{$row}:I{$row}", (float) ($part->stone_qty ?? 0), [$thin, $italic, $center], '"St. "0.00');
+                    $put("J{$row}:K{$row}", (float) ($part->stone_rate ?? 0), [$thin, $italic, $center], '"SR: "#,##0.00');
+                    $put("L{$row}:N{$row}", (float) $part->total, [$thin, $italic, $right, $bold], $FMT_MONEY);
+                    $sheet->getStyle("A{$row}")->applyFromArray($thin);
+                    $row++;
+                }
+
+                $put("A{$row}:M{$row}", 'Product Grand Total (Material + MC + Parts + VAT):', [$thin, $totalFill, $bold, $right]);
+                $put("N{$row}", (float) $item->item_total, [$thin, $totalFill, $bold, $right], $FMT_MONEY);
+                $row++;
+            }
+        }
+
+        $put("A{$row}:M{$row}", 'Net Invoice Amount', [$thin, $headFill, $bold, $right]);
+        $put("N{$row}", (float) $invoice->net_amount, [$thin, $headFill, $bold, $right], $FMT_MONEY);
+        $row += 2;
+
+        // ── payment details (left) & summary (right), side by side ─────────
+        $startRow = $row;
+
+        $payRows = [['Method', ucfirst((string) $invoice->payment_method), null]];
+        if ($invoice->payment_method === 'credit') {
+            $payRows[] = ['Payment Term', (string) ($invoice->payment_term ?? '-'), null];
+        }
+        if ($invoice->payment_method === 'cash' && $invoice->cash_amount_paid > 0) {
+            $payRows[] = ['Cash Received', (float) $invoice->cash_amount_paid, $FMT_MONEY];
+        }
+        if ($invoice->payment_method === 'cheque') {
+            $payRows[] = ['Bank Name', (string) ($invoice->bank->name ?? '-'), null];
+            $payRows[] = ['Cheque No', (string) ($invoice->cheque_no ?? '-'), null];
+            $payRows[] = ['Cheque Date', $invoice->cheque_date ? \Carbon\Carbon::parse($invoice->cheque_date)->format('d.m.Y') : '-', null];
+        }
+        if ($invoice->payment_method === 'bank_transfer') {
+            $payRows[] = ['From Bank', (string) ($invoice->transferBank->name ?? '-'), null];
+            $payRows[] = ['Customer Bank', (string) ($invoice->transfer_to_bank ?? '-'), null];
+            $payRows[] = ['Account Title', (string) ($invoice->account_title ?? '-'), null];
+            $payRows[] = ['Account No', (string) ($invoice->account_no ?? '-'), null];
+            $payRows[] = ['Transfer Date', $invoice->transfer_date ? \Carbon\Carbon::parse($invoice->transfer_date)->format('d.m.Y') : '-', null];
+            $payRows[] = ['Transaction Ref', (string) ($invoice->transaction_id ?? '-'), null];
+            $payRows[] = ['Transfer Amount', (float) ($invoice->transfer_amount ?? 0), $FMT_MONEY];
+        }
+        if (str_contains((string) $invoice->payment_method, 'material')) {
+            $payRows[] = ['Material Given By', (string) ($invoice->material_given_by ?? '-'), null];
+            $payRows[] = ['Material Received By', (string) ($invoice->material_received_by ?? '-'), null];
+            $payRows[] = ['Total Pure Weight (gms)', (float) $invoice->items->sum('purity_weight'), $FMT_WT];
+            $payRows[] = ['Making Charges (AED)', $totalMaking, $FMT_MONEY];
+        }
+
+        $put("A{$row}:F{$row}", 'Payment Details', [$thin, $headFill, $bold, $left]);
+        $r = $row + 1;
+        foreach ($payRows as [$label, $value, $fmt]) {
+            $put("A{$r}:C{$r}", $label, [$thin, $left]);
+            $put("D{$r}:F{$r}", $value, [$thin, $right], $fmt);
+            $r++;
+        }
+        $leftEnd = $r;
+
+        $sumRows = [
+            ['Material Value',      $totalMaterial, false],
+            ['Diamond Parts Val.',  $totalDiamond,  false],
+            ['Stone Parts Val.',    $totalStone,    false],
+            ['Making Charges (MC)', $totalMaking,   false],
+            ['VAT on MC',           $totalVat,      false],
+        ];
+        if ($totalItemDiscount > 0) {
+            $sumRows[] = ['Item Discounts', -1 * $totalItemDiscount, false];
+        }
+        if ($invoiceDiscount > 0) {
+            $pct = ($invoice->discount_type ?? '') === 'percent'
+                ? ' (' . rtrim(rtrim(number_format((float) $invoice->discount_value, 2), '0'), '.') . '%)'
+                : '';
+            $sumRows[] = ['Invoice Discount' . $pct, -1 * $invoiceDiscount, false];
+        }
+        $sumRows[] = ['Currency Payable (MC + Parts + VAT)', $currencyPayable, true];
+        $sumRows[] = ['Invoice Total', (float) $invoice->net_amount, true];
+        if ($invoice->currency === 'USD') {
+            $sumRows[] = ['Exchange Rate', (float) $invoice->exchange_rate, false, '0.0000'];
+        }
+        $sumRows[] = ['Total (AED)', (float) $aedAmount, false];
+        if (($invoice->invoice_vat_amount ?? 0) > 0) {
+            $sumRows[] = ['Invoice VAT (' . number_format((float) $invoice->invoice_vat_percent, 2) . '%)', (float) $invoice->invoice_vat_amount, false];
+            $sumRows[] = ['Grand Total (AED)', (float) $grandTotal, true];
+        }
+
+        $put("H{$row}:N{$row}", 'Summary (' . $invoice->currency . ')', [$thin, $headFill, $bold, $center]);
+        $r = $row + 1;
+        foreach ($sumRows as $sr) {
+            $isBold = $sr[2];
+            $fmt    = $sr[3] ?? $FMT_MONEY;
+            $put("H{$r}:K{$r}", $sr[0], array_filter([$thin, $left, $isBold ? $bold : null, $isBold ? $totalFill : null]));
+            $put("L{$r}:N{$r}", $sr[1], array_filter([$thin, $right, $isBold ? $bold : null, $isBold ? $totalFill : null]), $fmt);
+            $r++;
+        }
+        $row = max($leftEnd, $r) + 1;
+
+        // ── amount in words + terms + signatures (same text as the PDF) ───
+        $words = new \App\Services\myPDF();
+        $put("A{$row}:N{$row}", 'Amount in Words (AED): ' . $words->convertCurrencyToWords($grandTotal, 'AED'), [$left, $bold]);
+        $row++;
+        if ($invoice->currency === 'USD') {
+            $put("A{$row}:N{$row}", 'Amount in Words (USD): ' . $words->convertCurrencyToWords($invoice->net_amount, 'USD'), [$left, $bold]);
+            $row++;
+        }
+        $row++;
+
+        $put("A{$row}:N{$row}",
+            'TERMS & CONDITIONS: Goods sold on credit, if not paid when due, or in case of law suit arising there from, ' .
+            'the purchaser agrees to pay the seller all expense of recovery, collection, etc., including attorney fees, ' .
+            'legal expense and/or recovery-agent charges. GOODS ONCE SOLD CANNOT BE RETURNED OR EXCHANGED. ' .
+            'Any dispute arising out of or in connection with this sale shall be subject to the exclusive jurisdiction of Dubai Courts.',
+            [$left]);
+        $sheet->getRowDimension($row)->setRowHeight(48);
+        $row += 3;
+
+        $put("B{$row}:D{$row}", "Customer's Signature", [$center]);
+        $sheet->getStyle("B{$row}:D{$row}")->getBorders()->getTop()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+        $put("K{$row}:M{$row}", 'Authorized Signature', [$center]);
+        $sheet->getStyle("K{$row}:M{$row}")->getBorders()->getTop()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+
+        // ── print setup: landscape A4, fit to one page wide ────────────────
+        $sheet->getPageSetup()->setOrientation(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_LANDSCAPE);
+        $sheet->getPageSetup()->setPaperSize(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::PAPERSIZE_A4);
+        $sheet->getPageSetup()->setFitToWidth(1);
+        $sheet->getPageSetup()->setFitToHeight(0);
+        $sheet->getPageSetup()->setFitToPage(true);
+
+        return $spreadsheet;
     }
 
     // =========================================================================
@@ -1122,9 +1536,37 @@ class SaleInvoiceController extends Controller
                 $itemStoneVal   += $stoneValue;
             }
 
-            $taxableAmount = $makingValue;
+            // FEATURE (discount, item-wise): optional per-item discount, either
+            // a flat amount or a % (items[N][discount_type] = amount|percent,
+            // items[N][discount_value]) in the invoice's currency.
+            //
+            // The discount reduces the item's price, so the VAT charged on its
+            // making (VAT base = making) shrinks by the same proportion — VAT is
+            // always on the discounted value. The stored material_value /
+            // making_value / parts_total stay at their ORIGINAL (undiscounted)
+            // figures so the printout still reconciles to rate x weight; the
+            // discount itself is stored in discount_amount and subtracted in
+            // item_total.
+            //
+            // Material-payment invoices ("material" / "material+making cost"):
+            // the customer hands over metal by weight, which a discount must
+            // not change — so there the discount only applies to the currency
+            // portion (making + parts + its VAT), and material value is left
+            // untouched. For every other payment method the discount applies
+            // to the whole item (material + making + parts).
+            $materialPayment = $this->isMaterialPayment($request);
+            $discountBase    = ($materialPayment ? 0.0 : $materialValue) + $makingValue + $partsTotal;
+            [$discType, $discValue, $discAmount] = $this->resolveDiscount(
+                $itemData['discount_type']  ?? null,
+                $itemData['discount_value'] ?? 0,
+                $discountBase
+            );
+            $discFactor = $discountBase > 0 ? ($discountBase - $discAmount) / $discountBase : 1.0;
+            $factorMat  = $materialPayment ? 1.0 : $discFactor; // factor for the material component
+
+            $taxableAmount = $makingValue * $discFactor;
             $vatAmount     = $taxableAmount * ($vatPercent / 100);
-            $itemTotal     = $materialValue + $makingValue + $partsTotal + $vatAmount;
+            $itemTotal     = $materialValue + $makingValue + $partsTotal - $discAmount + $vatAmount;
 
             $existingBarcode   = $itemData['barcode_number'] ?? null;
             $wasAlreadyPrinted = false;
@@ -1155,6 +1597,17 @@ class SaleInvoiceController extends Controller
                 'is_printed'       => $wasAlreadyPrinted,
             ]);
 
+            // FEATURE (discount): written with forceFill() so it works without
+            // touching SaleInvoiceItem::$fillable. Only written when a discount
+            // exists, so invoices without one behave exactly as before.
+            if ($discAmount > 0) {
+                $invoiceItem->forceFill([
+                    'discount_type'   => $discType,
+                    'discount_value'  => $discValue,
+                    'discount_amount' => $discAmount,
+                ])->save();
+            }
+
             foreach ($partsData as $partData) {
                 $qty       = (float) ($partData['qty']        ?? 0);
                 $partRate  = (float) ($partData['rate']       ?? 0);
@@ -1174,23 +1627,118 @@ class SaleInvoiceController extends Controller
                 ]);
             }
 
+            // FEATURE (discount): accounting totals carry the DISCOUNTED amounts,
+            // so every revenue credit is already net of the discount ("reduce
+            // revenue directly") and the debit side (receivable / cash / bank)
+            // — which is built from the sum of these credits — follows.
             if ($matType === 'gold') {
-                $totals['gold_material'] += $materialValue;
-                $totals['gold_parts']    += $partsTotal;
+                $totals['gold_material'] += $materialValue * $factorMat;
+                $totals['gold_parts']    += $partsTotal    * $discFactor;
             } else {
-                $totals['diamond_material'] += $materialValue;
-                $totals['diamond_parts']    += $partsTotal;
+                $totals['diamond_material'] += $materialValue * $factorMat;
+                $totals['diamond_parts']    += $partsTotal    * $discFactor;
             }
-            $totals['material']    += $materialValue;
-            $totals['making']      += $makingValue;
-            $totals['diamond_val'] += $itemDiamondVal;
-            $totals['stone_val']   += $itemStoneVal;
-            $totals['vat']         += $vatAmount;
+            $totals['material']    += $materialValue   * $factorMat;
+            $totals['making']      += $makingValue     * $discFactor;
+            $totals['diamond_val'] += $itemDiamondVal  * $discFactor;
+            $totals['stone_val']   += $itemStoneVal    * $discFactor;
+            $totals['vat']         += $vatAmount; // already on the discounted making
 
             $position++;
         }
 
         return [$totals, $position];
+    }
+
+    // =========================================================================
+    // DISCOUNT HELPERS
+    // =========================================================================
+
+    private function isMaterialPayment(Request $request): bool
+    {
+        return str_contains((string) $request->payment_method, 'material');
+    }
+
+    /**
+     * Turns what the user typed (type = amount|percent, value) into the
+     * actual discount for a given base amount. The discount can never be
+     * negative or exceed the base. Returns [type|null, value, amount].
+     */
+    private function resolveDiscount($type, $value, float $base): array
+    {
+        $value = max(0.0, (float) $value);
+
+        if (!in_array($type, ['amount', 'percent'], true) || $value <= 0 || $base <= 0) {
+            return [null, 0.0, 0.0];
+        }
+
+        if ($type === 'percent') {
+            $value  = min($value, 100.0);
+            $amount = $base * $value / 100;
+        } else {
+            $amount = $value;
+        }
+
+        return [$type, $value, round(min($amount, $base), 2)];
+    }
+
+    /**
+     * FEATURE (discount, overall invoice amount): optional invoice-level
+     * discount (invoice_discount_type = amount|percent, invoice_discount_value)
+     * applied on top of the already item-discounted item totals.
+     *
+     * Returns [net amount after the discount, accounting totals scaled to
+     * match]. The scaling is proportional across the revenue components
+     * (gold/diamond/making/parts/VAT), so each revenue account is credited
+     * its share net of the discount and debits (built from the credits)
+     * still balance. For material-payment invoices only the currency
+     * portion (making + parts + VAT) is discountable — see createItems().
+     *
+     * The discount is stored on the invoice via forceFill() (no change to
+     * SaleInvoice::$fillable needed) and reset to zero on an edit that
+     * removes it.
+     */
+    private function applyInvoiceLevelDiscount(SaleInvoice $invoice, array $totals, Request $request): array
+    {
+        $netBefore       = (float) $invoice->items()->sum('item_total');
+        $materialPayment = $this->isMaterialPayment($request);
+
+        $currencyPortion = $totals['making'] + $totals['gold_parts'] + $totals['diamond_parts'] + $totals['vat'];
+        $base            = $materialPayment ? $currencyPortion : $netBefore;
+
+        [$type, $value, $amount] = $this->resolveDiscount(
+            $request->invoice_discount_type,
+            $request->invoice_discount_value,
+            (float) $base
+        );
+
+        if ($amount > 0) {
+            $g = ($base - $amount) / $base;
+
+            foreach (['making', 'gold_parts', 'diamond_parts', 'vat', 'diamond_val', 'stone_val'] as $key) {
+                $totals[$key] *= $g;
+            }
+            if (!$materialPayment) {
+                foreach (['gold_material', 'diamond_material', 'material'] as $key) {
+                    $totals[$key] *= $g;
+                }
+            }
+
+            $invoice->forceFill([
+                'discount_type'   => $type,
+                'discount_value'  => $value,
+                'discount_amount' => $amount,
+            ])->save();
+        } elseif ((float) ($invoice->discount_amount ?? 0) > 0) {
+            // edit that removed a previously saved invoice-level discount
+            $invoice->forceFill([
+                'discount_type'   => null,
+                'discount_value'  => 0,
+                'discount_amount' => 0,
+            ])->save();
+        }
+
+        return [round($netBefore - $amount, 2), $totals];
     }
 
     private function storeAttachments(Request $request, SaleInvoice $invoice): void
@@ -1278,6 +1826,12 @@ class SaleInvoiceController extends Controller
             'items.*.making_rate'      => 'required|numeric|min:0',
             'items.*.material_type'    => 'required|in:gold,diamond',
             'items.*.vat_percent'      => 'required|numeric|min:0',
+            // FEATURE (discount): optional, item-wise and whole-invoice. Blank
+            // fields arrive as null (ConvertEmptyStringsToNull) and mean "no discount".
+            'items.*.discount_type'    => 'nullable|in:amount,percent',
+            'items.*.discount_value'   => 'nullable|numeric|min:0',
+            'invoice_discount_type'    => 'nullable|in:amount,percent',
+            'invoice_discount_value'   => 'nullable|numeric|min:0',
             // FEATURE (Sale Invoice POS): optional flat retail price coming
             // from the POS screen — see createItems() for how it overrides
             // the normal rate x purity_weight calculation.
@@ -1825,7 +2379,11 @@ class SaleInvoiceController extends Controller
                 <td width="10%"></td>
                 <td width="45%" valign="top">
                     <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
-                        <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary (' . $invoice->currency . ')</b></td></tr>
+                        <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary (' . $invoice->currency . ')</b></td></tr>'
+                        . ((float) ($invoice->discount_amount ?? 0) > 0
+                            ? '<tr><td width="60%">Invoice Discount' . (($invoice->discount_type ?? '') === 'percent' ? ' (' . rtrim(rtrim(number_format((float) $invoice->discount_value, 2), '0'), '.') . '%)' : '') . '</td><td width="40%" align="right">-' . number_format((float) $invoice->discount_amount, 2) . '</td></tr>'
+                            : '')
+                        . '
                         <tr style="font-weight:bold;background-color:#eeeeee;">
                             <td width="60%">Invoice Total</td>
                             <td width="40%" align="right">' . number_format($invoice->net_amount, 2) . '</td>

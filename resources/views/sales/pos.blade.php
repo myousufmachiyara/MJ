@@ -34,9 +34,15 @@
         currency/exchange_rate path the full Sale Invoice screen already
         uses for USD invoices (SaleInvoiceController::store() computes
         net_amount_aed from it).
-    The two prices are independent — no AED<->USD conversion is ever
-    applied to an item's price — and the currency can only be switched
-    while the cart is empty, so one invoice never mixes currencies.
+    FIX (POS reads and shows BOTH prices): posScan() now returns an item's
+    AED and USD prices together, and the cart shows both columns side by
+    side. An item is only refused when NEITHER price is set. The Currency
+    selector decides which price is billed (and what the invoice currency
+    is) and can be changed at any time — the cart re-prices instantly from
+    the two stored prices. An item with no price in the selected currency
+    is highlighted and blocks checkout until it is removed or the currency
+    is switched. The two prices are independent; nothing is ever converted
+    from one to the other.
 
     Kept intentionally simple: no is_taxable/VAT%, no gold/diamond rate
     inputs, no parts — those only matter for the detailed costing the POS
@@ -145,13 +151,14 @@
                     <th>Gold Wt (g)</th>
                     <th>Diamond (Ct)</th>
                     <th>Stone (Ct)</th>
-                    <th>Selling Price (<span class="pos-currency-label">AED</span>)</th>
+                    <th class="pos-col-aed">Price (AED)</th>
+                    <th class="pos-col-usd">Price (USD)</th>
                     <th width="5%">Action</th>
                   </tr>
                 </thead>
                 <tbody id="posCartBody">
                   <tr id="posCartEmptyRow">
-                    <td colspan="10" class="text-center text-muted py-4">
+                    <td colspan="11" class="text-center text-muted py-4">
                       <i class="fas fa-barcode fa-2x d-block mb-2 opacity-25"></i>
                       No items scanned yet
                     </td>
@@ -179,10 +186,16 @@
                   <tr><td>Total Stone Weight</td><td class="text-end" id="pos_summary_stone">0.000 Ct</td></tr>
                 </tbody>
               </table>
-              <div class="d-flex justify-content-between align-items-center p-2 bg-light border rounded mb-3">
-                <span class="fw-bold">Total Selling Price (<span class="pos-currency-label">AED</span>)</span>
-                <span class="fw-bold fs-4 text-success" id="pos_summary_price">0.00</span>
+              <div id="pos_total_aed_box" class="d-flex justify-content-between align-items-center p-2 border rounded mb-2">
+                <span class="fw-bold">Total (AED)</span>
+                <span class="fw-bold fs-5" id="pos_summary_aed">0.00</span>
               </div>
+              <div id="pos_total_usd_box" class="d-flex justify-content-between align-items-center p-2 border rounded mb-2">
+                <span class="fw-bold">Total (USD)</span>
+                <span class="fw-bold fs-5" id="pos_summary_usd">0.00</span>
+              </div>
+              <div class="small text-muted mb-1">Billing in <b class="pos-currency-label">AED</b> — change the Currency at the top to bill in the other.</div>
+              <div id="pos_missing_price_msg" class="alert alert-danger py-2 px-3 small d-none mb-3"></div>
 
               <label class="fw-bold">Payment Method <span class="text-danger">*</span></label>
               <select name="payment_method" id="payment_method" class="form-control mb-2" required>
@@ -249,10 +262,17 @@ $(document).ready(function () {
     // or weight math happens here, everything is just retrieved/displayed.
     let cart = [];
 
-    // Currency the cart is currently priced in. posScan() is asked for
-    // this currency's price, and the form submits it as the invoice's
-    // currency. Only changeable while the cart is empty (see below).
+    // Currency the invoice is billed in (submitted as the invoice's
+    // currency). Every cart item carries BOTH prices; this only decides
+    // which one is used. Can be changed at any time.
     let activeCurrency = 'AED';
+
+    // The price of `item` in `cur` ('AED' | 'USD'), or null if that
+    // currency's price isn't set on the item.
+    function priceIn(item, cur) {
+        const v = cur === 'USD' ? item.selling_price_usd : item.selling_price_aed;
+        return (v === null || v === undefined || v === '') ? null : parseFloat(v);
+    }
 
     $('.select2-js').select2({ width: '100%' });
 
@@ -280,12 +300,24 @@ $(document).ready(function () {
 
         if (cart.length === 0) {
             body.append(
-                '<tr id="posCartEmptyRow"><td colspan="10" class="text-center text-muted py-4">' +
+                '<tr id="posCartEmptyRow"><td colspan="11" class="text-center text-muted py-4">' +
                 '<i class="fas fa-barcode fa-2x d-block mb-2 opacity-25"></i>No items scanned yet</td></tr>'
             );
         }
 
         cart.forEach((item, idx) => {
+            // Both prices side by side; the one being billed is bold + tinted,
+            // and a missing price in the billed currency is flagged in red.
+            const aed = priceIn(item, 'AED');
+            const usd = priceIn(item, 'USD');
+            const cell = function (val, cur) {
+                const active = cur === activeCurrency;
+                if (val === null) {
+                    return '<td class="text-center ' + (active ? 'table-danger text-danger fw-bold' : 'text-muted') + '">' +
+                           (active ? 'not set' : '—') + '</td>';
+                }
+                return '<td class="text-end ' + (active ? 'fw-bold table-success' : 'text-muted') + '">' + fmt(val, 2) + '</td>';
+            };
             body.append(
                 '<tr>' +
                     '<td class="text-center">' + (idx + 1) + '</td>' +
@@ -296,7 +328,8 @@ $(document).ready(function () {
                     '<td class="text-end">' + fmt(item.net_weight) + '</td>' +
                     '<td class="text-end">' + fmt(item.diamond_total_ct) + '</td>' +
                     '<td class="text-end">' + fmt(item.stone_total_ct) + '</td>' +
-                    '<td class="text-end fw-bold">' + fmt(item.selling_price, 2) + '</td>' +
+                    cell(aed, 'AED') +
+                    cell(usd, 'USD') +
                     '<td class="text-center">' +
                         '<button type="button" class="btn btn-sm btn-outline-danger pos-remove-item" data-idx="' + idx + '">' +
                             '<i class="fas fa-trash"></i>' +
@@ -321,6 +354,7 @@ $(document).ready(function () {
     function renderHiddenInputs() {
         const wrap = $('#posHiddenInputs').empty();
         cart.forEach((item, idx) => {
+            const billed = priceIn(item, activeCurrency) || 0;
             wrap.append(
                 '<input type="hidden" name="items[' + idx + '][item_name]" value="' + esc(item.item_name) + '">' +
                 '<input type="hidden" name="items[' + idx + '][barcode_number]" value="' + esc(item.barcode_number) + '">' +
@@ -329,28 +363,44 @@ $(document).ready(function () {
                 '<input type="hidden" name="items[' + idx + '][purity]" value="0">' +
                 '<input type="hidden" name="items[' + idx + '][making_rate]" value="0">' +
                 '<input type="hidden" name="items[' + idx + '][vat_percent]" value="0">' +
-                '<input type="hidden" name="items[' + idx + '][selling_price]" value="' + (parseFloat(item.selling_price) || 0) + '">'
+                '<input type="hidden" name="items[' + idx + '][selling_price]" value="' + billed + '">'
             );
         });
     }
 
     function updateSummary() {
         const totalItems   = cart.length;
-        const totalPrice   = cart.reduce((s, i) => s + (parseFloat(i.selling_price)    || 0), 0);
+        const totalAed     = cart.reduce((s, i) => s + (priceIn(i, 'AED') || 0), 0);
+        const totalUsd     = cart.reduce((s, i) => s + (priceIn(i, 'USD') || 0), 0);
+        const totalPrice   = activeCurrency === 'USD' ? totalUsd : totalAed;
+        const missing      = cart.filter(i => priceIn(i, activeCurrency) === null);
         const totalWeight  = cart.reduce((s, i) => s + (parseFloat(i.gross_weight)      || 0), 0);
         const totalGold    = cart.reduce((s, i) => s + (parseFloat(i.net_weight)        || 0), 0);
         const totalDiamond = cart.reduce((s, i) => s + (parseFloat(i.diamond_total_ct)  || 0), 0);
         const totalStone   = cart.reduce((s, i) => s + (parseFloat(i.stone_total_ct)    || 0), 0);
 
         $('#pos_summary_items').text(totalItems);
-        $('#pos_summary_price').text(totalPrice.toFixed(2));
+        $('#pos_summary_aed').text(totalAed.toFixed(2));
+        $('#pos_summary_usd').text(totalUsd.toFixed(2));
+        $('#pos_total_aed_box').toggleClass('bg-success bg-opacity-10 border-success', activeCurrency === 'AED').toggleClass('bg-light', activeCurrency !== 'AED');
+        $('#pos_total_usd_box').toggleClass('bg-success bg-opacity-10 border-success', activeCurrency === 'USD').toggleClass('bg-light', activeCurrency !== 'USD');
+
+        if (missing.length > 0) {
+            $('#pos_missing_price_msg').removeClass('d-none').html(
+                '<i class="fas fa-exclamation-triangle"></i> ' + missing.length + ' item(s) have no ' + activeCurrency +
+                ' price: ' + missing.map(i => esc(i.barcode_number)).join(', ') +
+                '. Remove them, or switch the currency.'
+            );
+        } else {
+            $('#pos_missing_price_msg').addClass('d-none').empty();
+        }
         $('#pos_summary_weight').text(totalWeight.toFixed(3) + ' g');
         $('#pos_summary_gold').text(totalGold.toFixed(3) + ' g');
         $('#pos_summary_diamond').text(totalDiamond.toFixed(3) + ' Ct');
         $('#pos_summary_stone').text(totalStone.toFixed(3) + ' Ct');
         $('#net_amount').val(totalPrice.toFixed(2));
 
-        $('#pos_checkout_btn').prop('disabled', totalItems === 0 || !$('#customer_id').val());
+        $('#pos_checkout_btn').prop('disabled', totalItems === 0 || !$('#customer_id').val() || missing.length > 0);
     }
 
     // ── Currency selector ────────────────────────────────────────────────
@@ -368,22 +418,9 @@ $(document).ready(function () {
     }
 
     $('#pos_currency').on('change', function () {
-        const newCurrency = $(this).val();
-
-        // Prices already in the cart were fetched in the previous currency,
-        // so switching mid-sale would leave a mixed-currency invoice.
-        if (cart.length > 0) {
-            $(this).val(activeCurrency);
-            showScanResult(
-                '<i class="fas fa-exclamation-triangle"></i> Remove all items from the cart before changing the currency.',
-                'warning'
-            );
-            focusScanInput();
-            return;
-        }
-
-        activeCurrency = newCurrency;
+        activeCurrency = $(this).val();
         applyCurrencyUi(activeCurrency);
+        renderCart(); // re-price every line from its two stored prices
         focusScanInput();
     });
 
@@ -406,7 +443,7 @@ $(document).ready(function () {
         $.ajax({
             url: POS_SCAN_URL,
             method: 'GET',
-            data: { barcode: barcode, currency: activeCurrency },
+            data: { barcode: barcode },
             success: function (data) {
                 if (!data.success) {
                     showScanResult('<i class="fas fa-times-circle"></i> ' + data.message, 'danger');
@@ -462,6 +499,11 @@ $(document).ready(function () {
         if (!$('#customer_id').val()) {
             e.preventDefault();
             showScanResult('<i class="fas fa-exclamation-triangle"></i> Please select a customer.', 'warning');
+            return;
+        }
+        if (cart.some(i => priceIn(i, activeCurrency) === null)) {
+            e.preventDefault();
+            showScanResult('<i class="fas fa-exclamation-triangle"></i> Some items have no ' + activeCurrency + ' price — remove them or switch the currency.', 'warning');
             return;
         }
         if (activeCurrency === 'USD' && !(parseFloat($('#pos_exchange_rate').val()) > 0)) {
