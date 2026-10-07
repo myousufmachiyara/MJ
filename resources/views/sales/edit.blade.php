@@ -200,6 +200,7 @@
                     <th width="5%" rowspan="2">Material</th>
                     <th rowspan="2">Material Val</th>
                     <th rowspan="2">MC</th>
+                    <th rowspan="2" class="text-danger" style="min-width:150px;">Discount<br><small class="fw-normal text-muted" style="font-size:.65rem;">Amt or %</small></th>
                     <th rowspan="2">VAT %</th>
                     <th rowspan="2">VAT Amt</th>
                     <th rowspan="2">Item Total</th>
@@ -249,6 +250,32 @@
                 </button>
               </div>
               <small class="text-muted">Sets making rate on every row to achieve this profit %</small>
+            </div>
+
+            {{-- ===== DISCOUNTS ===== --}}
+            <div class="col-md-2 mt-3">
+              <label class="text-danger">Item Discounts</label>
+              <input type="text" id="sum_item_discount" class="form-control text-danger fw-bold" readonly>
+            </div>
+            <div class="col-md-2 mt-3">
+              <label>Subtotal <small class="text-muted">(before inv. discount)</small></label>
+              <input type="text" id="subtotal_before_invoice_discount" class="form-control" readonly>
+            </div>
+            <div class="col-md-3 mt-3">
+              <label class="fw-bold text-danger">Invoice Discount <small class="text-muted fw-normal">(overall)</small></label>
+              <div class="input-group">
+                <input type="number" step="any" min="0" name="invoice_discount_value" id="invoice_discount_value"
+                       class="form-control border-danger" value="{{ old('invoice_discount_value', (float) ($saleInvoice->discount_value ?? 0)) }}" placeholder="0">
+                <select name="invoice_discount_type" id="invoice_discount_type" class="form-select border-danger" style="max-width:85px;flex:0 0 85px;">
+                  <option value="amount">Amount</option>
+                  <option value="percent" {{ old('invoice_discount_type', $saleInvoice->discount_type ?? 'amount') === 'percent' ? 'selected' : '' }}>%</option>
+                </select>
+              </div>
+              <small class="text-muted">Applied on the whole invoice, after item discounts</small>
+            </div>
+            <div class="col-md-2 mt-3">
+              <label>Invoice Discount Amt</label>
+              <input type="text" id="invoice_discount_amount_display" class="form-control bg-light fw-bold text-danger" readonly>
             </div>
 
             <div class="col-md-2 mt-3">
@@ -518,7 +545,32 @@ $(document).ready(function () {
     });
     $('#exchange_rate').on('input', calculateTotals);
     $('#invoice_vat_percent').on('input', calculateTotals);
+    $('#invoice_discount_value').on('input', calculateTotals);
+    $('#invoice_discount_type').on('change', calculateTotals);
     $('.select2-js').select2({ width: '100%' });
+
+    // ===== DISCOUNT HELPERS (mirror SaleInvoiceController::resolveDiscount / createItems) =====
+    function round2(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
+    function isMaterialPay() { return String($('#payment_method').val() || '').indexOf('material') !== -1; }
+    function resolveDiscountJs(type, value, base) {
+        value = Math.max(0, parseFloat(value) || 0);
+        if ((type !== 'amount' && type !== 'percent') || value <= 0 || base <= 0) return 0;
+        let amount;
+        if (type === 'percent') { value = Math.min(value, 100); amount = base * value / 100; }
+        else                    { amount = value; }
+        return round2(Math.min(amount, base));
+    }
+    // Item money with discount. For material-payment invoices the discount only
+    // applies to the currency part (making + parts), never to the metal value.
+    function computeItemMoney(mat, making, parts, vatPct, dType, dValue) {
+        const base    = (isMaterialPay() ? 0 : mat) + making + parts;
+        const disc    = resolveDiscountJs(dType, dValue, base);
+        const f       = base > 0 ? (base - disc) / base : 1;
+        const taxable = making * f;
+        const vat     = taxable * vatPct / 100;
+        const total   = mat + making + parts - disc + vat;
+        return { base, disc, taxable, vat, total };
+    }
 
     // ===== PROFIT HELPERS =====
     function calcProfitPct(sale, cost) {
@@ -549,8 +601,23 @@ $(document).ready(function () {
         if (costTotal <= 0 || gross <= 0) return;
 
         const desiredTotal  = costTotal * (1 + targetPct / 100);
-        const residual      = desiredTotal - materialVal - partsTotal;
-        const makingValue   = residual / (1 + vatPercent / 100);
+        const dType         = row.find('.discount-type').val();
+        const dVal          = parseFloat(row.find('.discount-value').val()) || 0;
+        let makingValue;
+        if (dVal <= 0) {
+            const residual = desiredTotal - materialVal - partsTotal;
+            makingValue    = residual / (1 + vatPercent / 100);
+        } else {
+            // A discount is set: item total (after discount) is increasing in making,
+            // so solve for the making value that lands on the desired total.
+            let lo = 0, hi = Math.max(desiredTotal * 4, 1);
+            for (let k = 0; k < 80; k++) {
+                const mid = (lo + hi) / 2;
+                const t   = computeItemMoney(materialVal, mid, partsTotal, vatPercent, dType, dVal).total;
+                if (t < desiredTotal) lo = mid; else hi = mid;
+            }
+            makingValue = (lo + hi) / 2;
+        }
         const newMakingRate = Math.max(0, makingValue / gross);
 
         row.find('.making-rate').val(newMakingRate.toFixed(4));
@@ -1164,6 +1231,16 @@ $(document).ready(function () {
             </select></td>
             <td><input type="number" name="items[${index}][material_value]" step="any" value="${data.material_value || 0}" class="form-control material-value" readonly></td>
             <td><input type="number" name="items[${index}][taxable_amount]" step="any" value="${data.taxable_amount || 0}" class="form-control taxable-amount" readonly></td>
+            <td style="min-width:150px;">
+                <div class="input-group input-group-sm">
+                    <input type="number" step="any" min="0" name="items[${index}][discount_value]" class="form-control discount-value" value="${data.discount_value || 0}">
+                    <select name="items[${index}][discount_type]" class="form-select discount-type" style="max-width:62px;flex:0 0 62px;">
+                        <option value="amount" ${data.discount_type !== 'percent' ? 'selected' : ''}>Amt</option>
+                        <option value="percent" ${data.discount_type === 'percent' ? 'selected' : ''}>%</option>
+                    </select>
+                </div>
+                <small class="text-danger fw-bold discount-amount-display"></small>
+            </td>
             <td><input type="number" name="items[${index}][vat_percent]" class="form-control vat-percent" step="any" value="${data.vat_percent || 0}"></td>
             <td><input type="number" name="items[${index}][vat_amount]" step="any" value="${data.vat_amount || 0}" class="form-control vat-amount" readonly></td>
             <td><input type="number" name="items[${index}][item_total]" step="any" value="${data.item_total || 0}" class="form-control item-total" readonly></td>
@@ -1178,7 +1255,7 @@ $(document).ready(function () {
             </td>
         </tr>
         <tr class="parts-row" style="display:none;background:#efefef">
-            <td colspan="18"><div class="parts-wrapper">
+            <td colspan="19"><div class="parts-wrapper">
                 <table class="table table-sm table-bordered parts-table">
                     <thead><tr><th>Part</th><th>Description</th><th>Diamond Ct.</th><th>Rate</th><th>Stone Ct.</th><th>Stone Rate</th><th>Total</th><th></th></tr></thead>
                     <tbody></tbody>
@@ -1230,6 +1307,8 @@ $(document).ready(function () {
         else if (val === 'cash')                 $('#received_by_box, #cash_fields').removeClass('d-none');
         else if (val === 'bank_transfer')        $('#bank_transfer_fields').removeClass('d-none');
         else if (val === 'material+making cost') $('#material_fields').removeClass('d-none');
+        // discount base depends on the payment method (material -> currency part only)
+        $('#SaleTable tr.item-row').each(function() { calculateRow($(this)); updateProfitDisplay($(this)); });
         calculateTotals();
     });
 
@@ -1303,7 +1382,7 @@ $(document).ready(function () {
         updateProfitDisplay(row);
     });
 
-    $(document).on('input change', '.purity, .vat-percent, .material-type, #gold_rate_aed, #diamond_rate_aed_gram, #purchase_gold_rate_aed, #purchase_making_rate_aed', function() {
+    $(document).on('input change', '.purity, .vat-percent, .discount-value, .discount-type, .material-type, #gold_rate_aed, #diamond_rate_aed_gram, #purchase_gold_rate_aed, #purchase_making_rate_aed', function() {
         $('#SaleTable tr.item-row').each(function() { calculateRow($(this)); updateProfitDisplay($(this)); });
         calculateTotals();
     });
@@ -1342,9 +1421,14 @@ $(document).ready(function () {
             partsTotal += parseFloat($(this).find('.part-total').val()) || 0;
         });
 
-        const taxableAmount = makingValue;
-        const vatAmount     = taxableAmount * vatPercent / 100;
-        const itemTotal     = materialValue + makingValue + partsTotal + vatAmount;
+        // Item-wise discount (Amount or %) — see computeItemMoney()
+        const money         = computeItemMoney(materialValue, makingValue, partsTotal, vatPercent,
+                                               row.find('.discount-type').val(), row.find('.discount-value').val());
+        const taxableAmount = money.taxable;
+        const vatAmount     = money.vat;
+        const itemTotal     = money.total;
+        row.find('.discount-amount-display').text(money.disc > 0 ? '− ' + money.disc.toFixed(2) : '');
+        row.data('money', { making: makingValue, parts: partsTotal, disc: money.disc, vat: vatAmount });
 
         row.find('.purity-weight').val(purityWeight.toFixed(4));
         row.find('.col-995').val(col995.toFixed(4));
@@ -1374,6 +1458,7 @@ $(document).ready(function () {
         let sumGoldGross = 0, sumPurityWeight = 0, sum995 = 0, sumMaking = 0;
         let sumMaterial = 0, sumVAT = 0, sumItemTotal = 0, totalCost = 0;
         let totalDiamondCTS = 0, totalStoneQty = 0, totalDiamondVal = 0, totalStoneVal = 0;
+        let sumItemDisc = 0, sumCurrencyPortion = 0;
         const purGoldR = parseFloat($('#purchase_gold_rate_aed').val()) || 0;
         const purMkR   = parseFloat($('#purchase_making_rate_aed').val()) || 0;
 
@@ -1390,6 +1475,9 @@ $(document).ready(function () {
             sumMaterial     += parseFloat(row.find('.material-value').val())  || 0;
             sumVAT          += parseFloat(row.find('.vat-amount').val())      || 0;
             sumItemTotal    += parseFloat(row.find('.item-total').val())       || 0;
+            const mny = row.data('money') || { making: 0, parts: 0, disc: 0, vat: 0 };
+            sumItemDisc        += mny.disc;
+            sumCurrencyPortion += mny.making + mny.parts - mny.disc + mny.vat;
             totalCost       += (purGoldR * purWt) + (baseGros * purMkR);
             if (matType === 'gold') sumGoldGross += grossVal;
 
@@ -1413,19 +1501,29 @@ $(document).ready(function () {
         $('#sum_vat_amount').val(sumVAT.toFixed(4));
         $('#sum_diamond_value').val(totalDiamondVal.toFixed(4));
         $('#sum_stone_value').val(totalStoneVal.toFixed(4));
-        $('#net_amount_display').val(sumItemTotal.toFixed(4));
-        $('#net_amount').val(sumItemTotal.toFixed(4));
+
+        // Invoice-level discount (mirrors SaleInvoiceController::applyInvoiceLevelDiscount):
+        // base = whole net, or only the currency portion (making+parts+VAT) for material payments.
+        const invDiscBase = isMaterialPay() ? sumCurrencyPortion : sumItemTotal;
+        const invDiscAmt  = resolveDiscountJs($('#invoice_discount_type').val(), $('#invoice_discount_value').val(), invDiscBase);
+        const netAfter    = round2(sumItemTotal - invDiscAmt);
+        $('#sum_item_discount').val(sumItemDisc.toFixed(2));
+        $('#subtotal_before_invoice_discount').val(sumItemTotal.toFixed(2));
+        $('#invoice_discount_amount_display').val(invDiscAmt.toFixed(2));
+
+        $('#net_amount_display').val(netAfter.toFixed(4));
+        $('#net_amount').val(netAfter.toFixed(4));
 
         const currency = $('#currency').val();
         const exRate   = parseFloat($('#exchange_rate').val()) || 1;
-        $('#converted_total').val(currency === 'USD' ? (sumItemTotal * exRate).toFixed(4) : sumItemTotal.toFixed(4));
+        $('#converted_total').val(currency === 'USD' ? (netAfter * exRate).toFixed(4) : netAfter.toFixed(4));
 
         const oi = $('#overall_profit_pct');
-        const { pct, label } = calcProfitPct(sumItemTotal, totalCost);
+        const { pct, label } = calcProfitPct(netAfter, totalCost);
         oi.val(label); colourProfitInput(oi, pct);
 
         const invVatPct = parseFloat($('#invoice_vat_percent').val()) || 0;
-        const netAed    = currency === 'USD' ? (sumItemTotal * exRate) : sumItemTotal;
+        const netAed    = currency === 'USD' ? round2(netAfter * exRate) : netAfter;
         const invVatAmt = Math.round(netAed * invVatPct / 100 * 100) / 100;
         $('#invoice_vat_amount_display').val(invVatAmt.toFixed(2));
         $('#grand_total_display').val((Math.round((netAed + invVatAmt) * 100) / 100).toFixed(2));
@@ -1435,7 +1533,7 @@ $(document).ready(function () {
           $('input[name="material_weight"]').val(sum995.toFixed(4));
           $('input[name="material_purity"]').val(sumPurityWeight.toFixed(4));
           $('input[name="material_value_input"]').val(sumMaterial.toFixed(4));
-          $('#making_charges_display').val(sumMaking.toFixed(4));
+            $('#making_charges_display').val(Math.max(0, sumMaking - sumItemDisc - invDiscAmt).toFixed(4));
         }
     }
 
@@ -1479,3 +1577,8 @@ document.getElementById('main-form').addEventListener('submit', function() {
 });
 </script>
 @endsection
+
+----------
+
+
+```blade
