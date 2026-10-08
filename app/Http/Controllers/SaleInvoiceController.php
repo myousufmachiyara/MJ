@@ -2351,11 +2351,33 @@ class SaleInvoiceController extends Controller
 
         $totalGrossWeight = 0;
 
+        // FEATURE (item code + certificate on the B2C receipt): the item code
+        // is the item's barcode_number (SKU); the certificate number is stored
+        // on the purchased item carrying that same barcode.
+        $certByBarcode = PurchaseInvoiceItem::whereIn(
+                'barcode_number',
+                $invoice->items->pluck('barcode_number')->filter()->unique()->values()
+            )
+            ->orderBy('id')
+            ->pluck('certificate_no', 'barcode_number');
+
         foreach ($invoice->items as $i => $item) {
+            $codeLines = [];
+            if ($item->barcode_number) {
+                $codeLines[] = 'Code: ' . htmlspecialchars($item->barcode_number);
+            }
+            $certNo = $certByBarcode->get($item->barcode_number);
+            if ($certNo) {
+                $codeLines[] = 'Cert#: ' . htmlspecialchars($certNo);
+            }
+            $codeHtml = $codeLines
+                ? '<br><span style="font-size:7px;color:#555555;">' . implode(' &nbsp;|&nbsp; ', $codeLines) . '</span>'
+                : '';
+
             $html .= '
                 <tr style="text-align:center;background-color:#ffffff;">
                     <td width="5%">' . ($i + 1) . '</td>
-                    <td width="30%" style="text-align:left;">' . htmlspecialchars($item->item_name ?: ($item->product->name ?? '-')) . '</td>
+                    <td width="30%" style="text-align:left;">' . htmlspecialchars($item->item_name ?: ($item->product->name ?? '-')) . $codeHtml . '</td>
                     <td width="25%" style="text-align:left;">' . htmlspecialchars($item->item_description ?? '-') . '</td>
                     <td width="12%">' . number_format($item->gross_weight, 3) . '</td>
                     <td width="10%">' . ucfirst($item->material_type) . '</td>
