@@ -2271,6 +2271,9 @@ class SaleInvoiceController extends Controller
         $invoice = SaleInvoice::with([
             'customer',
             'items',
+            // FEATURE (parts on the B2C receipt): same relations print() loads.
+            'items.parts',
+            'items.parts.product.measurementUnit',
             'bank',
             'transferBank',
         ])->findOrFail($id);
@@ -2359,6 +2362,32 @@ class SaleInvoiceController extends Controller
                     <td width="18%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
                 </tr>';
             $totalGrossWeight += $item->gross_weight;
+
+            // FEATURE (parts on the B2C receipt): the diamond / stone parts of
+            // each item, listed right under it (same data as the detailed
+            // invoice's "Parts Detail"). Their value is already inside the
+            // item's Amount, so each part's total is informational.
+            if ($item->parts && $item->parts->count() > 0) {
+                $html .= '<tr style="background-color:#f9f9f9;font-style:italic;font-size:7px;">
+                            <td></td><td colspan="5"><b>Parts Detail:</b></td>
+                          </tr>';
+
+                foreach ($item->parts as $part) {
+                    $partName = htmlspecialchars($part->item_name ?: ($part->product->name ?? 'Part'));
+                    $detail   = number_format($part->qty, 3) . ' Ct @ ' . number_format($part->rate, 2);
+                    if ((float) ($part->stone_qty ?? 0) > 0) {
+                        $detail .= '<br>Stone ' . number_format($part->stone_qty, 2) . ' @ ' . number_format($part->stone_rate ?? 0, 2);
+                    }
+                    $html .= '
+                    <tr style="font-size:7px;background-color:#fcfcfc;text-align:center;">
+                        <td width="5%"></td>
+                        <td width="30%" style="text-align:left;">' . $partName . '</td>
+                        <td width="25%" style="text-align:left;">' . htmlspecialchars($part->part_description ?? '') . '</td>
+                        <td width="22%" colspan="2">' . $detail . '</td>
+                        <td width="18%" align="right">' . number_format($part->total, 2) . '</td>
+                    </tr>';
+                }
+            }
         }
 
         $html .= '
