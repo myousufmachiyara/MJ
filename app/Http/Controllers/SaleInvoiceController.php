@@ -2398,7 +2398,7 @@ class SaleInvoiceController extends Controller
                     $partName = htmlspecialchars($part->item_name ?: ($part->product->name ?? 'Part'));
                     $detail   = number_format($part->qty, 3) . ' Ct @ ' . number_format($part->rate, 2);
                     if ((float) ($part->stone_qty ?? 0) > 0) {
-                        $detail .= '<br>Stone ' . number_format($part->stone_qty, 2) . ' @ ' . number_format($part->stone_rate ?? 0, 2);
+                        $detail .= '<br>Stone ' . number_format($part->stone_qty, 2);
                     }
                     $html .= '
                     <tr style="font-size:7px;background-color:#fcfcfc;text-align:center;">
