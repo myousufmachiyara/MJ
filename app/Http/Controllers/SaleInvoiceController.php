@@ -2396,7 +2396,7 @@ class SaleInvoiceController extends Controller
 
                 foreach ($item->parts as $part) {
                     $partName = htmlspecialchars($part->item_name ?: ($part->product->name ?? 'Part'));
-                    $detail   = number_format($part->qty, 3) . ' Ct @ ' . number_format($part->rate, 2);
+                    $detail   = number_format($part->qty, 3) . ' Ct';
                     if ((float) ($part->stone_qty ?? 0) > 0) {
                         $detail .= '<br>Stone ' . number_format($part->stone_qty, 2);
                     }
