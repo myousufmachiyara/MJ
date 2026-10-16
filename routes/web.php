@@ -154,10 +154,14 @@ Route::middleware(['auth'])->group(function () {
         Route::get('inventory', [InventoryReportController::class, 'inventoryReports'])->name('inventory');
         Route::get('purchase',  [PurchaseReportController::class,  'purchaseReports']) ->name('purchase');
         Route::get('sale',      [SalesReportController::class,     'saleReports'])     ->name('sale');
+        Route::get('sale-profit/gold-rate',  [\App\Http\Controllers\SaleProfitReportController::class, 'goldRate'])
+        ->middleware('can:reports.sales')->name('profit_gold_rate');
+         Route::get('sale-profit/item-price', [\App\Http\Controllers\SaleProfitReportController::class, 'itemPrice'])
+        ->middleware('can:reports.sales')->name('profit_item_price');
         Route::get('accounts',  [AccountsReportController::class,  'accounts'])        ->name('accounts');
         Route::get('sale/{id}/print-profit', [SalesReportController::class, 'printProfit'])->name('print-profit');
     });
-
+    
     // ── Consignments ──────────────────────────────────────────────────────────
     // AJAX / static endpoints — must come before parameterised routes
     Route::get ('consignments/scan-barcode',      [ConsignmentController::class, 'scanBarcode'])        ->name('consignments.scan_barcode');

@@ -234,6 +234,12 @@
                   <a class="nav-link" href="{{ route('reports.sale') }}">Sales</a>
                 </li>
               @endcan
+              <li class="{{ request()->routeIs('reports.profit_gold_rate') ? 'active' : '' }}">
+                <a class="nav-link" href="{{ route('reports.profit_gold_rate') }}">Sale Profit - Gold Rate</a>
+              </li>
+              <li class="{{ request()->routeIs('reports.profit_item_price') ? 'active' : '' }}">
+                <a class="nav-link" href="{{ route('reports.profit_item_price') }}">Sale Profit - Item Price</a>
+              </li>
               @can('reports.accounts')
                 <li class="{{ request()->routeIs('reports.accounts') ? 'active' : '' }}">
                   <a class="nav-link" href="{{ route('reports.accounts') }}">Accounts</a>
