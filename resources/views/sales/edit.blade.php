@@ -559,6 +559,22 @@ $(document).ready(function () {
         const n = parseFloat(v);
         return isNaN(n) ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
+    // FEATURE (item picture on the Sale Invoice): shows the picture that was
+    // uploaded for the purchased item (Purchase Invoice -> Img / bulk picture
+    // import) as a small thumbnail under the item name. Display only — it adds
+    // no form field, so nothing about saving changes.
+    function setItemImage(row, url, name) {
+        const cell = row.find('.item-img-cell').first();
+        if (!cell.length) return;
+        cell.empty();
+        if (!url) return;
+        $('<img>')
+            .attr({ src: url, alt: name || 'Item', title: (name || 'Item') + ' — click to enlarge' })
+            .css({ height: '56px', width: '56px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #dee2e6', cursor: 'zoom-in' })
+            .on('click', function () { window.open(url, '_blank'); })
+            .appendTo(cell);
+    }
+
     function setSellingPrice(row, aed, usd) {
         row.find('.sp-aed').text(fmtSellingPrice(aed));
         row.find('.sp-usd').text(fmtSellingPrice(usd));
@@ -686,11 +702,12 @@ $(document).ready(function () {
                 let nearestOpt = null, minDiff = Infinity;
                 newRow.find('.purity option').each(function() { const diff = Math.abs(parseFloat($(this).val()) - pur); if (diff < minDiff) { minDiff = diff; nearestOpt = $(this).val(); } });
                 if (nearestOpt) newRow.find('.purity').val(nearestOpt);
-                newRow.find('.base-gross-weight').val((parseFloat(data.gross_weight) || 0).toFixed(3));
+                newRow.find('.base-gross-weight').val(resolveBaseGross(data).toFixed(3));
                 newRow.find('.making-rate').val(data.making_rate || 0);
                 newRow.find('.material-type').val(data.material_type || 'gold');
                 newRow.find('.vat-percent').val(data.vat_percent || 0);
                 setSellingPrice(newRow, data.selling_price_aed, data.selling_price_usd);
+                setItemImage(newRow, data.image_url, data.item_name);
                 if (data.parts && data.parts.length > 0) {
                     const partsRow = newRow.next('.parts-row');
                     partsRow.show();
@@ -730,11 +747,12 @@ $(document).ready(function () {
         });
         if (nearestOpt) newRow.find('.purity').val(nearestOpt);
 
-        newRow.find('.base-gross-weight').val((parseFloat(data.gross_weight) || 0).toFixed(3));
+        newRow.find('.base-gross-weight').val(resolveBaseGross(data).toFixed(3));
         newRow.find('.making-rate').val(data.making_rate || 0);
         newRow.find('.material-type').val(data.material_type || 'gold');
         newRow.find('.vat-percent').val(data.vat_percent || 0);
         setSellingPrice(newRow, data.selling_price_aed, data.selling_price_usd);
+        setItemImage(newRow, data.image_url, data.item_name);
 
         if (data.parts && data.parts.length > 0) {
             const partsRow  = newRow.next('.parts-row');
@@ -968,11 +986,12 @@ $(document).ready(function () {
                 });
                 if (nearestOpt) row.find('.purity').val(nearestOpt);
 
-                row.find('.base-gross-weight').val((parseFloat(r.gross_weight) || 0).toFixed(3));
+                row.find('.base-gross-weight').val(resolveBaseGross(r).toFixed(3));
                 row.find('.making-rate').val(r.making_rate || 0);
                 row.find('.material-type').val(r.material_type || 'gold');
                 row.find('.vat-percent').val(r.vat_percent || 0);
                 setSellingPrice(row, r.selling_price_aed, r.selling_price_usd);
+                setItemImage(row, r.image_url, r.item_name);
 
                 if (r.parts && r.parts.length > 0) {
                     const partsRow  = row.next('.parts-row');
@@ -1170,11 +1189,12 @@ $(document).ready(function () {
         });
         if (nearestOpt) newRow.find('.purity').val(nearestOpt);
 
-        newRow.find('.base-gross-weight').val((parseFloat(item.gross_weight) || 0).toFixed(3));
+        newRow.find('.base-gross-weight').val(resolveBaseGross(item).toFixed(3));
         newRow.find('.making-rate').val(item.making_rate || 0);
         newRow.find('.material-type').val(item.material_type || 'gold');
         newRow.find('.vat-percent').val(item.vat_percent || 0);
         setSellingPrice(newRow, item.selling_price_aed, item.selling_price_usd);
+        setItemImage(newRow, item.image_url, item.item_name);
 
         if (item.parts && item.parts.length > 0) {
             const partsRow = newRow.next('.parts-row');
@@ -1236,7 +1256,7 @@ $(document).ready(function () {
                 <input type="text" name="items[${index}][item_name]" class="form-control item-name-input" placeholder="Product Name" value="${data.item_name || ''}">
                 <input type="hidden" name="items[${index}][barcode_number]" value="${data.barcode_number || ''}">
                 <button type="button" class="btn btn-link p-0 toggle-product">Select Product</button>
-            </div></td>
+            </div><div class="item-img-cell mt-1"></div></td>
             <td><input type="text" name="items[${index}][item_description]" class="form-control" value="${data.item_description || ''}" required></td>
             <td><select name="items[${index}][purity]" class="form-control purity">${purityOptions}</select></td>
             <td><input type="number" name="items[${index}][base_gross_weight]" step="any" value="${data.gross_weight || 0}" class="form-control base-gross-weight"></td>
@@ -1294,7 +1314,8 @@ $(document).ready(function () {
         $('#SaleTable').append(buildItemRowHtml(i, itemData));
         const itemRow  = $('#SaleTable tr.item-row').last();
         const partsRow = itemRow.next('.parts-row');
-        itemRow.find('.base-gross-weight').val(parseFloat(itemData.gross_weight) || 0);
+        itemRow.find('.base-gross-weight').val(resolveBaseGross(itemData));
+        setItemImage(itemRow, itemData.image_url, itemData.item_name);
         if (itemData.parts && itemData.parts.length > 0) {
             partsRow.show();
             itemData.parts.forEach((p, j) => partsRow.find('.parts-table tbody').append(buildPartRowHtml(i, j, p)));
@@ -1410,6 +1431,30 @@ $(document).ready(function () {
         $('#SaleTable tr.item-row').each(function() { calculateRow($(this)); updateProfitDisplay($(this)); });
         calculateTotals();
     });
+
+    // FIX (Edit page total different from Create page total): the Gross Wt
+    // that is SAVED on a sale item is  base + (part carats / 5) + (stone
+    // carats / 5)  — i.e. it already contains the parts. This page puts the
+    // saved value into the "Base Gross" box and recalcItemGrossWeight() then
+    // adds the parts' carats AGAIN, so every item that has parts came out
+    // heavier on Edit than it was on Create (and the summary total with it).
+    // Rule used everywhere an item is loaded into a row here (saved items,
+    // barcode scan, name search, consignment): take net_weight when the source
+    // supplies it, otherwise take its gross_weight and remove the weight its
+    // own parts/stones already contribute, so Base Gross is the weight WITHOUT
+    // parts — exactly what the Create page enters.
+    function resolveBaseGross(src) {
+        if (!src) return 0;
+        if (src.net_weight !== undefined && src.net_weight !== null && src.net_weight !== '') {
+            return parseFloat(src.net_weight) || 0;
+        }
+        const gross = parseFloat(src.gross_weight) || 0;
+        let carats = 0;
+        (src.parts || []).forEach(function(p) {
+            carats += (parseFloat(p.qty) || 0) + (parseFloat(p.stone_qty) || 0);
+        });
+        return Math.max(0, Math.round((gross - carats / 5) * 10000) / 10000);
+    }
 
     function recalcItemGrossWeight(itemRow) {
         if (!itemRow || !itemRow.length) return;

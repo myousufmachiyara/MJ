@@ -217,6 +217,7 @@
                         <input type="hidden" name="items[0][barcode_number]" value="">
                         <button type="button" class="btn btn-link p-0 toggle-product">Select Product</button>
                       </div>
+                      <div class="item-img-cell mt-1"></div>
                     </td>
                     <td><input type="text" name="items[0][item_description]" class="form-control" required></td>
                     <td>
@@ -648,6 +649,22 @@ $(document).ready(function () {
         const n = parseFloat(v);
         return isNaN(n) ? '—' : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
+    // FEATURE (item picture on the Sale Invoice): shows the picture that was
+    // uploaded for the purchased item (Purchase Invoice -> Img / bulk picture
+    // import) as a small thumbnail under the item name. Display only — it adds
+    // no form field, so nothing about saving changes.
+    function setItemImage(row, url, name) {
+        const cell = row.find('.item-img-cell').first();
+        if (!cell.length) return;
+        cell.empty();
+        if (!url) return;
+        $('<img>')
+            .attr({ src: url, alt: name || 'Item', title: (name || 'Item') + ' — click to enlarge' })
+            .css({ height: '56px', width: '56px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #dee2e6', cursor: 'zoom-in' })
+            .on('click', function () { window.open(url, '_blank'); })
+            .appendTo(cell);
+    }
+
     function setSellingPrice(row, aed, usd) {
         row.find('.sp-aed').text(fmtSellingPrice(aed));
         row.find('.sp-usd').text(fmtSellingPrice(usd));
@@ -784,11 +801,12 @@ $(document).ready(function () {
                 let nearestOpt = null, minDiff = Infinity;
                 newRow.find('.purity option').each(function() { const diff = Math.abs(parseFloat($(this).val()) - pur); if (diff < minDiff) { minDiff = diff; nearestOpt = $(this).val(); } });
                 if (nearestOpt) newRow.find('.purity').val(nearestOpt);
-                newRow.find('.base-gross-weight').val((parseFloat(data.gross_weight) || 0).toFixed(3));
+                newRow.find('.base-gross-weight').val(resolveBaseGross(data).toFixed(3));
                 newRow.find('.making-rate').val(data.making_rate || 0);
                 newRow.find('.material-type').val(data.material_type || 'gold');
                 newRow.find('.vat-percent').val(data.vat_percent || 0);
                 setSellingPrice(newRow, data.selling_price_aed, data.selling_price_usd);
+                setItemImage(newRow, data.image_url, data.item_name);
                 if (data.parts && data.parts.length > 0) {
                     const partsRow = newRow.next('.parts-row');
                     partsRow.show();
@@ -834,11 +852,12 @@ $(document).ready(function () {
         });
         if (nearestOpt) newRow.find('.purity').val(nearestOpt);
 
-        newRow.find('.base-gross-weight').val((parseFloat(data.net_weight) || 0).toFixed(3));
+        newRow.find('.base-gross-weight').val(resolveBaseGross(data).toFixed(3));
         newRow.find('.making-rate').val(data.making_rate || 0);
         newRow.find('.material-type').val(data.material_type || 'gold');
         newRow.find('.vat-percent').val(data.vat_percent || 0);
         setSellingPrice(newRow, data.selling_price_aed, data.selling_price_usd);
+        setItemImage(newRow, data.image_url, data.item_name);
 
         if (data.parts && data.parts.length > 0) {
             const partsRow  = newRow.next('.parts-row');
@@ -1156,11 +1175,12 @@ $(document).ready(function () {
         });
         if (nearestOpt) newRow.find('.purity').val(nearestOpt);
 
-        newRow.find('.base-gross-weight').val((parseFloat(item.net_weight) || 0).toFixed(3));
+        newRow.find('.base-gross-weight').val(resolveBaseGross(item).toFixed(3));
         newRow.find('.making-rate').val(item.making_rate || 0);
         newRow.find('.material-type').val(item.material_type || 'gold');
         newRow.find('.vat-percent').val(item.vat_percent || 0);
         setSellingPrice(newRow, item.selling_price_aed, item.selling_price_usd);
+        setItemImage(newRow, item.image_url, item.item_name);
 
         if (item.parts && item.parts.length > 0) {
             const partsRow = newRow.next('.parts-row');
@@ -1324,7 +1344,7 @@ $(document).ready(function () {
                 <input type="text" name="items[${nextIndex}][item_name]" class="form-control item-name-input" placeholder="Product Name">
                 <input type="hidden" name="items[${nextIndex}][barcode_number]" value="">
                 <button type="button" class="btn btn-link p-0 toggle-product">Select Product</button>
-            </div></td>
+            </div><div class="item-img-cell mt-1"></div></td>
             <td><input type="text" name="items[${nextIndex}][item_description]" class="form-control" required></td>
             <td><select name="items[${nextIndex}][purity]" class="form-control purity">${purityOptions}</select></td>
             <td><input type="number" name="items[${nextIndex}][base_gross_weight]" step="any" value="0" class="form-control base-gross-weight"></td>
@@ -1446,6 +1466,25 @@ $(document).ready(function () {
         });
         calculateTotals();
     });
+
+    // Base Gross = weight WITHOUT parts (what is typed in the Base Gross box).
+    // Uses net_weight when the source supplies it (purchase items do). When it
+    // does not (sale / consignment sources, or an older server response) it is
+    // derived as gross_weight minus the weight its own parts/stones add
+    // (carats / 5) — the same rule the Edit page uses, so Create and Edit can
+    // never disagree on an item's weight.
+    function resolveBaseGross(src) {
+        if (!src) return 0;
+        if (src.net_weight !== undefined && src.net_weight !== null && src.net_weight !== '') {
+            return parseFloat(src.net_weight) || 0;
+        }
+        const gross = parseFloat(src.gross_weight) || 0;
+        let carats = 0;
+        (src.parts || []).forEach(function(p) {
+            carats += (parseFloat(p.qty) || 0) + (parseFloat(p.stone_qty) || 0);
+        });
+        return Math.max(0, Math.round((gross - carats / 5) * 10000) / 10000);
+    }
 
     function recalcItemGrossWeight(itemRow) {
         if (!itemRow || !itemRow.length) return;

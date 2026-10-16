@@ -33,6 +33,19 @@
   </div>
 </div>
 
+{{-- IMPORT REPORT MODAL (result of Import Excel / Import Pictures) --}}
+<div id="importReportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:2100; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:8px; max-width:860px; width:94%; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 10px 40px rgba(0,0,0,0.25);">
+    <div style="padding:16px 22px; border-bottom:1px solid #dee2e6;">
+      <h5 class="mb-0" id="importReportTitle"></h5>
+    </div>
+    <div id="importReportBody" style="padding:16px 22px; overflow:auto; font-size:.9rem;"></div>
+    <div style="padding:12px 22px; border-top:1px solid #dee2e6; text-align:right;">
+      <button type="button" id="importReportClose" class="btn btn-primary">OK</button>
+    </div>
+  </div>
+</div>
+
 <div class="row">
   <div class="col">
     <form action="{{ route('purchase_invoices.store') }}" method="POST" enctype="multipart/form-data">
@@ -134,6 +147,13 @@
                 <button type="button" class="btn btn-success" onclick="document.getElementById('excel_import').click()">
                     <i class="fas fa-file-excel"></i> Import Excel
                 </button>
+                {{-- FEATURE: bulk pictures — matched to item rows by file name (Excel "Image File" column, else Cert. No, else Item Name) --}}
+                <input type="file" id="bulk_images" class="d-none" accept="image/*" multiple>
+                <button type="button" class="btn btn-warning" onclick="document.getElementById('bulk_images').click()"
+                        title="Select many pictures at once. They are matched to items by file name (Excel column 'Image File', else Cert. No., else Item Name).">
+                    <i class="fas fa-images"></i> Import Pictures
+                </button>
+                <span id="bulkImagesStatus" class="small text-muted ms-1"></span>
                 <a href="{{ route('purchase.download_template') }}" class="btn btn-danger"><i class="fas fa-download"></i> Download Template</a>
               </div>
             </header>
@@ -535,27 +555,58 @@
         return (v === undefined || v === null) ? '' : v.toString().trim();
     }
 
-    function findCategoryByCode(code) {
-        const norm = normalizeCode(code).toLowerCase();
-        if (!norm) return null;
-        return categories.find(c => normalizeCode(c.code).toLowerCase() === norm) || null;
+    // Header names are matched ignoring case, spaces and punctuation, so
+    // "Category Code", "category code", "CATEGORY_CODE" and "Category  Code "
+    // are all the same column. (Before, only the exact text "Category Code"
+    // was recognised — any other spelling made the Category Code read as
+    // EMPTY, and the category was then guessed from the Subcategory Code
+    // alone, which is how a "T" (Twin) row could silently end up as "R" (Ring).)
+    function normHeader(h) {
+        return (h === undefined || h === null) ? '' : h.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
     }
 
-    // FIX (root cause of the "G-" bug, confirmed against real data): a
-    // Subcategory Code is NOT actually unique system-wide in this database —
-    // e.g. code "DWN" exists once per category (Ring, Necklace, Earrings,
-    // Pendant, Chain, Bracelet, Bangle all have their own "...DWN" row).
-    // A plain find-by-code therefore silently returns whichever one happens
-    // to come first once loaded (alphabetically by name here — "BANGLE..."
-    // sorts before "NECKLACE...", "RING...", etc.), which is how a Necklace
-    // row ended up filed under Bangle (category code "G") no matter what
-    // Category Code its own row actually said. This now returns EVERY
-    // matching row so the caller can disambiguate using the row's own
-    // Category Code instead of guessing.
-    function findSubcategoriesByCode(code) {
-        const norm = normalizeCode(code).toLowerCase();
-        if (!norm) return [];
-        return subcategories.filter(sc => normalizeCode(sc.code).toLowerCase() === norm);
+    function getCell(row, aliases) {
+        const wanted = aliases.map(normHeader);
+        const keys   = Object.keys(row);
+        for (let i = 0; i < wanted.length; i++) {
+            const hit = keys.find(k => normHeader(k) === wanted[i]);
+            if (hit !== undefined && row[hit] !== undefined && row[hit] !== null && row[hit].toString().trim() !== '') {
+                return row[hit];
+            }
+        }
+        return '';
+    }
+
+    const CATEGORY_HEADERS    = ['Category Code', 'CategoryCode', 'Category', 'Cat Code'];
+    const SUBCATEGORY_HEADERS = ['Subcategory Code', 'SubcategoryCode', 'Sub Category Code', 'Subcategory', 'Sub Category', 'Sub Cat Code'];
+    const IMAGE_HEADERS       = ['Image File', 'Image', 'Picture', 'Picture File', 'Photo', 'Image Name'];
+
+    // Category lookup. An exact (same-case) code wins; otherwise the code is
+    // matched ignoring case; otherwise the category NAME ("Twin") is accepted.
+    // Returns EVERY match so the caller can refuse to guess when it is not 1.
+    function findCategoryMatches(raw) {
+        const v = normalizeCode(raw);
+        if (!v) return [];
+        const lower = v.toLowerCase();
+        let m = categories.filter(c => normalizeCode(c.code) === v);
+        if (!m.length) m = categories.filter(c => normalizeCode(c.code).toLowerCase() === lower);
+        if (!m.length) m = categories.filter(c => normalizeCode(c.name).toLowerCase() === lower);
+        return m;
+    }
+
+    // Subcategory lookup, optionally limited to ONE category. A Subcategory
+    // Code is only unique INSIDE its category (the same code can exist under
+    // several categories), so when the row names a category the subcategory
+    // must belong to it — same-coded rows of other categories are ignored.
+    function findSubcategoryMatches(raw, categoryId) {
+        const v = normalizeCode(raw);
+        if (!v) return [];
+        const lower = v.toLowerCase();
+        const pool  = categoryId ? subcategories.filter(sc => sc.category_id == categoryId) : subcategories;
+        let m = pool.filter(sc => normalizeCode(sc.code) === v);
+        if (!m.length) m = pool.filter(sc => normalizeCode(sc.code).toLowerCase() === lower);
+        if (!m.length) m = pool.filter(sc => normalizeCode(sc.name).toLowerCase() === lower);
+        return m;
     }
 
     function describeCategoryOwners(subcategoryCandidates) {
@@ -564,6 +615,10 @@
             .filter(Boolean)
             .map(c => `${c.name} (${c.code})`)
             .join(', ');
+    }
+
+    function validCategoryCodesText() {
+        return categories.map(c => `${normalizeCode(c.code) || '(no code)'} = ${c.name}`).join(', ');
     }
 
     function subcategoryOptionsHtmlForCategory(categoryId, selectedId) {
@@ -579,86 +634,91 @@
     }
 
     /**
-     * Resolves an imported row's Category Code / Subcategory Code text to
-     * real category_id/subcategory_id selections on that item row, entirely
-     * from the preloaded `categories`/`subcategories` arrays (no AJAX, so a
-     * bulk import of many rows doesn't fire dozens of concurrent requests).
+     * Resolves an imported row's Category Code / Subcategory Code to a real
+     * category + subcategory selection on that item row, from the preloaded
+     * `categories`/`subcategories` arrays (no AJAX).
      *
-     * FIX (root cause of the "G-" bug): this system's Subcategory Codes are
-     * NOT guaranteed unique across categories (confirmed against production
-     * data — several categories each have their own subcategory sharing the
-     * same code, e.g. "DWN"). A code-only lookup can therefore match several
-     * different rows, one per category. The matching here now works like
-     * this:
+     * Rules (strict — it never guesses):
+     *   1. A Category Code that is given MUST match exactly one category. If
+     *      it matches none (or several), the row is left unselected and a
+     *      warning lists the valid codes. It is NEVER replaced by a category
+     *      worked out from the Subcategory Code (that silent fallback is what
+     *      used to turn a "T" row into an "R" row).
+     *   2. With a valid category, the Subcategory Code must belong to THAT
+     *      category. Otherwise the subcategory is left empty and the warning
+     *      says which categories do have that code.
+     *   3. With NO Category Code on the row, the Subcategory Code is accepted
+     *      only if exactly one category owns it; if several do, nothing is
+     *      guessed and a warning asks for a Category Code.
      *
-     *   - Category Code given + Subcategory Code given: the subcategory MUST
-     *     belong to that exact category — every OTHER same-coded subcategory
-     *     under a different category is ignored. If none matches under that
-     *     category, the category from Category Code is still applied, but
-     *     the subcategory is left for manual selection and a warning names
-     *     which categories DO have that code.
-     *   - Category Code given, no Subcategory Code: just applies the
-     *     category.
-     *   - No Category Code, Subcategory Code given and unambiguous (only one
-     *     category has that code): applies both, deriving the category from
-     *     it — same shortcut as before.
-     *   - No Category Code, Subcategory Code given but ambiguous (more than
-     *     one category shares that code): there is no safe way to guess
-     *     which one was meant, so NEITHER is set — a warning lists the
-     *     categories that share the code and asks for a Category Code on
-     *     that row instead of silently picking one (which is exactly how
-     *     "DWN" used to always resolve to the alphabetically-first category,
-     *     "BANGLE" / code "G", regardless of the item's real category).
-     *
-     * Anything that doesn't match a known code, or that stays unresolved for
-     * one of the ambiguity reasons above, is pushed onto `warnings` (by row
-     * label) instead of failing the import.
+     * Returns a result object used for the post-import report:
+     *   { category, subcategory, problems: [..text..] }
      */
     function applyCategorySubcategoryFromCodes(itemRow, categoryCodeRaw, subcategoryCodeRaw, itemLabel, warnings) {
         const categoryCode    = normalizeCode(categoryCodeRaw);
         const subcategoryCode = normalizeCode(subcategoryCodeRaw);
-        if (!categoryCode && !subcategoryCode) return;
+        const result = { category: null, subcategory: null, problems: [] };
+        if (!categoryCode && !subcategoryCode) return result;
 
-        let matchedCategory = categoryCode ? findCategoryByCode(categoryCode) : null;
-        if (categoryCode && !matchedCategory) {
-            warnings.push(`${itemLabel}: Category Code "${categoryCode}" not found`);
-        }
+        const problem = function (msg) { result.problems.push(msg); warnings.push(`${itemLabel}: ${msg}`); };
 
+        let matchedCategory = null;
         let matchedSubcategory = null;
 
-        if (subcategoryCode) {
-            const candidates = findSubcategoriesByCode(subcategoryCode);
-
-            if (candidates.length === 0) {
-                warnings.push(`${itemLabel}: Subcategory Code "${subcategoryCode}" not found`);
-            } else if (matchedCategory) {
-                matchedSubcategory = candidates.find(sc => sc.category_id == matchedCategory.id) || null;
-                if (!matchedSubcategory) {
-                    warnings.push(
-                        `${itemLabel}: Subcategory Code "${subcategoryCode}" is not defined under category ` +
-                        `"${matchedCategory.name}" (${matchedCategory.code}) — that code exists under: ` +
-                        `${describeCategoryOwners(candidates) || 'no category with a resolvable code'}. Category kept as ` +
-                        `"${matchedCategory.code}" from Category Code; please pick the Subcategory manually for this item.`
-                    );
-                }
-            } else if (candidates.length === 1) {
-                matchedSubcategory = candidates[0];
-                matchedCategory    = categories.find(c => c.id == matchedSubcategory.category_id) || null;
+        if (categoryCode) {
+            const cats = findCategoryMatches(categoryCode);
+            if (cats.length === 1) {
+                matchedCategory = cats[0];
+            } else if (cats.length === 0) {
+                problem(`Category Code "${categoryCode}" not found — category and subcategory left empty. Valid codes: ${validCategoryCodesText()}`);
+                return result;
             } else {
-                warnings.push(
-                    `${itemLabel}: Subcategory Code "${subcategoryCode}" is used by more than one category ` +
-                    `(${describeCategoryOwners(candidates)}) and no Category Code was given on this row, so it can't be ` +
-                    `resolved automatically — add a Category Code for this item and re-import, or pick both manually.`
-                );
+                problem(`Category Code "${categoryCode}" matches more than one category (${cats.map(c => c.name).join(', ')}) — category and subcategory left empty, please pick manually`);
+                return result;
             }
         }
 
-        if (!matchedCategory) return;
+        if (subcategoryCode) {
+            if (matchedCategory) {
+                const subs = findSubcategoryMatches(subcategoryCode, matchedCategory.id);
+                if (subs.length === 1) {
+                    matchedSubcategory = subs[0];
+                } else if (subs.length > 1) {
+                    problem(`Subcategory Code "${subcategoryCode}" is defined more than once under "${matchedCategory.name}" — subcategory left empty, please pick manually`);
+                } else {
+                    const elsewhere = findSubcategoryMatches(subcategoryCode, null);
+                    problem(
+                        `Subcategory Code "${subcategoryCode}" is not defined under "${matchedCategory.name}" (${matchedCategory.code})` +
+                        (elsewhere.length ? ` — that code exists under: ${describeCategoryOwners(elsewhere)}` : ' — no subcategory has that code') +
+                        `. Category kept; please pick the Subcategory manually`
+                    );
+                }
+            } else {
+                const subs = findSubcategoryMatches(subcategoryCode, null);
+                if (subs.length === 1) {
+                    matchedSubcategory = subs[0];
+                    matchedCategory    = categories.find(c => c.id == matchedSubcategory.category_id) || null;
+                } else if (subs.length === 0) {
+                    problem(`Subcategory Code "${subcategoryCode}" not found`);
+                } else {
+                    problem(
+                        `Subcategory Code "${subcategoryCode}" is used by more than one category (${describeCategoryOwners(subs)}) and no Category Code was given ` +
+                        `on this row, so it can't be resolved automatically — add a Category Code and re-import, or pick both manually`
+                    );
+                }
+            }
+        }
+
+        if (!matchedCategory) return result;
 
         itemRow.find('.category-select').val(matchedCategory.id);
         itemRow.find('.subcategory-select')
             .prop('disabled', false)
             .html(subcategoryOptionsHtmlForCategory(matchedCategory.id, matchedSubcategory ? matchedSubcategory.id : null));
+
+        result.category    = matchedCategory;
+        result.subcategory = matchedSubcategory;
+        return result;
     }
 
     $(document).on('click', '.toggle-parts', function() {
@@ -1264,9 +1324,190 @@
         $('#excel_import').val('');
     });
 
+    // ================= BULK PICTURE IMPORT =================
+    // FEATURE: a second attachment next to "Import Excel" — pick many pictures
+    // at once; each is matched to an item row by FILE NAME and put into that
+    // row's own "Img" file input (items[N][image]), exactly as if it had been
+    // chosen by hand, so saving the invoice stores it the normal way
+    // (image_path) and the Sale Invoice then shows it.
+    //
+    // A row's picture is found, in this order, by:
+    //   1. the "Image File" column of the Excel row (e.g. R-001.jpg — with or
+    //      without the extension). When that column is filled, ONLY it is used.
+    //   2. otherwise the row's Certificate No (picture named like the cert no)
+    //   3. otherwise the row's Item Name
+    // Names are compared ignoring case, spaces and punctuation.
+    //
+    // Pictures can be chosen before OR after the Excel file (and again at any
+    // time) — they are applied to whatever rows are on the page at that moment.
+    let bulkPictures = [];   // [{ key, name, file }]
+
+    function normalizeRefKey(s) {
+        return (s === undefined || s === null) ? '' :
+            s.toString().trim().replace(/\.(jpe?g|png|gif|webp|bmp|heic|heif)$/i, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    // Shrinks big phone/camera pictures before upload (a 200-row invoice with
+    // full-size photos would exceed the server's POST size limit). Falls back
+    // to the original file whenever anything goes wrong.
+    function compressImage(file, maxDim, quality) {
+        maxDim = maxDim || 1600; quality = quality || 0.85;
+        return new Promise(function (resolve) {
+            if (!/^image\//.test(file.type)) return resolve(file);
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = function () {
+                const w = img.naturalWidth, h = img.naturalHeight;
+                const scale = Math.min(1, maxDim / Math.max(w, h));
+                if (scale === 1 && file.size <= 600 * 1024) { URL.revokeObjectURL(url); return resolve(file); }
+                const c = document.createElement('canvas');
+                c.width = Math.max(1, Math.round(w * scale)); c.height = Math.max(1, Math.round(h * scale));
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+                ctx.drawImage(img, 0, 0, c.width, c.height);
+                c.toBlob(function (blob) {
+                    URL.revokeObjectURL(url);
+                    if (!blob || (scale === 1 && blob.size >= file.size)) return resolve(file);
+                    resolve(new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }));
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = function () { URL.revokeObjectURL(url); resolve(file); };
+            img.src = url;
+        });
+    }
+
+    function showRowThumb(row, file) {
+        const wrapper = row.find('.product-wrapper').first();
+        wrapper.find('.row-img-thumb').remove();
+        if (!file) return;
+        const src = URL.createObjectURL(file);
+        $('<img class="row-img-thumb mt-1">')
+            .attr({ src: src, title: file.name })
+            .css({ height: '48px', width: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #dee2e6', display: 'block' })
+            .appendTo(wrapper);
+    }
+
+    // shows a thumbnail whenever a picture is chosen by hand as well
+    $(document).on('change', '.item-image-input', function () {
+        const row = $(this).closest('tr.item-row');
+        row.removeData('bulkImg');
+        showRowThumb(row, this.files && this.files[0] ? this.files[0] : null);
+    });
+
+    function setRowPicture(row, file) {
+        const input = row.find('.item-image-input')[0];
+        if (!input || typeof DataTransfer === 'undefined') return false;
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+        row.data('bulkImg', true);
+        showRowThumb(row, file);
+        return true;
+    }
+
+    // Applies the loaded pictures to the rows now on the page.
+    // Returns a summary used by the report.
+    function applyBulkPictures() {
+        const summary = { matched: 0, rowsMissing: [], unusedPictures: [] };
+        if (!bulkPictures.length) return summary;
+
+        const byKey  = {};
+        bulkPictures.forEach(p => { if (p.key && !byKey[p.key]) byKey[p.key] = p; });
+        const usedKeys = {};
+
+        $('#PurchaseTable tr.item-row').each(function () {
+            const row     = $(this);
+            const name    = row.find('.item-name-input').val();
+            if (!name || !name.toString().trim()) return;
+
+            // a picture the user picked by hand on this row is never overwritten
+            const input = row.find('.item-image-input')[0];
+            if (input && input.files && input.files.length && !row.data('bulkImg')) return;
+
+            const sheetRef = row.data('imageRef');
+            const refs = sheetRef
+                ? [sheetRef]
+                : [row.find('input[name*="[certificate_no]"]').val(), name];
+
+            let pic = null;
+            for (let i = 0; i < refs.length; i++) {
+                const k = normalizeRefKey(refs[i]);
+                if (k && byKey[k]) { pic = byKey[k]; break; }
+            }
+
+            if (pic) {
+                if (setRowPicture(row, pic.file)) { summary.matched++; usedKeys[pic.key] = true; }
+            } else if (sheetRef) {
+                summary.rowsMissing.push(`${name} → "${sheetRef}"`);
+            }
+        });
+
+        bulkPictures.forEach(p => { if (!usedKeys[p.key]) summary.unusedPictures.push(p.name); });
+        return summary;
+    }
+
+    function escHtml(s) {
+        return (s === undefined || s === null ? '' : s.toString())
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function pictureSummaryHtml(sum) {
+        let html = `<div class="mb-2"><strong>${sum.matched}</strong> picture(s) attached to item rows.</div>`;
+        if (sum.rowsMissing.length) {
+            html += `<div class="text-danger mb-2"><strong>Image File not found among the selected pictures (${sum.rowsMissing.length}):</strong><br>` +
+                    sum.rowsMissing.slice(0, 40).map(escHtml).join('<br>') +
+                    (sum.rowsMissing.length > 40 ? '<br>…' : '') + '</div>';
+        }
+        if (sum.unusedPictures.length) {
+            html += `<div class="text-warning-emphasis mb-2"><strong>Pictures that matched no item (${sum.unusedPictures.length}):</strong><br>` +
+                    sum.unusedPictures.slice(0, 40).map(escHtml).join('<br>') +
+                    (sum.unusedPictures.length > 40 ? '<br>…' : '') + '</div>';
+        }
+        if (sum.matched > 20) {
+            html += `<div class="alert alert-warning py-2 mb-2" style="font-size:.85rem;">
+                ${sum.matched} pictures will be uploaded together with this invoice. PHP only accepts <code>max_file_uploads</code>
+                files per request (default <strong>20</strong>) — if your server still has the default, ask your host to raise
+                <code>max_file_uploads</code> (and <code>post_max_size</code>) to at least ${sum.matched + 10}, otherwise pictures beyond the limit are silently dropped on save.</div>`;
+        }
+        return html;
+    }
+
+    function openImportReport(title, bodyHtml) {
+        document.getElementById('importReportTitle').innerHTML = title;
+        document.getElementById('importReportBody').innerHTML  = bodyHtml;
+        document.getElementById('importReportModal').style.display = 'flex';
+    }
+    $('#importReportClose').on('click', function () {
+        document.getElementById('importReportModal').style.display = 'none';
+    });
+
+    $('#bulk_images').on('change', async function () {
+        const files = Array.from(this.files || []).filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|gif|webp|bmp)$/i.test(f.name));
+        $(this).val('');
+        if (!files.length) return;
+
+        const status = $('#bulkImagesStatus');
+        const prepared = [];
+        for (let i = 0; i < files.length; i++) {
+            status.text(`Preparing pictures ${i + 1} / ${files.length}…`);
+            const f = await compressImage(files[i]);
+            prepared.push({ key: normalizeRefKey(files[i].name), name: files[i].name, file: f });
+        }
+
+        // newly chosen pictures replace earlier ones with the same name
+        const incoming = {};
+        prepared.forEach(p => { incoming[p.key] = true; });
+        bulkPictures = bulkPictures.filter(p => !incoming[p.key]).concat(prepared);
+
+        const sum = applyBulkPictures();
+        status.text(`${bulkPictures.length} picture(s) loaded`);
+        openImportReport('<i class="fas fa-images text-warning"></i> Pictures', pictureSummaryHtml(sum));
+    });
+
     function runExcelImport(file, mode) {
         const unmatchedPurityRows   = [];
         const categorySubWarnings   = [];
+        const importRows            = [];   // for the on-screen report
 
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -1305,10 +1546,21 @@
                     currentItemRow.find('input[name*="[item_description]"]').val(row['Description'] || '');
                     currentItemRow.find('input[name*="[certificate_no]"]').val(row['Certificate No'] || '');
                     currentItemRow.find('.tray-no-input').val(row['Tray No'] || '');
-                    applyCategorySubcategoryFromCodes(
-                        currentItemRow, row['Category Code'], row['Subcategory Code'],
-                        row['Item Name'], categorySubWarnings
+
+                    const catRaw = getCell(row, CATEGORY_HEADERS);
+                    const subRaw = getCell(row, SUBCATEGORY_HEADERS);
+                    const resolved = applyCategorySubcategoryFromCodes(
+                        currentItemRow, catRaw, subRaw, row['Item Name'], categorySubWarnings
                     );
+
+                    // picture file name for this item (optional "Image File" column)
+                    const imgRef = normalizeCode(getCell(row, IMAGE_HEADERS));
+                    if (imgRef) currentItemRow.data('imageRef', imgRef);
+
+                    importRows.push({
+                        item: row['Item Name'], catRaw: normalizeCode(catRaw), subRaw: normalizeCode(subRaw),
+                        category: resolved.category, subcategory: resolved.subcategory, problems: resolved.problems
+                    });
 
                     const purityRaw = row['Purity'] !== undefined && row['Purity'] !== ''
                         ? row['Purity']
@@ -1346,32 +1598,44 @@
 
             calculateTotals();
 
-            const warningBlocks = [];
+            // pictures already loaded (chosen before the Excel file) are attached now
+            const picSummary = bulkPictures.length ? applyBulkPictures() : null;
+
+            // ── on-screen import report (replaces the old plain alert) ──
+            let html = '';
             if (unmatchedPurityRows.length > 0) {
-                warningBlocks.push(
-                    'Purity value with no matching dropdown option:\n' +
-                    unmatchedPurityRows.map(r => `- ${r.item}: ${r.purity}`).join('\n')
-                );
+                html += '<div class="text-danger mb-2"><strong>Purity value with no matching dropdown option:</strong><br>' +
+                        unmatchedPurityRows.map(r => `${escHtml(r.item)}: ${escHtml(r.purity)}`).join('<br>') + '</div>';
             }
             if (categorySubWarnings.length > 0) {
-                warningBlocks.push(
-                    'Category/Subcategory Code not found:\n' +
-                    categorySubWarnings.map(w => `- ${w}`).join('\n')
-                );
+                html += '<div class="text-danger mb-2"><strong>Category / Subcategory — please check these manually:</strong><br>' +
+                        categorySubWarnings.map(w => '• ' + escHtml(w)).join('<br>') + '</div>';
+            }
+            if (picSummary) html += pictureSummaryHtml(picSummary);
+            else if ($('#PurchaseTable tr.item-row').filter(function () { return $(this).data('imageRef'); }).length) {
+                html += '<div class="text-muted mb-2">The sheet has an "Image File" column — now click <strong>Import Pictures</strong> and select the picture files.</div>';
             }
 
-            if (warningBlocks.length > 0) {
-                alert(
-                    'Items imported, but please check the following manually:\n\n' +
-                    warningBlocks.join('\n\n')
-                );
-            } else {
-                alert(
-                    mode === 'replace'
-                        ? 'Existing items removed. Items imported successfully!'
-                        : 'Items imported successfully and added to the existing list!'
-                );
-            }
+            // what the import actually selected for every row, so a wrong match is visible immediately
+            html += '<div class="fw-bold mt-2 mb-1">What was selected for each imported item</div>' +
+                '<div style="max-height:40vh; overflow:auto;"><table class="table table-sm table-bordered mb-0" style="font-size:.8rem;">' +
+                '<thead class="table-light"><tr><th>#</th><th>Item</th><th>Sheet Category</th><th>→ Category</th><th>Sheet Subcat.</th><th>→ Subcategory</th></tr></thead><tbody>' +
+                importRows.map((r, i) => {
+                    const bad = r.problems.length > 0;
+                    return `<tr class="${bad ? 'table-danger' : ''}"><td>${i + 1}</td><td>${escHtml(r.item)}</td>` +
+                        `<td>${escHtml(r.catRaw) || '<span class="text-muted">—</span>'}</td>` +
+                        `<td>${r.category ? escHtml(r.category.name) + ' (' + escHtml(r.category.code) + ')' : '<span class="text-muted">—</span>'}</td>` +
+                        `<td>${escHtml(r.subRaw) || '<span class="text-muted">—</span>'}</td>` +
+                        `<td>${r.subcategory ? escHtml(r.subcategory.name) + ' (' + escHtml(r.subcategory.code) + ')' : '<span class="text-muted">—</span>'}</td></tr>`;
+                }).join('') + '</tbody></table></div>';
+
+            const hasWarnings = unmatchedPurityRows.length > 0 || categorySubWarnings.length > 0;
+            openImportReport(
+                hasWarnings
+                    ? '<i class="fas fa-exclamation-triangle text-warning"></i> Items imported — please check'
+                    : '<i class="fas fa-check-circle text-success"></i> ' + (mode === 'replace' ? 'Existing items removed. Items imported successfully' : 'Items imported successfully and added to the existing list'),
+                html
+            );
 
             $('#excel_import').val('');
             pendingExcelFile = null;

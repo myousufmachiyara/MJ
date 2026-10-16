@@ -84,19 +84,24 @@ class PurchaseInvoiceController extends Controller
         //
         // 'Tray No' is free text (e.g. "T-101") identifying the physical
         // tray the item is stored in. Optional, read as-is, no matching.
+        // 'Image File' (optional) is the file NAME of the item's picture, e.g.
+        // "bracelet-01.jpg". On the Purchase Invoice page click "Import
+        // Pictures" and select the picture files — each is matched to its row
+        // by this name (with or without the extension). If the column is left
+        // empty the picture is matched by Certificate No, then by Item Name.
         $rows = [
             [
                 'Item Name', 'Description', 'Certificate No', 'Category Code', 'Subcategory Code', 'Tray No',
                 'Purity', 'Gross Wt', 'Making Rate', 'Material', 'VAT %',
                 'Part Name', 'Part Desc', 'Part Qty', 'Part Rate',
-                'Stone Qty', 'Stone Rate', 'Cert. Charges',
+                'Stone Qty', 'Stone Rate', 'Cert. Charges', 'Image File',
             ],
-            ['18K Gold Bracelet', 'Handmade Chain Design', 'GIA 1234567', 'RING', 'RING-A', 'T-101', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50', '75.00'],
-            ['22K Wedding Band', 'Plain Polished', '', '', '', '', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '', ''],
-            ['Diamond Engagement Ring', 'Solitaire Setting', 'GIA 9988776', 'NECK', 'NECK-B', 'T-205', '0.75', '4.20', '150.00', 'gold', '5', '', '', '', '', '', '', ''],
-            ['', '', '', '', '', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0', '200.00'],
-            ['', '', '', '', '', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10', '0'],
+            ['18K Gold Bracelet', 'Handmade Chain Design', 'GIA 1234567', 'RING', 'RING-A', 'T-101', '0.75', '12.50', '25.00', 'gold', '5', '', '', '', '', '', '', '', 'bracelet-01.jpg'],
+            ['', '', '', '', '', '', '', '', '', '', '', 'Small Diamonds', 'VVS1 Round', '0.25', '1500', '10', '50', '75.00', ''],
+            ['22K Wedding Band', 'Plain Polished', '', '', '', '', '0.92', '8.75', '15.00', 'gold', '5', '', '', '', '', '', '', '', 'band-02.jpg'],
+            ['Diamond Engagement Ring', 'Solitaire Setting', 'GIA 9988776', 'NECK', 'NECK-B', 'T-205', '0.75', '4.20', '150.00', 'gold', '5', '', '', '', '', '', '', '', 'ring-03.jpg'],
+            ['', '', '', '', '', '', '', '', '', '', '', 'Main Diamond', '1.0ct GIA', '1.00', '8500', '0', '0', '200.00', ''],
+            ['', '', '', '', '', '', '', '', '', '', '', 'Side Stones', 'Micro Pave', '0.50', '1200', '24', '10', '0', ''],
         ];
 
         // StreamedResponse: Laravel sends headers first, THEN the callback writes body.
@@ -457,12 +462,34 @@ class PurchaseInvoiceController extends Controller
             // undone too — rather than silently accepting a suspicious wipe.
             $oldItemCount = $invoice->items()->count();
 
-            foreach ($invoice->items as $oldItem) {
-                $oldItem->parts()->delete();
-            }
-            $invoice->items()->delete();
+            // FIX (printed barcodes stopped working after an update): the
+            // barcode SYMBOL printed on each label encodes the item's own row
+            // id (PurchaseInvoiceItem::getScanCodeAttribute(), zero-padded
+            // id), not the barcode_number text. This method used to delete
+            // EVERY item row and re-insert them all, so every item got a new
+            // id on every update — and every label already printed and
+            // attached to a piece stopped scanning (or pointed at a different
+            // item), even though barcode_number text was kept.
+            //
+            // Now only rows that were actually removed on the form are
+            // deleted; every other row is UPDATED IN PLACE by createItems()
+            // (matched by barcode_number), so its id — and with it the printed
+            // label — never changes. Columns that are not on this form
+            // (e.g. selling_price / selling_price_usd) are kept as well,
+            // instead of being wiped by the delete-and-recreate.
+            $incomingBarcodes = collect($request->items)->pluck('barcode_number')->filter()->unique()->values();
 
-            [$totals] = $this->createItems($invoice, $request->items, $request, 1, preservePrinted: true);
+            foreach ($invoice->items()->get() as $oldItem) {
+                if (!$incomingBarcodes->contains($oldItem->barcode_number)) {
+                    $oldItem->parts()->delete();
+                    $oldItem->delete();
+                }
+            }
+
+            // rows that survive, keyed by barcode_number, to be updated in place
+            $reusableItems = $invoice->items()->get()->keyBy('barcode_number');
+
+            [$totals] = $this->createItems($invoice, $request->items, $request, 1, preservePrinted: true, reusableItems: $reusableItems);
 
             $newItemCount = $invoice->items()->count();
 
@@ -1257,7 +1284,8 @@ class PurchaseInvoiceController extends Controller
         array $items,
         Request $request,
         int $startPosition = 1,
-        bool $preservePrinted = false
+        bool $preservePrinted = false,
+        ?\Illuminate\Support\Collection $reusableItems = null
     ): array {
         $totals = [
             'gold_material'    => 0.0,
@@ -1272,6 +1300,7 @@ class PurchaseInvoiceController extends Controller
         ];
 
         $position         = $startPosition;
+        $usedBarcodes     = []; // barcodes already matched to a reused row (guards duplicates)
         $goldRateAedGram  = (float) ($request->gold_rate_aed    ?? 0);
         $diamondRateAedCt = (float) ($request->diamond_rate_aed ?? 0);
 
@@ -1356,7 +1385,7 @@ class PurchaseInvoiceController extends Controller
                 ? (float) $itemData['selling_price']
                 : null;
 
-            $invoiceItem = $invoice->items()->create([
+            $itemAttributes = [
                 'item_name'        => $itemData['item_name']        ?? null,
                 'product_id'       => $productId,
                 'category_id'      => $categoryId,
@@ -1383,7 +1412,24 @@ class PurchaseInvoiceController extends Controller
                 'barcode_number'   => $existingBarcode ?? $this->generateBarcodeNumber($invoice, $position, $subcategoryId, $categoryId),
                 'certificate_no'   => $itemData['certificate_no'] ?? null,
                 'is_printed'       => $wasAlreadyPrinted,
-            ]);
+            ];
+
+            // FIX (keep printed labels valid): on an update, a row that
+            // already exists on this invoice (same barcode_number) is updated
+            // IN PLACE so its id — which the printed barcode symbol encodes —
+            // stays the same. Only genuinely new rows are inserted.
+            $reuse = ($reusableItems && $existingBarcode && !isset($usedBarcodes[$existingBarcode]))
+                ? $reusableItems->get($existingBarcode)
+                : null;
+
+            if ($reuse) {
+                $usedBarcodes[$existingBarcode] = true;
+                $reuse->update($itemAttributes);
+                $reuse->parts()->delete(); // parts are re-created below from the form
+                $invoiceItem = $reuse;
+            } else {
+                $invoiceItem = $invoice->items()->create($itemAttributes);
+            }
 
             foreach ($partsData as $partData) {
                 $qty         = (float) ($partData['qty']                   ?? 0);
@@ -1941,7 +1987,16 @@ class PurchaseInvoiceController extends Controller
 
         $prefix    = $invoice->is_taxable ? 'MJT-' : 'MJ-';
         $invoiceNo = substr($invoice->invoice_no, strrpos($invoice->invoice_no, '-') + 1);
-        return $prefix . $invoiceNo . '-' . $itemPosition;
+
+        // Rows kept on an update now exist while new rows are being numbered,
+        // so skip any position whose barcode is already taken.
+        $candidate = $prefix . $invoiceNo . '-' . $itemPosition;
+        while (PurchaseInvoiceItem::where('barcode_number', $candidate)->exists()) {
+            $itemPosition++;
+            $candidate = $prefix . $invoiceNo . '-' . $itemPosition;
+        }
+
+        return $candidate;
     }
 
     /**

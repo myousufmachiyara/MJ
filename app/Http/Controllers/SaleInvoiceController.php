@@ -235,6 +235,7 @@ class SaleInvoiceController extends Controller
                 'vat_percent'      => $saleItem->vat_percent,
                 'selling_price_aed' => $this->sellingPricesFor($saleItem->barcode_number)[0],
                 'selling_price_usd' => $this->sellingPricesFor($saleItem->barcode_number)[1],
+                'image_url'        => $this->imageUrlFor($saleItem->barcode_number),
                 'parts'            => $saleItem->parts->map(fn($p) => [
                     'item_name'        => $p->item_name,
                     'part_description' => $p->part_description,
@@ -316,6 +317,32 @@ class SaleInvoiceController extends Controller
     }
 
     /**
+     * FEATURE (item picture on the Sale Invoice): public URL of the picture
+     * uploaded for a purchased item (Purchase Invoice -> Img, or the bulk
+     * picture import). Same URL convention the Purchase Invoice edit screen
+     * already uses. null = no picture. Display only.
+     */
+    private function imageUrlFromPath(?string $imagePath): ?string
+    {
+        return $imagePath ? asset('storage/app/public/' . $imagePath) : null;
+    }
+
+    /** Picture URL of the purchased item carrying this barcode (null if none). */
+    private function imageUrlFor($barcode): ?string
+    {
+        if (!$barcode) {
+            return null;
+        }
+
+        $path = PurchaseInvoiceItem::where('barcode_number', $barcode)
+            ->whereNotNull('image_path')
+            ->latest()
+            ->value('image_path');
+
+        return $this->imageUrlFromPath($path);
+    }
+
+    /**
      * Shared JSON shape for a purchase-item scan result. Used by both the
      * short numeric-surrogate fast path and the legacy barcode_number
      * match above, so the two lookup routes can never drift into
@@ -331,6 +358,11 @@ class SaleInvoiceController extends Controller
             'item_description' => $purchaseItem->item_description,
             'purity'           => $purchaseItem->purity,
             'gross_weight'     => $purchaseItem->gross_weight,
+            // FIX (Edit total differed from Create): net_weight = weight WITHOUT
+            // parts. The sale screens use it as "Base Gross" so parts are not
+            // added twice (gross_weight already includes them).
+            'net_weight'       => $purchaseItem->net_weight,
+            'image_url'        => $this->imageUrlFromPath($purchaseItem->image_path),
             'making_rate'      => $purchaseItem->making_rate,
             'material_type'    => $purchaseItem->material_type,
             'vat_percent'      => $purchaseItem->vat_percent,
@@ -519,9 +551,20 @@ class SaleInvoiceController extends Controller
             ->get(['barcode_number', 'selling_price', 'selling_price_usd'])
             ->keyBy('barcode_number');
 
-        $itemsData = $saleInvoice->items->map(function ($item) use ($sellingPrices) {
+        // FEATURE (item picture on the Sale Invoice): picture path of each
+        // line's purchased item, keyed by barcode (display only).
+        $itemImages = PurchaseInvoiceItem::whereIn(
+                'barcode_number',
+                $saleInvoice->items->pluck('barcode_number')->filter()->unique()->values()
+            )
+            ->whereNotNull('image_path')
+            ->orderBy('id')
+            ->pluck('image_path', 'barcode_number');
+
+        $itemsData = $saleInvoice->items->map(function ($item) use ($sellingPrices, $itemImages) {
             $sp = $sellingPrices->get($item->barcode_number);
             return [
+                'image_url'        => $this->imageUrlFromPath($itemImages->get($item->barcode_number)),
                 'item_name'        => $item->item_name,
                 'barcode_number'   => $item->barcode_number,
                 'selling_price_aed' => $sp && $sp->selling_price !== null ? (float) $sp->selling_price : null,
@@ -2630,6 +2673,7 @@ class SaleInvoiceController extends Controller
             'item_description' => $item->item_description,
             'purity'           => $item->purity,
             'gross_weight'     => $item->gross_weight,
+            'net_weight'       => $source === 'purchase' ? $item->net_weight : null,
             'making_rate'      => $item->making_rate,
             'material_type'    => $item->material_type,
             'material_value'   => (float) ($item->material_value ?? 0),
@@ -2637,6 +2681,9 @@ class SaleInvoiceController extends Controller
             // reference selling prices (purchase item with the same barcode)
             'selling_price_aed' => $source === 'consignment' ? null : $this->sellingPricesFor($item->barcode_number)[0],
             'selling_price_usd' => $source === 'consignment' ? null : $this->sellingPricesFor($item->barcode_number)[1],
+            'image_url'        => $source === 'purchase'
+                ? $this->imageUrlFromPath($item->image_path)
+                : ($source === 'sale' ? $this->imageUrlFor($item->barcode_number) : null),
             'invoice_no'       => $invoiceNo,
             'invoice_date'     => $invoiceDate,
             'party_name'       => $partyName,
