@@ -342,11 +342,32 @@ class SellingPriceController extends Controller
 
         $filename = 'selling_price_export_' . now()->format('Y-m-d_His') . '.csv';
 
+        // FEATURE (parts in the export): every item is followed by one row per
+        // part (diamond / stone component) with that part's name, description
+        // and weight, so the sheet shows what each piece is made of.
+        //   - Part rows leave "Barcode Number" EMPTY and carry the item's
+        //     barcode in "Parent Barcode" instead. import() skips any row with
+        //     an empty Barcode Number, so part rows can never change a price
+        //     and the Export -> edit -> Import round trip still works.
+        //   - Weights: parts store CARATS (diamond ct = qty, stone ct =
+        //     stone_qty); the app converts carats to grams as ct / 5 (this is
+        //     how a Gross Wt is built: Net Wt + parts ct / 5), so the gram
+        //     columns use the same rule.
+        //   - Item rows: Gold Weight (gms) is the item's Gross Wt as before
+        //     (it already includes the parts' weight); Net Gold Wt (gms) is
+        //     the metal alone, and Parts Wt (gms) is the parts' share.
         $rows = [
-            ['Barcode Number', 'Item Name', 'Certificate No', 'Gold Weight (gms)', 'Diamond (ct)', 'Selling Price (AED)', 'Selling Price (USD)'],
+            [
+                'Barcode Number', 'Item Name', 'Certificate No', 'Gold Weight (gms)', 'Diamond (ct)',
+                'Selling Price (AED)', 'Selling Price (USD)',
+                'Row Type', 'Net Gold Wt (gms)', 'Parts Wt (gms)',
+                'Parent Barcode', 'Part Name', 'Part Description', 'Part Diamond (ct)', 'Part Stone (ct)', 'Part Wt (gms)',
+            ],
         ];
 
         foreach ($items as $item) {
+            $partsCt = (float) $item->parts->sum('qty') + (float) $item->parts->sum('stone_qty');
+
             $rows[] = [
                 $item->barcode_number,
                 $item->item_name,
@@ -355,7 +376,30 @@ class SellingPriceController extends Controller
                 number_format((float) $item->diamond_total_ct, 3, '.', ''),
                 $item->selling_price !== null ? number_format((float) $item->selling_price, 2, '.', '') : '',
                 $item->selling_price_usd !== null ? number_format((float) $item->selling_price_usd, 2, '.', '') : '',
+                'Item',
+                number_format((float) $item->net_weight, 3, '.', ''),
+                number_format($partsCt / 5, 3, '.', ''),
+                '', '', '', '', '', '',
             ];
+
+            foreach ($item->parts as $part) {
+                $dia   = (float) $part->qty;
+                $stone = (float) $part->stone_qty;
+
+                $rows[] = [
+                    '',                              // Barcode Number — empty on purpose (import skips it)
+                    '',                              // Item Name
+                    '', '', '', '', '',              // cert / weights / prices belong to the item row
+                    'Part',
+                    '', '',
+                    $item->barcode_number,           // Parent Barcode
+                    $part->item_name,
+                    $part->part_description,
+                    number_format($dia, 3, '.', ''),
+                    number_format($stone, 3, '.', ''),
+                    number_format(($dia + $stone) / 5, 3, '.', ''),
+                ];
+            }
         }
 
         return response()->streamDownload(function () use ($rows) {
