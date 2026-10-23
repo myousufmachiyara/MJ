@@ -766,7 +766,113 @@ class SaleInvoiceController extends Controller
     // PRINT — detailed B2B invoice (unchanged)
     // =========================================================================
 
-    public function print($id)
+    // =========================================================================
+    // PRINT — optional product pictures
+    // =========================================================================
+
+    /**
+     * FEATURE (product picture on the printed invoice): the Sale Invoice list
+     * asks "show product pictures?" before opening either print; "Yes" adds
+     * ?images=1 to the print URL. Without it (or with images=0) both prints
+     * come out exactly as before.
+     */
+    private function wantsPrintImages(Request $request): bool
+    {
+        return $request->boolean('images');
+    }
+
+    /**
+     * barcode_number => small data-URI thumbnail (or null) for every item of
+     * the invoice. The picture is the one uploaded on the purchased item that
+     * carries the same barcode (Purchase Invoice -> Img / bulk picture import).
+     *
+     * Each picture is shrunk to a 240px square JPEG (letter-boxed on white, so
+     * nothing is cropped or stretched) before it goes into the PDF - the
+     * stored originals can be 1600px and would make the PDF huge. If GD is not
+     * available the original file is used as it is.
+     */
+    private function printImageSources($invoice): array
+    {
+        $barcodes = $invoice->items->pluck('barcode_number')->filter()->unique()->values();
+        if ($barcodes->isEmpty()) {
+            return [];
+        }
+
+        $paths = PurchaseInvoiceItem::whereIn('barcode_number', $barcodes)
+            ->whereNotNull('image_path')
+            ->orderBy('id')
+            ->pluck('image_path', 'barcode_number');
+
+        $out = [];
+        foreach ($paths as $barcode => $relPath) {
+            $out[$barcode] = $this->thumbnailForPdf($relPath);
+        }
+
+        return $out;
+    }
+
+    private function thumbnailForPdf(string $relPath): ?string
+    {
+        try {
+            $full = \Illuminate\Support\Facades\Storage::disk('public')->path($relPath);
+            if (!is_file($full)) {
+                return null;
+            }
+
+            if (!function_exists('imagecreatetruecolor')) {
+                return $full; // no GD: embed the original file
+            }
+
+            $info = @getimagesize($full);
+            if (!$info) {
+                return null;
+            }
+
+            switch ($info[2]) {
+                case IMAGETYPE_JPEG: $src = @imagecreatefromjpeg($full); break;
+                case IMAGETYPE_PNG:  $src = @imagecreatefrompng($full);  break;
+                case IMAGETYPE_GIF:  $src = @imagecreatefromgif($full);  break;
+                case IMAGETYPE_WEBP: $src = function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($full) : false; break;
+                default:             $src = false;
+            }
+            if (!$src) {
+                return null;
+            }
+
+            $w = imagesx($src);
+            $h = imagesy($src);
+            $box = 240;
+            $scale = min($box / $w, $box / $h, 1);
+            $nw = max(1, (int) round($w * $scale));
+            $nh = max(1, (int) round($h * $scale));
+
+            $dst = imagecreatetruecolor($box, $box);
+            imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255));
+            imagecopyresampled($dst, $src, (int) (($box - $nw) / 2), (int) (($box - $nh) / 2), 0, 0, $nw, $nh, $w, $h);
+
+            ob_start();
+            imagejpeg($dst, null, 80);
+            $jpeg = ob_get_clean();
+            imagedestroy($src);
+            imagedestroy($dst);
+
+            return 'data:image/jpeg;base64,' . base64_encode($jpeg);
+        } catch (\Throwable $e) {
+            Log::warning('[SaleInvoice] print picture skipped: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /** <img> (or a dash) for the picture column of a print row. */
+    private function printImageCell(?string $src, int $sizePx = 34): string
+    {
+        if (!$src) {
+            return '-';
+        }
+        return '<img src="' . $src . '" width="' . $sizePx . '" height="' . $sizePx . '">';
+    }
+
+    public function print(Request $request, $id)
     {
         $invoice = SaleInvoice::with([
             'customer',
@@ -806,6 +912,10 @@ class SaleInvoiceController extends Controller
         if (str_contains((string) $invoice->payment_method, 'material')) {
             $totalCurrencyPayable -= $totalDiscount;
         }
+
+        // FEATURE (product picture column) - optional, see wantsPrintImages()
+        $showImages = $this->wantsPrintImages($request);
+        $imageSrc   = $showImages ? $this->printImageSources($invoice) : [];
 
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
@@ -865,13 +975,21 @@ class SaleInvoiceController extends Controller
         </table>';
         $pdf->writeHTML($customerHtml, true, false, false, false);
 
+        // column widths (%): with the picture column Item Name / Description
+        // give up some room so the table still adds up to the page width.
+        $wName = $showImages ? 10 : 12;
+        $wDesc = $showImages ? 10 : 14;
+        $picTh = $showImages ? '<th width="7%" rowspan="2">Picture</th>' : '';
+        $x     = $showImages ? 1 : 0;   // extra column count for colspans below
+
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
                     <th width="3%"  rowspan="2">#</th>
-                    <th width="12%" rowspan="2">Item Name</th>
-                    <th width="14%" rowspan="2">Description</th>
+                    ' . $picTh . '
+                    <th width="' . $wName . '%" rowspan="2">Item Name</th>
+                    <th width="' . $wDesc . '%" rowspan="2">Description</th>
                     <th width="6%"  rowspan="2">Gross Wt</th>
                     <th width="6%"  rowspan="2">Purity</th>
                     <th width="6%"  rowspan="2">Purity Wt</th>
@@ -897,8 +1015,9 @@ class SaleInvoiceController extends Controller
             $html .= '
                 <tr style="text-align:center;background-color:#ffffff;">
                     <td width="3%">' . ($index + 1) . '</td>
-                    <td width="12%">' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
-                    <td width="14%">' . ($item->item_description ?? '-') . '</td>
+                    ' . ($showImages ? '<td width="7%">' . $this->printImageCell($imageSrc[$item->barcode_number] ?? null, 32) . '</td>' : '') . '
+                    <td width="' . $wName . '%">' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
+                    <td width="' . $wDesc . '%">' . ($item->item_description ?? '-') . '</td>
                     <td width="6%">' . number_format($item->gross_weight, 3) . '</td>
                     <td width="6%">' . number_format($item->purity, 3) . '</td>
                     <td width="6%">' . number_format($item->purity_weight, 3) . '</td>
@@ -919,14 +1038,14 @@ class SaleInvoiceController extends Controller
                     ? 'Discount (' . rtrim(rtrim(number_format((float) $item->discount_value, 2), '0'), '.') . '%)'
                     : 'Discount';
                 $html .= '<tr style="background-color:#fff8e6;font-style:italic;font-size:7px;">
-                            <td></td><td colspan="11" align="right"><b>' . $discLabel . ' (already deducted from Item Total):</b></td>
+                            <td></td><td colspan="' . (11 + $x) . '" align="right"><b>' . $discLabel . ' (already deducted from Item Total):</b></td>
                             <td colspan="2" align="right">-' . number_format((float) $item->discount_amount, 2) . '</td>
                           </tr>';
             }
 
             if ($hasParts) {
                 $html .= '<tr style="background-color:#f9f9f9;font-style:italic;font-size:7px;">
-                            <td></td><td colspan="13"><b>Parts Detail:</b></td>
+                            <td></td><td colspan="' . (13 + $x) . '"><b>Parts Detail:</b></td>
                           </tr>';
 
                 foreach ($item->parts as $part) {
@@ -934,8 +1053,9 @@ class SaleInvoiceController extends Controller
                     $html .= '
                     <tr style="font-size:7px;background-color:#fcfcfc;text-align:center;">
                         <td width="3%"></td>
-                        <td width="12%" style="text-align:left;">' . $displayPartName . '</td>
-                        <td width="14%" style="text-align:left;">' . htmlspecialchars($part->part_description ?? '') . '</td>
+                        ' . ($showImages ? '<td width="7%"></td>' : '') . '
+                        <td width="' . $wName . '%" style="text-align:left;">' . $displayPartName . '</td>
+                        <td width="' . $wDesc . '%" style="text-align:left;">' . htmlspecialchars($part->part_description ?? '') . '</td>
                         <td colspan="2">' . number_format($part->qty, 3) . ' Ct</td>
                         <td colspan="2">Rate:' . number_format($part->rate, 2) . '</td>
                         <td colspan="2">St.' . number_format($part->stone_qty ?? 0, 2) . '</td>
@@ -946,7 +1066,7 @@ class SaleInvoiceController extends Controller
 
                 $html .= '
                     <tr style="background-color:#eeeeee;font-weight:bold;font-size:8px;">
-                        <td colspan="12" align="right">Product Grand Total (Material + MC + Parts + VAT):</td>
+                        <td colspan="' . (12 + $x) . '" align="right">Product Grand Total (Material + MC + Parts + VAT):</td>
                         <td colspan="2" align="right">' . number_format($productTotal, 2) . '</td>
                     </tr>';
             }
@@ -954,7 +1074,7 @@ class SaleInvoiceController extends Controller
 
         $html .= '
                 <tr style="font-weight:bold;background-color:#f5f5f5;">
-                    <td colspan="13" align="right">Net Invoice Amount</td>
+                    <td colspan="' . (13 + $x) . '" align="right">Net Invoice Amount</td>
                     <td align="right">' . number_format($invoice->net_amount, 2) . '</td>
                 </tr>
             </tbody>
@@ -2309,7 +2429,7 @@ class SaleInvoiceController extends Controller
     // PRINT SIMPLE — Walk-in / Retail receipt (unchanged)
     // =========================================================================
 
-    public function printSimple($id)
+    public function printSimple(Request $request, $id)
     {
         $invoice = SaleInvoice::with([
             'customer',
@@ -2320,6 +2440,10 @@ class SaleInvoiceController extends Controller
             'bank',
             'transferBank',
         ])->findOrFail($id);
+
+        // FEATURE (product picture column) - optional, see wantsPrintImages()
+        $showImages = $this->wantsPrintImages($request);
+        $imageSrc   = $showImages ? $this->printImageSources($invoice) : [];
 
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
@@ -2378,15 +2502,24 @@ class SaleInvoiceController extends Controller
         </table>';
         $pdf->writeHTML($customerHtml, true, false, false, false);
 
+        // widths (%) - with the picture column Item Name / Description / Material
+        // give up room so the table still adds up to 100 %.
+        $wName = $showImages ? 26 : 30;
+        $wDesc = $showImages ? 20 : 25;
+        $wMat  = $showImages ? 8  : 10;
+        $picTh = $showImages ? '<th width="11%">Picture</th>' : '';
+        $x     = $showImages ? 1 : 0;
+
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
                     <th width="5%">#</th>
-                    <th width="30%" style="text-align:left;">Item Name</th>
-                    <th width="25%">Description</th>
+                    ' . $picTh . '
+                    <th width="' . $wName . '%" style="text-align:left;">Item Name</th>
+                    <th width="' . $wDesc . '%">Description</th>
                     <th width="12%">Gross Wt (g)</th>
-                    <th width="10%">Material</th>
+                    <th width="' . $wMat . '%">Material</th>
                     <th width="18%">Amount (AED)</th>
                 </tr>
             </thead>
@@ -2420,10 +2553,11 @@ class SaleInvoiceController extends Controller
             $html .= '
                 <tr style="text-align:center;background-color:#ffffff;">
                     <td width="5%">' . ($i + 1) . '</td>
-                    <td width="30%" style="text-align:left;">' . htmlspecialchars($item->item_name ?: ($item->product->name ?? '-')) . $codeHtml . '</td>
-                    <td width="25%" style="text-align:left;">' . htmlspecialchars($item->item_description ?? '-') . '</td>
+                    ' . ($showImages ? '<td width="11%">' . $this->printImageCell($imageSrc[$item->barcode_number] ?? null, 38) . '</td>' : '') . '
+                    <td width="' . $wName . '%" style="text-align:left;">' . htmlspecialchars($item->item_name ?: ($item->product->name ?? '-')) . $codeHtml . '</td>
+                    <td width="' . $wDesc . '%" style="text-align:left;">' . htmlspecialchars($item->item_description ?? '-') . '</td>
                     <td width="12%">' . number_format($item->gross_weight, 3) . '</td>
-                    <td width="10%">' . ucfirst($item->material_type) . '</td>
+                    <td width="' . $wMat . '%">' . ucfirst($item->material_type) . '</td>
                     <td width="18%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
                 </tr>';
             $totalGrossWeight += $item->gross_weight;
@@ -2434,7 +2568,7 @@ class SaleInvoiceController extends Controller
             // item's Amount, so each part's total is informational.
             if ($item->parts && $item->parts->count() > 0) {
                 $html .= '<tr style="background-color:#f9f9f9;font-style:italic;font-size:7px;">
-                            <td></td><td colspan="5"><b>Parts Detail:</b></td>
+                            <td></td><td colspan="' . (5 + $x) . '"><b>Parts Detail:</b></td>
                           </tr>';
 
                 foreach ($item->parts as $part) {
@@ -2446,9 +2580,10 @@ class SaleInvoiceController extends Controller
                     $html .= '
                     <tr style="font-size:7px;background-color:#fcfcfc;text-align:center;">
                         <td width="5%"></td>
-                        <td width="30%" style="text-align:left;">' . $partName . '</td>
-                        <td width="25%" style="text-align:left;">' . htmlspecialchars($part->part_description ?? '') . '</td>
-                        <td width="22%" colspan="2">' . $detail . '</td>
+                        ' . ($showImages ? '<td width="11%"></td>' : '') . '
+                        <td width="' . $wName . '%" style="text-align:left;">' . $partName . '</td>
+                        <td width="' . $wDesc . '%" style="text-align:left;">' . htmlspecialchars($part->part_description ?? '') . '</td>
+                        <td width="' . (12 + $wMat) . '%" colspan="2">' . $detail . '</td>
                         <td width="18%" align="right">' . number_format($part->total, 2) . '</td>
                     </tr>';
                 }
@@ -2457,7 +2592,7 @@ class SaleInvoiceController extends Controller
 
         $html .= '
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
-                    <td colspan="3" style="text-align:right;">Net Invoice Amount</td>
+                    <td colspan="' . (3 + $x) . '" style="text-align:right;">Net Invoice Amount</td>
                     <td>' . number_format($totalGrossWeight, 3) . ' g</td>
                     <td></td>
                     <td>' . number_format($invoice->net_amount, 2) . '</td>
