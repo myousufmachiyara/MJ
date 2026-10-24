@@ -55,7 +55,8 @@ Route::middleware(['auth'])->group(function () {
     // is part of editing the invoice, not a separate capability.
     Route::put('/purchase-invoice-items/{id}/selling-price', [PurchaseInvoiceController::class, 'updateSellingPrice'])->middleware('check.permission:purchase_invoices.edit')->name('purchase_invoice_items.update_selling_price');
     Route::get('/purchase-return/{invoiceId}/items',   [PurchaseReturnController::class,  'getInvoiceItems'])->name('purchase_return.invoice_items');
-
+    Route::post('/purchase-invoice-items/{id}/image', [PurchaseInvoiceController::class, 'uploadItemImage'])->middleware('check.permission:purchase_invoices.edit')->name('purchase_invoice_items.upload_image');
+    
     // FEATURE (bulk Selling Price update): a standalone screen listing every
     // unsold purchased item (across ALL invoices) so Selling Price can be
     // set/updated for many items at once — see SellingPriceController's own
