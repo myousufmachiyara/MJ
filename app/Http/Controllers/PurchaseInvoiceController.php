@@ -363,6 +363,75 @@ class PurchaseInvoiceController extends Controller
     }
 
     // =========================================================================
+    // QUICK PICTURE UPLOAD (edit screen) — one saved item at a time.
+    //
+    // The big "Update Invoice" form posts every item plus its pictures in one
+    // request; a single oversized picture (PHP upload_max_filesize /
+    // post_max_size) or too many pictures (max_file_uploads) makes PHP drop
+    // files WITHOUT any message. This endpoint stores one picture for one
+    // already-saved item, right when it is picked, and answers with a clear
+    // error when the picture is rejected. Like updateSellingPrice() it only
+    // touches that one row, so ids (and printed barcode labels) never change.
+    // =========================================================================
+
+    public function uploadItemImage(Request $request, $id)
+    {
+        $item = PurchaseInvoiceItem::findOrFail($id);
+
+        $file = $request->file('image');
+
+        if (!$file) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No picture was received by the server. The file is probably bigger than the server limit (upload_max_filesize='
+                    . ini_get('upload_max_filesize') . ', post_max_size=' . ini_get('post_max_size') . ').',
+            ], 422);
+        }
+
+        if (!$file->isValid()) {
+            Log::warning('[PurchaseInvoice] item picture upload rejected by PHP', [
+                'item_id' => $item->id,
+                'error'   => $file->getErrorMessage(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Upload failed: ' . $file->getErrorMessage()
+                    . ' (upload_max_filesize=' . ini_get('upload_max_filesize') . ').',
+            ], 422);
+        }
+
+        $validator = \Illuminate\Support\Facades\Validator::make(
+            ['image' => $file],
+            ['image' => 'required|image|max:5120']
+        );
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first('image'),
+            ], 422);
+        }
+
+        $oldPath = $item->image_path;
+        $path    = $file->store('purchase_invoice_items', 'public');
+        $item->update(['image_path' => $path]);
+
+        // the previous file is no longer referenced by this row — remove it
+        // unless another row still points at it
+        if ($oldPath && $oldPath !== $path
+            && !PurchaseInvoiceItem::where('image_path', $oldPath)->exists()) {
+            try { Storage::disk('public')->delete($oldPath); } catch (\Throwable $e) {}
+        }
+
+        return response()->json([
+            'success'    => true,
+            'id'         => $item->id,
+            'image_path' => $path,
+            'image_url'  => asset('storage/app/public/' . $path),
+            'message'    => 'Picture saved.',
+        ]);
+    }
+
+    // =========================================================================
     // UPDATE
     // =========================================================================
 
@@ -1361,7 +1430,15 @@ class PurchaseInvoiceController extends Controller
             }
 
             if (isset($itemData['image']) && $itemData['image'] instanceof \Illuminate\Http\UploadedFile) {
-                $imagePath = $itemData['image']->store('purchase_invoice_items', 'public');
+                if ($itemData['image']->isValid()) {
+                    $imagePath = $itemData['image']->store('purchase_invoice_items', 'public');
+                } else {
+                    // DIAGNOSTIC: PHP received the file part but flagged it (too big etc.)
+                    Log::warning('[PurchaseInvoice] item picture ignored — invalid upload', [
+                        'item_name' => $itemData['item_name'] ?? null,
+                        'error'     => $itemData['image']->getErrorMessage(),
+                    ]);
+                }
             }
 
             // FIX (belt-and-suspenders alongside convertEmptyStringsToNullRecursive()

@@ -33,6 +33,19 @@
   </div>
 </div>
 
+{{-- IMPORT REPORT MODAL (result of Import Pictures / Import Excel) --}}
+<div id="importReportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:2100; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:8px; max-width:860px; width:94%; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 10px 40px rgba(0,0,0,0.25);">
+    <div style="padding:16px 22px; border-bottom:1px solid #dee2e6;">
+      <h5 class="mb-0" id="importReportTitle"></h5>
+    </div>
+    <div id="importReportBody" style="padding:16px 22px; overflow:auto; font-size:.9rem;"></div>
+    <div style="padding:12px 22px; border-top:1px solid #dee2e6; text-align:right;">
+      <button type="button" id="importReportClose" class="btn btn-primary">OK</button>
+    </div>
+  </div>
+</div>
+
 <div class="row">
   <div class="col">
     <form id="main-form" action="{{ route('purchase_invoices.update', $purchaseInvoice->id) }}" method="POST" enctype="multipart/form-data">
@@ -187,6 +200,14 @@
                 <button type="button" class="btn btn-success" onclick="document.getElementById('excel_import').click()">
                   <i class="fas fa-file-excel"></i> Import Excel
                 </button>
+                {{-- FEATURE: bulk pictures on edit — matched to item rows by file name (Barcode No, Cert. No., Item Name, or the Excel "Image File" column).
+                     Pictures for already-saved items are uploaded and saved immediately; pictures for new rows go with "Update Invoice". --}}
+                <input type="file" id="bulk_images" class="d-none" accept="image/*" multiple>
+                <button type="button" class="btn btn-warning" onclick="document.getElementById('bulk_images').click()"
+                        title="Select many pictures at once. They are matched to items by file name: Barcode No., Cert. No. or Item Name (or the Excel column 'Image File').">
+                  <i class="fas fa-images"></i> Import Pictures
+                </button>
+                <span id="bulkImagesStatus" class="small text-muted ms-1"></span>
                 <a href="{{ route('purchase.download_template') }}" class="btn btn-danger">
                   <i class="fas fa-download"></i> Download Template
                 </a>
@@ -700,6 +721,286 @@ $(document).ready(function () {
         });
     });
 
+    // ===== ITEM PICTURES (single + bulk) =====
+    // Saved items (row has data-item-id): the picture is compressed in the
+    // browser and uploaded RIGHT AWAY to
+    // PurchaseInvoiceController::uploadItemImage() — one small request per
+    // item, with the real error shown under the row if the server rejects it.
+    // (Posting every picture inside the big "Update Invoice" request can lose
+    // pictures silently when PHP's upload limits are hit.)
+    // New, not yet saved rows have no id to upload to, so their picture stays in
+    // the row's file input and is saved together with "Update Invoice".
+    const ITEM_IMAGE_URL_BASE     = SELLING_PRICE_SAVE_URL_BASE;
+    const SERVER_MAX_FILE_UPLOADS = {{ (int) (ini_get('max_file_uploads') ?: 20) }};
+    let imageUploadsInFlight = 0;
+    let bulkPictures = [];   // [{ key, name, file }]
+
+    function normalizeRefKey(s) {
+        return (s === undefined || s === null) ? '' :
+            s.toString().trim().replace(/\.(jpe?g|png|gif|webp|bmp|heic|heif)$/i, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    function escHtml(s) {
+        return (s === undefined || s === null ? '' : s.toString())
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Shrinks big phone/camera pictures before upload. Falls back to the
+    // original file whenever anything goes wrong.
+    function compressImage(file, maxDim, quality) {
+        maxDim = maxDim || 1600; quality = quality || 0.85;
+        return new Promise(function (resolve) {
+            if (!/^image\//.test(file.type)) return resolve(file);
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = function () {
+                const w = img.naturalWidth, h = img.naturalHeight;
+                const scale = Math.min(1, maxDim / Math.max(w, h));
+                if (scale === 1 && file.size <= 600 * 1024) { URL.revokeObjectURL(url); return resolve(file); }
+                const c = document.createElement('canvas');
+                c.width = Math.max(1, Math.round(w * scale)); c.height = Math.max(1, Math.round(h * scale));
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+                ctx.drawImage(img, 0, 0, c.width, c.height);
+                c.toBlob(function (blob) {
+                    URL.revokeObjectURL(url);
+                    if (!blob || (scale === 1 && blob.size >= file.size)) return resolve(file);
+                    resolve(new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }));
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = function () { URL.revokeObjectURL(url); resolve(file); };
+            img.src = url;
+        });
+    }
+
+    function setImageStatus(row, kind, html) {
+        row.find('.item-image-status')
+            .removeClass('text-success text-danger text-muted')
+            .addClass(kind || 'text-muted')
+            .html(html || '');
+    }
+
+    // number of NEW rows whose picture waits in the form (counts toward PHP's max_file_uploads)
+    function formPictureCount(exceptRow) {
+        let n = 0;
+        $('#PurchaseTable .item-image-input').each(function () {
+            if (exceptRow && exceptRow.length && $(this).closest('tr.item-row')[0] === exceptRow[0]) return;
+            if (this.files && this.files.length) n++;
+        });
+        return n;
+    }
+
+    // new (unsaved) row: keep the picture in the form's file input
+    // returns 'ok' | 'limit' | 'unsupported'
+    function setRowFormPicture(row, file) {
+        const input = row.find('.item-image-input')[0];
+        if (!input || typeof DataTransfer === 'undefined') return 'unsupported';
+        if (formPictureCount(row) >= SERVER_MAX_FILE_UPLOADS) return 'limit';
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+        showItemImage(row, URL.createObjectURL(file), file.name);
+        setImageStatus(row, 'text-muted', 'Will be saved when you click Update Invoice');
+        return 'ok';
+    }
+
+    // saved row: upload now. resolves { ok, message }
+    function uploadSavedRowPicture(row, file) {
+        const itemId = row.attr('data-item-id');
+        const label  = row.find('.item-name-input').val() || '';
+        const fd = new FormData();
+        fd.append('image', file, file.name);
+        setImageStatus(row, 'text-muted', '<i class="fas fa-spinner fa-spin"></i> Saving picture…');
+        imageUploadsInFlight++;
+        return new Promise(function (resolve) {
+            $.ajax({
+                url: ITEM_IMAGE_URL_BASE + '/' + itemId + '/image',
+                method: 'POST',
+                data: fd,
+                processData: false,
+                contentType: false,
+                headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'Accept': 'application/json' },
+                success: function (res) {
+                    showItemImage(row, res.image_url + (res.image_url.indexOf('?') < 0 ? '?v=' + Date.now() : ''), label);
+                    const input = row.find('.item-image-input')[0];
+                    if (input) input.value = '';           // already saved — do not send it again with the form
+                    setImageStatus(row, 'text-success', '<i class="fas fa-check-circle"></i> Picture saved');
+                    clearTimeout(row.data('_img_status_timer'));
+                    row.data('_img_status_timer', setTimeout(function () { setImageStatus(row, 'text-muted', ''); }, 4000));
+                    resolve({ ok: true });
+                },
+                error: function (xhr) {
+                    let msg = (xhr.responseJSON && (xhr.responseJSON.message ||
+                              (xhr.responseJSON.errors && Object.values(xhr.responseJSON.errors)[0][0]))) || '';
+                    if (!msg) {
+                        if (xhr.status === 413)      msg = 'Picture is too large for the server (413).';
+                        else if (xhr.status === 419) msg = 'Session expired — reload the page and try again.';
+                        else if (xhr.status === 403) msg = 'You do not have permission to edit purchase invoices.';
+                        else if (xhr.status === 404) msg = 'Upload address not found — the route for pictures is not installed (see INSTALL.txt).';
+                        else                         msg = 'Upload failed (HTTP ' + (xhr.status || 'no response') + ').';
+                    }
+                    setImageStatus(row, 'text-danger', '<i class="fas fa-times-circle"></i> ' + escHtml(msg));
+                    resolve({ ok: false, message: msg });
+                },
+                complete: function () { imageUploadsInFlight--; }
+            });
+        });
+    }
+
+    // picture chosen by hand on one row
+    $(document).on('change', '.item-image-input', async function () {
+        const row  = $(this).closest('tr.item-row');
+        const file = this.files && this.files[0] ? this.files[0] : null;
+        row.removeData('bulkImg');
+        if (!file) { setImageStatus(row, 'text-muted', ''); return; }
+
+        setImageStatus(row, 'text-muted', 'Preparing picture…');
+        const prepared = await compressImage(file);
+
+        if (row.attr('data-item-id')) {
+            await uploadSavedRowPicture(row, prepared);   // on failure the original stays in the input
+        } else {
+            const r = setRowFormPicture(row, prepared);
+            if (r === 'limit') {
+                setImageStatus(row, 'text-danger', 'Too many new pictures for one save (server allows ' + SERVER_MAX_FILE_UPLOADS +
+                    '). Click Update Invoice first, then add the rest.');
+                this.value = '';
+            } else if (r === 'unsupported') {
+                setImageStatus(row, 'text-muted', 'Will be saved when you click Update Invoice');
+            }
+        }
+    });
+
+    function findPictureForRow(row, byKey) {
+        const sheetRef = row.data('imageRef');
+        const refs = sheetRef
+            ? [sheetRef]
+            : [row.find('input[name*="[barcode_number]"]').val(),
+               row.find('input[name*="[certificate_no]"]').val(),
+               row.find('.item-name-input').val()];
+        for (let i = 0; i < refs.length; i++) {
+            const k = normalizeRefKey(refs[i]);
+            if (k && byKey[k]) return byKey[k];
+        }
+        return null;
+    }
+
+    // Applies the loaded pictures to the rows now on the page. Saved rows are
+    // uploaded (3 at a time); new rows get the picture in their file input.
+    async function applyBulkPictures() {
+        const sum = { saved: 0, replaced: 0, queued: 0, failed: [], overflow: [], rowsMissing: [], unusedPictures: [] };
+        if (!bulkPictures.length) return sum;
+
+        const byKey = {};
+        bulkPictures.forEach(p => { if (p.key && !byKey[p.key]) byKey[p.key] = p; });
+        const usedKeys = {};
+        const jobs = [];
+
+        $('#PurchaseTable tr.item-row').each(function () {
+            const row  = $(this);
+            const name = row.find('.item-name-input').val();
+            if (!name || !name.toString().trim()) return;
+
+            const pic = findPictureForRow(row, byKey);
+            if (pic) {
+                usedKeys[pic.key] = true;
+                jobs.push({ row: row, pic: pic, name: name.toString() });
+            } else if (row.data('imageRef')) {
+                sum.rowsMissing.push(`${name} → "${row.data('imageRef')}"`);
+            }
+        });
+
+        let next = 0;
+        async function worker() {
+            while (next < jobs.length) {
+                const job = jobs[next++];
+                if (job.row.attr('data-item-id')) {
+                    const had = job.row.find('.item-img-cell img').length > 0;
+                    const r = await uploadSavedRowPicture(job.row, job.pic.file);
+                    if (r.ok) { sum.saved++; if (had) sum.replaced++; }
+                    else sum.failed.push(`${job.name}: ${r.message}`);
+                } else {
+                    const r = setRowFormPicture(job.row, job.pic.file);
+                    if (r === 'ok') { job.row.data('bulkImg', true); sum.queued++; }
+                    else sum.overflow.push(job.name);
+                }
+                $('#bulkImagesStatus').text(`Saving pictures… ${Math.min(next, jobs.length)} / ${jobs.length}`);
+            }
+        }
+        await Promise.all([worker(), worker(), worker()]);
+
+        bulkPictures.forEach(p => { if (!usedKeys[p.key]) sum.unusedPictures.push(p.name); });
+        return sum;
+    }
+
+    function listHtml(items) {
+        return items.slice(0, 40).map(escHtml).join('<br>') + (items.length > 40 ? '<br>…' : '');
+    }
+
+    function pictureSummaryHtml(sum) {
+        let html = '';
+        if (sum.saved) {
+            html += `<div class="mb-2 text-success"><strong>${sum.saved}</strong> picture(s) saved to existing items now` +
+                    (sum.replaced ? ` (${sum.replaced} of them replaced an earlier picture)` : '') + `.</div>`;
+        }
+        if (sum.queued) {
+            html += `<div class="mb-2"><strong>${sum.queued}</strong> picture(s) attached to new rows — they are saved when you click <strong>Update Invoice</strong>.</div>`;
+        }
+        if (!sum.saved && !sum.queued && !sum.failed.length) {
+            html += `<div class="mb-2 text-danger">No picture matched any item. Name each picture file like the item's <strong>Barcode No.</strong>, <strong>Cert. No.</strong> or <strong>Item Name</strong> (or the Excel "Image File" column).</div>`;
+        }
+        if (sum.failed.length) {
+            html += `<div class="text-danger mb-2"><strong>Not saved (${sum.failed.length}):</strong><br>${listHtml(sum.failed)}</div>`;
+        }
+        if (sum.overflow.length) {
+            html += `<div class="text-danger mb-2"><strong>Not attached — a new invoice save can carry only ${SERVER_MAX_FILE_UPLOADS} pictures (server <code>max_file_uploads</code>) (${sum.overflow.length}):</strong><br>${listHtml(sum.overflow)}<br>` +
+                    `Click Update Invoice first, then import these pictures again.</div>`;
+        }
+        if (sum.rowsMissing.length) {
+            html += `<div class="text-danger mb-2"><strong>Image File not found among the selected pictures (${sum.rowsMissing.length}):</strong><br>${listHtml(sum.rowsMissing)}</div>`;
+        }
+        if (sum.unusedPictures.length) {
+            html += `<div class="text-warning-emphasis mb-2"><strong>Pictures that matched no item (${sum.unusedPictures.length}):</strong><br>${listHtml(sum.unusedPictures)}</div>`;
+        }
+        return html;
+    }
+
+    function openImportReport(title, bodyHtml) {
+        document.getElementById('importReportTitle').innerHTML = title;
+        document.getElementById('importReportBody').innerHTML  = bodyHtml;
+        document.getElementById('importReportModal').style.display = 'flex';
+    }
+    $('#importReportClose').on('click', function () {
+        document.getElementById('importReportModal').style.display = 'none';
+    });
+
+    $('#bulk_images').on('change', async function () {
+        const files = Array.from(this.files || []).filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|gif|webp|bmp)$/i.test(f.name));
+        $(this).val('');
+        if (!files.length) return;
+
+        const status = $('#bulkImagesStatus');
+        const prepared = [];
+        for (let i = 0; i < files.length; i++) {
+            status.text(`Preparing pictures ${i + 1} / ${files.length}…`);
+            const f = await compressImage(files[i]);
+            prepared.push({ key: normalizeRefKey(files[i].name), name: files[i].name, file: f });
+        }
+
+        // newly chosen pictures replace earlier ones with the same name
+        const incoming = {};
+        prepared.forEach(p => { incoming[p.key] = true; });
+        bulkPictures = bulkPictures.filter(p => !incoming[p.key]).concat(prepared);
+
+        const sum = await applyBulkPictures();
+        bulkPictures = [];   // already applied/uploaded — do not re-upload on the next import
+        status.text('');
+        openImportReport('<i class="fas fa-images text-warning"></i> Pictures', pictureSummaryHtml(sum));
+    });
+
+    // read by the form's submit listener (bottom of this file): do not submit while a picture upload is still running
+    window.pictureUploadsBusy = function () { return imageUploadsInFlight > 0; };
+
     // ===== CURRENCY BOX =====
     function initCurrencyBox() {
         const isUSD = $('#currency').val() === 'USD';
@@ -891,6 +1192,7 @@ $(document).ready(function () {
                     </select>
                     <input type="text" name="items[${index}][tray_no]" class="form-control form-control-sm tray-no-input mt-1" value="${trayNo}" placeholder="Tray No">
                     <input type="file" name="items[${index}][image]" class="form-control form-control-sm item-image-input mt-1" accept="image/*">
+                    <small class="item-image-status d-block" style="min-height:1em;"></small>
                 </div>
             </td>
             <td><input type="text" name="items[${index}][item_description]" class="form-control" value="${desc}" required></td>
@@ -1443,6 +1745,19 @@ $(document).ready(function () {
     function runExcelImport(file, mode) {
         const unmatchedPurityRows = [];
         const categorySubWarnings = [];
+        let imageRefRows = 0;
+
+        function getImageRef(rowObj) {
+            const wanted = ['imagefile', 'image', 'picture', 'picturefile', 'photo', 'imagename'];
+            const keys = Object.keys(rowObj);
+            for (let i = 0; i < wanted.length; i++) {
+                const hit = keys.find(k => k.toString().toLowerCase().replace(/[^a-z0-9]/g, '') === wanted[i]);
+                if (hit !== undefined && rowObj[hit] !== undefined && rowObj[hit] !== null && rowObj[hit].toString().trim() !== '') {
+                    return rowObj[hit].toString().trim();
+                }
+            }
+            return '';
+        }
 
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -1497,6 +1812,10 @@ $(document).ready(function () {
                     currentItemRow.find('.material-type').val((row['Material'] || 'gold').toLowerCase());
                     currentItemRow.find('.vat-percent').val(row['VAT %'] || 0);
                     recalcItemGrossWeight(currentItemRow);
+
+                    // optional "Image File" column: remembered for Import Pictures
+                    const imgRef = getImageRef(row);
+                    if (imgRef) { currentItemRow.data('imageRef', imgRef); imageRefRows++; }
                 }
                 if (row['Part Name'] && row['Part Name'].toString().trim() !== '' && currentItemRow) {
                     const partsRow = currentItemRow.next('.parts-row');
@@ -1517,32 +1836,27 @@ $(document).ready(function () {
 
             calculateTotals();
 
-            const warningBlocks = [];
+            let html = '';
             if (unmatchedPurityRows.length > 0) {
-                warningBlocks.push(
-                    'Purity value with no matching dropdown option:\n' +
-                    unmatchedPurityRows.map(r => `- ${r.item}: ${r.purity}`).join('\n')
-                );
+                html += '<div class="text-danger mb-2"><strong>Purity value with no matching dropdown option:</strong><br>' +
+                        unmatchedPurityRows.map(r => `${escHtml(r.item)}: ${escHtml(r.purity)}`).join('<br>') + '</div>';
             }
             if (categorySubWarnings.length > 0) {
-                warningBlocks.push(
-                    'Category/Subcategory Code not found:\n' +
-                    categorySubWarnings.map(w => `- ${w}`).join('\n')
-                );
+                html += '<div class="text-danger mb-2"><strong>Category/Subcategory Code not found:</strong><br>' +
+                        categorySubWarnings.map(w => '• ' + escHtml(w)).join('<br>') + '</div>';
             }
-
-            if (warningBlocks.length > 0) {
-                alert(
-                    'Items imported, but please check the following manually:\n\n' +
-                    warningBlocks.join('\n\n')
-                );
+            if (html) {
+                html = '<div class="mb-2">Items imported, but please check the following manually:</div>' + html;
             } else {
-                alert(
-                    mode === 'replace'
-                        ? 'Existing items removed. Items imported successfully!'
-                        : 'Items imported successfully and added to the existing list!'
-                );
+                html = '<div class="mb-2 text-success">' + (mode === 'replace'
+                    ? 'Existing items removed. Items imported successfully!'
+                    : 'Items imported successfully and added to the existing list!') + '</div>';
             }
+            if (imageRefRows > 0) {
+                html += '<div class="text-muted mb-2">The sheet has an "Image File" column (' + imageRefRows +
+                        ' item(s)) — now click <strong>Import Pictures</strong> and select the picture files.</div>';
+            }
+            openImportReport('<i class="fas fa-file-excel text-success"></i> Import Excel', html);
 
             $('#excel_import').val('');
             pendingExcelFile = null;
@@ -1573,7 +1887,12 @@ function resubmitWithConfirm() {
 // this line (check the console for the actual error, it will be the real
 // root cause) and the submit handler below was never attached at all.
 try {
-    document.getElementById('main-form').addEventListener('submit', function() {
+    document.getElementById('main-form').addEventListener('submit', function(ev) {
+        if (window.pictureUploadsBusy && window.pictureUploadsBusy()) {
+            ev.preventDefault();
+            alert('A picture is still being saved. Please wait a moment and click Update Invoice again.');
+            return;
+        }
         collectItemsJsonForSubmit();
         const btn = this.querySelector('button[type="submit"]');
         btn.disabled = true;

@@ -1387,16 +1387,48 @@
             .appendTo(wrapper);
     }
 
-    // shows a thumbnail whenever a picture is chosen by hand as well
-    $(document).on('change', '.item-image-input', function () {
-        const row = $(this).closest('tr.item-row');
+    // PHP only accepts this many uploaded files per request (ini max_file_uploads);
+    // extra pictures are dropped by PHP without any message, so they are limited here.
+    const SERVER_MAX_FILE_UPLOADS = {{ (int) (ini_get('max_file_uploads') ?: 20) }};
+
+    function picturesAttachedCount(exceptRow) {
+        let n = 0;
+        $('#PurchaseTable .item-image-input').each(function () {
+            if (exceptRow && exceptRow.length && $(this).closest('tr.item-row')[0] === exceptRow[0]) return;
+            if (this.files && this.files.length) n++;
+        });
+        return n;
+    }
+
+    // picture chosen by hand: shrunk first (big phone photos are otherwise rejected
+    // by the server's upload size limit), then shown as a thumbnail
+    $(document).on('change', '.item-image-input', async function () {
+        const input = this;
+        const row   = $(input).closest('tr.item-row');
         row.removeData('bulkImg');
-        showRowThumb(row, this.files && this.files[0] ? this.files[0] : null);
+        const file  = input.files && input.files[0] ? input.files[0] : null;
+        if (!file) { showRowThumb(row, null); return; }
+
+        const small = await compressImage(file);
+        if (small !== file && typeof DataTransfer !== 'undefined') {
+            const dt = new DataTransfer();
+            dt.items.add(small);
+            input.files = dt.files;
+        }
+        if (picturesAttachedCount(row) >= SERVER_MAX_FILE_UPLOADS) {
+            input.value = '';
+            showRowThumb(row, null);
+            alert('The server accepts only ' + SERVER_MAX_FILE_UPLOADS + ' pictures per save (PHP max_file_uploads). ' +
+                  'Save this invoice first, then open Edit to add the remaining pictures.');
+            return;
+        }
+        showRowThumb(row, input.files[0]);
     });
 
     function setRowPicture(row, file) {
         const input = row.find('.item-image-input')[0];
         if (!input || typeof DataTransfer === 'undefined') return false;
+        if (picturesAttachedCount(row) >= SERVER_MAX_FILE_UPLOADS) return false;
         const dt = new DataTransfer();
         dt.items.add(file);
         input.files = dt.files;
@@ -1408,7 +1440,7 @@
     // Applies the loaded pictures to the rows now on the page.
     // Returns a summary used by the report.
     function applyBulkPictures() {
-        const summary = { matched: 0, rowsMissing: [], unusedPictures: [] };
+        const summary = { matched: 0, overflow: [], rowsMissing: [], unusedPictures: [] };
         if (!bulkPictures.length) return summary;
 
         const byKey  = {};
@@ -1437,6 +1469,7 @@
 
             if (pic) {
                 if (setRowPicture(row, pic.file)) { summary.matched++; usedKeys[pic.key] = true; }
+                else { summary.overflow.push(name.toString()); usedKeys[pic.key] = true; }
             } else if (sheetRef) {
                 summary.rowsMissing.push(`${name} → "${sheetRef}"`);
             }
@@ -1463,11 +1496,12 @@
                     sum.unusedPictures.slice(0, 40).map(escHtml).join('<br>') +
                     (sum.unusedPictures.length > 40 ? '<br>…' : '') + '</div>';
         }
-        if (sum.matched > 20) {
-            html += `<div class="alert alert-warning py-2 mb-2" style="font-size:.85rem;">
-                ${sum.matched} pictures will be uploaded together with this invoice. PHP only accepts <code>max_file_uploads</code>
-                files per request (default <strong>20</strong>) — if your server still has the default, ask your host to raise
-                <code>max_file_uploads</code> (and <code>post_max_size</code>) to at least ${sum.matched + 10}, otherwise pictures beyond the limit are silently dropped on save.</div>`;
+        if (sum.overflow && sum.overflow.length) {
+            html += `<div class="alert alert-danger py-2 mb-2" style="font-size:.85rem;">
+                <strong>${sum.overflow.length} picture(s) NOT attached:</strong> the server accepts only ${SERVER_MAX_FILE_UPLOADS} pictures per save
+                (PHP <code>max_file_uploads</code>). Save the invoice, then use <strong>Edit → Import Pictures</strong> for the rest
+                (pictures there are saved directly, with no limit), or ask your host to raise <code>max_file_uploads</code>.<br>` +
+                sum.overflow.slice(0, 40).map(escHtml).join('<br>') + (sum.overflow.length > 40 ? '<br>…' : '') + `</div>`;
         }
         return html;
     }
