@@ -62,6 +62,7 @@ class DatabaseSeeder extends Seeder
             'purities',
             'purchase_invoices', 'purchase_return',
             'sale_invoices', 'sale_return',
+            'quotations',
             // FEATURE (Sale Invoice POS): its own module — 'pos.index' gates
             // opening the POS screen (see routes/web.php). Seeded with the
             // full index/create/edit/delete/print set below, matching every
@@ -80,6 +81,7 @@ class DatabaseSeeder extends Seeder
             'purities',
             'purchase_invoices', 'purchase_return',
             'sale_invoices', 'sale_return',
+            'quotations',
             'pos',
             'vouchers',
             'consignments',

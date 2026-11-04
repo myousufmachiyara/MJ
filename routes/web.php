@@ -8,6 +8,7 @@ use App\Http\Controllers\{
     SubHeadOfAccController,
     COAController,
     SaleInvoiceController,
+    QuotationController,
     PurchaseInvoiceController,
     PurchaseReturnController,
     ProductController,
@@ -95,6 +96,13 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/sale-invoices/pos',      [SaleInvoiceController::class, 'pos'])    ->middleware('check.permission:pos.index')->name('sale_invoices.pos');
     Route::get('/sale-invoices/pos/scan', [SaleInvoiceController::class, 'posScan'])->middleware('check.permission:pos.index')->name('sale_invoices.pos_scan');
 
+    // ── Quotation helpers (print variants) ────────────────────────────────────
+    // A quotation is a record-only document: no ledger, no inventory. Barcode
+    // scan / name search inside the quotation screens reuse the existing
+    // read-only sale.scan_barcode / sale.search_by_name endpoints above.
+    Route::get('/quotations/{id}/print-simple', [QuotationController::class, 'printSimple'])->middleware('check.permission:quotations.print')->name('quotations.print_simple');
+    Route::get('/quotations/{id}/export-excel', [QuotationController::class, 'exportExcel'])->middleware('check.permission:quotations.print')->name('quotations.export_excel');
+
     // ── Sale Return Helper (AJAX — must be before the modules loop) ───────────
     Route::get('/sale-return/{invoiceId}/items', [SaleReturnController::class, 'getInvoiceItems'])->name('sale_return.invoice_items');
 
@@ -133,6 +141,7 @@ Route::middleware(['auth'])->group(function () {
         'purchase_return'       => ['controller' => PurchaseReturnController::class,     'permission' => 'purchase_return'],
         'sale_invoices'         => ['controller' => SaleInvoiceController::class,        'permission' => 'sale_invoices'],
         'sale_return'           => ['controller' => SaleReturnController::class,         'permission' => 'sale_return'],
+        'quotations'            => ['controller' => QuotationController::class,          'permission' => 'quotations'],
     ];
 
     foreach ($modules as $uri => $config) {

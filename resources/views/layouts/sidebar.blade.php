@@ -159,8 +159,8 @@
           {{-- FIX (POS nav): also show this parent menu for a user who only has
                pos.index (e.g. counter staff without Invoices-list access), so
                the POS link below isn't hidden behind the Invoices-list permission. --}}
-          @if(auth()->user()->can('sale_invoices.index') || auth()->user()->can('pos.index') || auth()->user()->can('sale_return.index'))
-          <li class="nav-parent {{ request()->routeIs('sale_invoices.*') || request()->routeIs('sale_return.*') ? 'nav-expanded nav-active' : '' }}">
+          @if(auth()->user()->can('sale_invoices.index') || auth()->user()->can('pos.index') || auth()->user()->can('sale_return.index') || auth()->user()->can('quotations.index'))
+          <li class="nav-parent {{ request()->routeIs('sale_invoices.*') || request()->routeIs('sale_return.*') || request()->routeIs('quotations.*') ? 'nav-expanded nav-active' : '' }}">
             <a class="nav-link" href="#">
               <i class="fa fa-cash-register"></i>
               <span>Sale</span>
@@ -169,6 +169,12 @@
               @can('sale_invoices.index')
                 <li class="{{ request()->routeIs('sale_invoices.*') && !request()->routeIs('sale_invoices.pos*') ? 'active' : '' }}">
                   <a class="nav-link" href="{{ route('sale_invoices.index') }}">Invoices</a>
+                </li>
+              @endcan
+              {{-- Quotation: record-only document, no ledger / inventory impact. --}}
+              @can('quotations.index')
+                <li class="{{ request()->routeIs('quotations.*') ? 'active' : '' }}">
+                  <a class="nav-link" href="{{ route('quotations.index') }}">Quotations</a>
                 </li>
               @endcan
               {{-- POS: its own module/permission ('pos.index') — see routes/web.php. --}}
