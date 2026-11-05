@@ -850,7 +850,7 @@ class QuotationController extends Controller
             [$right]);
 
         // ── title ─────────────────────────────────────────────────────────
-        $put('A6:N6', $invoice->is_taxable ? 'TAX INVOICE (SALE)' : 'SALE INVOICE', [$center, $bold]);
+        $put('A6:N6', $invoice->is_taxable ? 'QUOTATION' : 'QUOTATION', [$center, $bold]);
         $sheet->getStyle('A6')->getFont()->setSize(13);
         $sheet->getRowDimension(6)->setRowHeight(22);
 
