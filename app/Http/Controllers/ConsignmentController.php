@@ -217,6 +217,22 @@ class ConsignmentController extends Controller
     // SCAN BARCODE FOR FORM
     // =========================================================================
 
+    /**
+     * Same lookup rules as SaleInvoiceController::scanBarcode(), so a label
+     * scans identically in both screens:
+     *
+     *   1. pure digits  -> the short numeric code printed on purchase labels
+     *                      (PurchaseInvoiceItem::getScanCodeAttribute() = the
+     *                      item's id, zero-padded). Can never collide with a
+     *                      typed barcode_number, which always has a letter/dash.
+     *   2. previous sale line with that barcode_number
+     *   3. in-stock CSG- consignment item
+     *   4. purchase item by barcode_number (MJ-/MJT-/{SubcategoryCode}-00001)
+     *
+     * The response always carries the REAL barcode_number, which the form must
+     * store as source_barcode (never the scanned numeric code) — inventory
+     * reports and sale settlement match on it.
+     */
     public function scanBarcodeForForm(Request $request)
     {
         $barcode = trim($request->get('barcode', ''));
@@ -226,78 +242,53 @@ class ConsignmentController extends Controller
         }
 
         try {
-            // ── 1. Search purchase_invoice_items (MJ-/MJT- barcodes) ─────────
-            $purchaseItem = \App\Models\PurchaseInvoiceItem::where('barcode_number', $barcode)
-                ->latest()
-                ->first();
+            // ── 1. Numeric label code -> purchase item id ────────────────────
+            if (ctype_digit($barcode)) {
+                $purchaseItem = PurchaseInvoiceItem::with('parts')->find((int) $barcode);
 
-            if ($purchaseItem) {
-                $parts = [];
-                try {
-                    $parts = $purchaseItem->parts ?? collect();
-                } catch (\Throwable $e) {
-                    $parts = collect();
+                if ($purchaseItem) {
+                    return response()->json($this->formScanPayload('purchase', $purchaseItem));
                 }
 
                 return response()->json([
-                    'success'          => true,
-                    'source'           => 'purchase',
-                    'barcode_number'   => $purchaseItem->barcode_number,
-                    'item_name'        => $purchaseItem->item_name,
-                    'item_description' => $purchaseItem->item_description,
-                    'purity'           => $purchaseItem->purity,
-                    'gross_weight'     => $purchaseItem->net_weight ?? $purchaseItem->gross_weight ?? 0,
-                    'making_rate'      => $purchaseItem->making_rate  ?? 0,
-                    'material_type'    => $purchaseItem->material_type ?? 'gold',
-                    'vat_percent'      => $purchaseItem->vat_percent   ?? 0,
-                    'agreed_value'     => 0,
-                    'parts'            => collect($parts)->map(fn($p) => [
-                        'item_name'        => $p->item_name        ?? null,
-                        'part_description' => $p->part_description ?? null,
-                        'qty'              => $p->qty              ?? 0,
-                        'rate'             => $p->rate             ?? 0,
-                        'stone_qty'        => $p->stone_qty        ?? 0,
-                        'stone_rate'       => $p->stone_rate       ?? 0,
-                        'total'            => $p->total            ?? 0,
-                    ])->values(),
-                ]);
+                    'success' => false,
+                    'message' => 'Scanned label not recognised (item #' . $barcode . ' not found — it may have been deleted).',
+                ], 404);
             }
 
-            // ── 2. Search consignment_items (CSG- in stock) ───────────────────
+            // ── 2. Previously sold line with this barcode ────────────────────
+            $saleItem = \App\Models\SaleInvoiceItem::with('parts')
+                ->where('barcode_number', $barcode)
+                ->latest()
+                ->first();
+
+            if ($saleItem) {
+                return response()->json($this->formScanPayload('sale', $saleItem));
+            }
+
+            // ── 3. Consignment item still in stock (CSG-) ────────────────────
             $csgItem = ConsignmentItem::with(['parts', 'consignment'])
                 ->where('barcode_number', $barcode)
                 ->where('item_status', 'in_stock')
                 ->first();
 
             if ($csgItem) {
-                return response()->json([
-                    'success'          => true,
-                    'source'           => 'consignment',
-                    'consignment_no'   => $csgItem->consignment->consignment_no,
-                    'barcode_number'   => $csgItem->barcode_number,
-                    'item_name'        => $csgItem->item_name,
-                    'item_description' => $csgItem->item_description,
-                    'purity'           => $csgItem->purity,
-                    'gross_weight'     => $csgItem->gross_weight,
-                    'making_rate'      => $csgItem->making_rate,
-                    'material_type'    => $csgItem->material_type,
-                    'vat_percent'      => $csgItem->vat_percent,
-                    'agreed_value'     => $csgItem->agreed_value,
-                    'parts'            => $csgItem->parts->map(fn($p) => [
-                        'item_name'        => $p->item_name,
-                        'part_description' => $p->part_description,
-                        'qty'              => $p->qty,
-                        'rate'             => $p->rate,
-                        'stone_qty'        => $p->stone_qty,
-                        'stone_rate'       => $p->stone_rate,
-                        'total'            => $p->total,
-                    ])->values(),
-                ]);
+                return response()->json($this->formScanPayload('consignment', $csgItem));
+            }
+
+            // ── 4. Purchase item by barcode_number ───────────────────────────
+            $purchaseItem = PurchaseInvoiceItem::with('parts')
+                ->where('barcode_number', $barcode)
+                ->latest()
+                ->first();
+
+            if ($purchaseItem) {
+                return response()->json($this->formScanPayload('purchase', $purchaseItem));
             }
 
             return response()->json([
                 'success' => false,
-                'message' => 'Barcode "' . $barcode . '" not found. Check the barcode and try again.',
+                'message' => 'Barcode "' . $barcode . '" not found in any record.',
             ], 404);
 
         } catch (\Throwable $e) {
@@ -311,6 +302,43 @@ class ConsignmentController extends Controller
                 'message' => 'Server error: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /** One JSON shape for every scan source (purchase | sale | consignment). */
+    private function formScanPayload(string $source, $item): array
+    {
+        $payload = [
+            'success'          => true,
+            'source'           => $source,
+            'barcode_number'   => $item->barcode_number,
+            'item_name'        => $item->item_name,
+            'item_description' => $item->item_description,
+            'purity'           => $item->purity,
+            // Purchase items: net_weight = weight WITHOUT parts, so parts are not
+            // counted twice (gross_weight already includes them).
+            'gross_weight'     => $source === 'purchase'
+                                    ? ($item->net_weight ?? $item->gross_weight ?? 0)
+                                    : ($item->gross_weight ?? 0),
+            'making_rate'      => $item->making_rate   ?? 0,
+            'material_type'    => $item->material_type ?? 'gold',
+            'vat_percent'      => $item->vat_percent   ?? 0,
+            'agreed_value'     => $source === 'consignment' ? ($item->agreed_value ?? 0) : 0,
+            'parts'            => $item->parts->map(fn ($p) => [
+                'item_name'        => $p->item_name        ?? null,
+                'part_description' => $p->part_description ?? null,
+                'qty'              => $p->qty              ?? 0,
+                'rate'             => $p->rate             ?? 0,
+                'stone_qty'        => $p->stone_qty        ?? 0,
+                'stone_rate'       => $p->stone_rate       ?? 0,
+                'total'            => $p->total            ?? 0,
+            ])->values()->toArray(),
+        ];
+
+        if ($source === 'consignment') {
+            $payload['consignment_no'] = $item->consignment->consignment_no ?? null;
+        }
+
+        return $payload;
     }
 
     // =========================================================================

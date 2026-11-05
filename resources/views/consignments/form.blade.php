@@ -132,7 +132,7 @@
               <div class="col-md-5">
                 <div class="input-group">
                   <input type="text" id="barcode_scan_input" class="form-control"
-                         placeholder="Scan MJ-/MJT- barcode or press Enter…"
+                         placeholder="Scan barcode / label or press Enter…"
                          autocomplete="off">
                   <button type="button" class="btn btn-primary fw-bold" id="barcode_scan_btn">
                     <i class="fas fa-search"></i> Search
@@ -291,17 +291,22 @@ $(document).ready(function () {
                     return;
                 }
 
+                // The scan may have been the short numeric label code — always
+                // store / compare the REAL barcode_number (inventory reports and
+                // sale settlement match on source_barcode).
+                const realBarcode = data.barcode_number || barcode;
+
                 // Duplicate check
                 let duplicate = false;
                 $('#ConsignmentTable tr.item-row').each(function () {
-                    if ($(this).find('input[name*="[source_barcode]"]').val() === barcode) {
+                    if ($(this).find('input[name*="[source_barcode]"]').val() === realBarcode) {
                         duplicate = true; return false;
                     }
                 });
                 if (duplicate) {
                     showScanResult(
                         '<i class="fas fa-exclamation-triangle"></i> <strong>' +
-                        barcode + '</strong> is already on this consignment.', 'warning'
+                        realBarcode + '</strong> is already on this consignment.', 'warning'
                     );
                     return;
                 }
@@ -318,7 +323,7 @@ $(document).ready(function () {
                 const newRow = $('#ConsignmentTable tr.item-row').last();
 
                 newRow.find('.item-name-input').val(data.item_name || '');
-                newRow.find('input[name*="[source_barcode]"]').val(barcode);
+                newRow.find('input[name*="[source_barcode]"]').val(realBarcode);
                 newRow.find('input[name*="[item_description]"]').val(data.item_description || '');
                 newRow.find('.gross-weight').val(parseFloat(data.gross_weight) || 0);
                 newRow.find('.making-rate').val(data.making_rate || 0);
@@ -344,7 +349,9 @@ $(document).ready(function () {
 
                 const srcBadge = data.source === 'purchase'
                     ? '<span class="badge bg-info ms-1">from Purchase</span>'
-                    : '<span class="badge bg-success ms-1">from Consignment</span>';
+                    : data.source === 'sale'
+                        ? '<span class="badge bg-primary ms-1">from Sale</span>'
+                        : '<span class="badge bg-success ms-1">from Consignment</span>';
                 showScanResult(
                     '<i class="fas fa-check-circle"></i> Added: <strong>' +
                     (data.item_name || barcode) + '</strong>' + srcBadge, 'success'
