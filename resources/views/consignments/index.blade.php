@@ -111,7 +111,7 @@
                         <i class="fas fa-edit"></i>
                       </a>
                     @endif
-                    <a href="{{ route('consignments.print', $c->id) }}" class="btn btn-outline-secondary" target="_blank" title="Print Document">
+                    <a href="{{ route('consignments.print', $c->id) }}" class="btn btn-outline-secondary js-print-link" target="_blank" title="Print Document">
                       <i class="fas fa-file-pdf"></i>
                     </a>
                     @if($c->direction === 'inbound')
@@ -183,4 +183,5 @@ $(document).ready(function () {
     $('#filterOut').on('click', function () { applyFilter('outbound'); });
 });
 </script>
+@include('consignments._print_picture_modal')
 @endsection

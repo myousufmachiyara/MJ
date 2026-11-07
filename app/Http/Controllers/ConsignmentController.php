@@ -110,9 +110,18 @@ class ConsignmentController extends Controller
         $products = Product::with('measurementUnit')->orderBy('name')->get();
         $isEdit   = true;
 
-        $itemsJson = $consignment->items->map(function ($item) {
+        // Pictures live on the purchased item (Purchase Invoice -> Img), matched by
+        // the item's ORIGINAL barcode (source_barcode).
+        $imagePaths = PurchaseInvoiceItem::whereIn('barcode_number', $consignment->items->pluck('source_barcode')->filter()->unique()->values())
+            ->whereNotNull('image_path')
+            ->orderBy('id')
+            ->pluck('image_path', 'barcode_number');
+
+        $itemsJson = $consignment->items->map(function ($item) use ($imagePaths) {
             return [
                 'id'               => $item->id,
+                'source_barcode'   => $item->source_barcode,
+                'image_url'        => $this->imageUrlFromPath($imagePaths->get($item->source_barcode)),
                 'item_name'        => $item->item_name,
                 'item_description' => $item->item_description,
                 'barcode_number'   => $item->barcode_number,
@@ -304,6 +313,24 @@ class ConsignmentController extends Controller
         }
     }
 
+    private function imageUrlFromPath(?string $imagePath): ?string
+    {
+        return $imagePath ? asset('storage/app/public/' . $imagePath) : null;
+    }
+
+    /** image_path of the purchased item carrying this barcode (null if none). */
+    private function imagePathFor($barcode): ?string
+    {
+        if (!$barcode) {
+            return null;
+        }
+
+        return PurchaseInvoiceItem::where('barcode_number', $barcode)
+            ->whereNotNull('image_path')
+            ->orderBy('id')
+            ->value('image_path');
+    }
+
     /** [AED, USD] selling price stored on the purchased item with this barcode. */
     private function sellingPricesFor($barcode): array
     {
@@ -331,6 +358,11 @@ class ConsignmentController extends Controller
         // the value agreed there.
         [$sellingAed, $sellingUsd] = $this->sellingPricesFor($item->barcode_number);
 
+        // Picture of the purchased item (a CSG- item points back to its original
+        // purchase barcode through source_barcode).
+        $imageBarcode = $source === 'consignment' ? ($item->source_barcode ?: null) : $item->barcode_number;
+        $imagePath    = $source === 'purchase' ? ($item->image_path ?? null) : $this->imagePathFor($imageBarcode);
+
         $agreedValue = $source === 'consignment' && (float) ($item->agreed_value ?? 0) > 0
             ? (float) $item->agreed_value
             : (float) ($sellingAed ?? 0);
@@ -351,6 +383,7 @@ class ConsignmentController extends Controller
             'material_type'    => $item->material_type ?? 'gold',
             'vat_percent'      => $item->vat_percent   ?? 0,
             'agreed_value'     => $agreedValue,
+            'image_url'        => $this->imageUrlFromPath($imagePath),
             'selling_price_aed' => $sellingAed,
             'selling_price_usd' => $sellingUsd,
             'parts'            => $item->parts->map(fn ($p) => [
@@ -621,9 +654,112 @@ class ConsignmentController extends Controller
     // PRINT — Consignment Document
     // =========================================================================
 
-    public function print($id)
+    // =========================================================================
+    // PRINT — optional product pictures (same behaviour as the Sale Invoice print)
+    // =========================================================================
+
+    /** Pictures are added only when the print URL carries ?images=1. */
+    private function wantsPrintImages(Request $request): bool
+    {
+        return $request->boolean('images');
+    }
+
+    /**
+     * source_barcode => small data-URI thumbnail (or null) for every item.
+     * The picture is the one uploaded on the purchased item with that barcode.
+     * Each one is shrunk to a 240px letter-boxed JPEG so the PDF stays small.
+     */
+    private function printImageSources($consignment): array
+    {
+        $barcodes = $consignment->items->pluck('source_barcode')->filter()->unique()->values();
+        if ($barcodes->isEmpty()) {
+            return [];
+        }
+
+        $paths = PurchaseInvoiceItem::whereIn('barcode_number', $barcodes)
+            ->whereNotNull('image_path')
+            ->orderBy('id')
+            ->pluck('image_path', 'barcode_number');
+
+        $out = [];
+        foreach ($paths as $barcode => $relPath) {
+            $out[$barcode] = $this->thumbnailForPdf($relPath);
+        }
+
+        return $out;
+    }
+
+    private function thumbnailForPdf(string $relPath): ?string
+    {
+        try {
+            $full = \Illuminate\Support\Facades\Storage::disk('public')->path($relPath);
+            if (!is_file($full)) {
+                return null;
+            }
+
+            if (!function_exists('imagecreatetruecolor')) {
+                return $full; // no GD: embed the original file
+            }
+
+            $info = @getimagesize($full);
+            if (!$info) {
+                return null;
+            }
+
+            switch ($info[2]) {
+                case IMAGETYPE_JPEG: $src = @imagecreatefromjpeg($full); break;
+                case IMAGETYPE_PNG:  $src = @imagecreatefrompng($full);  break;
+                case IMAGETYPE_GIF:  $src = @imagecreatefromgif($full);  break;
+                case IMAGETYPE_WEBP: $src = function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($full) : false; break;
+                default:             $src = false;
+            }
+            if (!$src) {
+                return null;
+            }
+
+            $w = imagesx($src);
+            $h = imagesy($src);
+            $box = 240;
+            $scale = min($box / $w, $box / $h, 1);
+            $nw = max(1, (int) round($w * $scale));
+            $nh = max(1, (int) round($h * $scale));
+
+            $dst = imagecreatetruecolor($box, $box);
+            imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255));
+            imagecopyresampled($dst, $src, (int) (($box - $nw) / 2), (int) (($box - $nh) / 2), 0, 0, $nw, $nh, $w, $h);
+
+            ob_start();
+            imagejpeg($dst, null, 80);
+            $jpeg = ob_get_clean();
+            imagedestroy($src);
+            imagedestroy($dst);
+
+            return 'data:image/jpeg;base64,' . base64_encode($jpeg);
+        } catch (\Throwable $e) {
+            Log::warning('[Consignment] print picture skipped: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /** <img> (or a dash) for the picture column of a print row. */
+    private function printImageCell(?string $src, int $sizePx = 34): string
+    {
+        if (!$src) {
+            return '-';
+        }
+        return '<img src="' . $src . '" width="' . $sizePx . '" height="' . $sizePx . '">';
+    }
+
+    public function print(Request $request, $id)
     {
         $consignment = Consignment::with(['partner', 'items.parts', 'createdBy'])->findOrFail($id);
+
+        // optional "Picture" column (see wantsPrintImages())
+        $showImages = $this->wantsPrintImages($request);
+        $imageSrc   = $showImages ? $this->printImageSources($consignment) : [];
+        $picTh      = $showImages ? '<th width="6%" rowspan="2">Picture</th>' : '';
+        $descW      = $showImages ? 9 : 15;      // keeps the row at 100%
+        $colSpan    = $showImages ? 13 : 12;     // columns in an item row
 
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
@@ -690,8 +826,9 @@ class ConsignmentController extends Controller
             <thead>
                 <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
                     <th width="5%"  rowspan="2">#</th>
+                    ' . $picTh . '
                     <th width="11%" rowspan="2">Item Name</th>
-                    <th width="15%" rowspan="2">Description</th>
+                    <th width="' . $descW . '%" rowspan="2">Description</th>
                     <th width="6%"  rowspan="2">Purity</th>
                     <th width="6%"  rowspan="2">Gross Wt</th>
                     <th width="6%"  rowspan="2">Purity Wt</th>
@@ -716,7 +853,7 @@ class ConsignmentController extends Controller
         // ROW HEIGHT CONSTANTS (mm, approximate for font-size 9 + cellpadding 2)
         // Tune these if rows appear too tight or too loose on the actual PDF.
         // =========================================================================
-        $ROW_ITEM_H    = 6;   // height of one item data row
+        $ROW_ITEM_H    = $showImages ? 12 : 6;   // height of one item data row (taller with a picture)
         $ROW_LABEL_H   = 5;   // height of the "Parts:" label row
         $ROW_PART_H    = 5;   // height of one part detail row
         $ROW_HEADER_H  = 14;  // height of the two-row thead (written after page break)
@@ -757,8 +894,9 @@ class ConsignmentController extends Controller
                 <tbody>
                     <tr style="text-align:center;background-color:' . $bg . ';">
                         <td width="5%"  style="text-align:center;">' . ($index + 1) . '</td>
+                        ' . ($showImages ? '<td width="6%" style="text-align:center;">' . $this->printImageCell($imageSrc[$item->source_barcode] ?? null, 26) . '</td>' : '') . '
                         <td width="11%" style="text-align:left;">'   . htmlspecialchars($item->item_name        ?? '-') . '</td>
-                        <td width="15%" style="text-align:left;">'   . htmlspecialchars($item->item_description ?? '-') . '</td>
+                        <td width="' . $descW . '%" style="text-align:left;">'   . htmlspecialchars($item->item_description ?? '-') . '</td>
                         <td width="6%"  style="text-align:center;">' . number_format($item->purity,        3) . '</td>
                         <td width="6%"  style="text-align:center;">' . number_format($item->gross_weight,  3) . '</td>
                         <td width="6%"  style="text-align:center;">' . number_format($item->purity_weight, 3) . '</td>
@@ -773,7 +911,7 @@ class ConsignmentController extends Controller
             if ($hasParts) {
                 $rowHtml .= '
                     <tr style="background-color:#f5f5f5">
-                        <td colspan="12" style="text-align:left;font-style:italic;padding-left:4px;">
+                        <td colspan="' . $colSpan . '" style="text-align:left;font-style:italic;padding-left:4px;">
                             <b>Parts:</b>
                         </td>
                     </tr>';
@@ -781,7 +919,7 @@ class ConsignmentController extends Controller
                 foreach ($item->parts as $part) {
                     $rowHtml .= '
                     <tr style="background-color:#fafafa;text-align:center;">
-                        <td colspan="2" style="text-align:left;">'  . htmlspecialchars($part->item_name        ?? 'Part') . '</td>
+                        <td colspan="' . ($showImages ? 3 : 2) . '" style="text-align:left;">'  . htmlspecialchars($part->item_name        ?? 'Part') . '</td>
                         <td colspan="2" style="text-align:left;">'  . htmlspecialchars($part->part_description ?? '')     . '</td>
                         <td colspan="3" style="text-align:center;">'
                             . number_format($part->qty, 3) . ' Ct @ ' . number_format($part->rate, 2)

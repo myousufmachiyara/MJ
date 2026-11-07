@@ -350,6 +350,8 @@ $(document).ready(function () {
                     newRow.find('.agreed-value').val(scannedAgreed.toFixed(2)).data('manual', true);
                 }
 
+                setItemImage(newRow, data.image_url, data.item_name);
+
                 recalcRow(newRow);
 
                 newRow.addClass('table-warning');
@@ -563,6 +565,7 @@ $(document).ready(function () {
                            value="">
                     <button type="button" class="btn btn-link p-0 toggle-product">Select Product</button>
                 </div>
+                <div class="item-img-cell mt-1"></div>
                 <input type="hidden" name="items[${nextIndex}][source_barcode]" value="">
             </td>
             <td><input type="text" name="items[${nextIndex}][item_description]"
@@ -630,6 +633,7 @@ $(document).ready(function () {
             newItemRow.find('.item-name-input').val(data.item_name || '');
             newItemRow.find('input[name*="[item_description]"]').val(data.item_description || '');
             newItemRow.find('input[name*="[source_barcode]"]').val(data.source_barcode || '');
+            setItemImage(newItemRow, data.image_url, data.item_name);
             newItemRow.find('.gross-weight').val(parseFloat(data.gross_weight) || 0);
             newItemRow.find('.making-rate').val(data.making_rate || 0);
             newItemRow.find('.material-type').val(data.material_type || 'gold');
@@ -852,6 +856,20 @@ $(document).ready(function () {
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    // Picture uploaded for the purchased item (Purchase Invoice -> Img), shown as a
+    // small thumbnail under the item name. Display only — no form field.
+    function setItemImage(row, url, name) {
+        const cell = row.find('.item-img-cell').first();
+        if (!cell.length) return;
+        cell.empty();
+        if (!url) return;
+        $('<img>')
+            .attr({ src: url, alt: name || 'Item', title: (name || 'Item') + ' — click to enlarge' })
+            .css({ height: '56px', width: '56px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #dee2e6', cursor: 'zoom-in' })
+            .on('click', function () { window.open(url, '_blank'); })
+            .appendTo(cell);
+    }
 
     function escVal(str) {
         return String(str || '').replace(/"/g, '&quot;').replace(/'/g, '&#039;');

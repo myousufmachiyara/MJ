@@ -56,7 +56,7 @@
         </a>
       @endif
       <a href="{{ route('consignments.print', $consignment->id) }}"
-         class="btn btn-sm btn-outline-secondary" target="_blank">
+         class="btn btn-sm btn-outline-secondary js-print-link" target="_blank">
         <i class="fas fa-file-pdf me-1"></i> Print Doc
       </a>
       @if($isInbound)
@@ -344,4 +344,5 @@
   </div>{{-- end card-body --}}
 </section>
 </div></div>
+@include('consignments._print_picture_modal')
 @endsection
