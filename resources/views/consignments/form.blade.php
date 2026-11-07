@@ -139,7 +139,7 @@
                   </button>
                 </div>
                 <small class="text-muted">
-                  Finds purchased items (MJ-/MJT-) and auto-fills a row.
+                  Finds the item by barcode / label and auto-fills a row (Agreed Value = its selling price).
                   For external supplier items, use <strong>Add Item</strong> manually.
                 </small>
               </div>
@@ -340,6 +340,14 @@ $(document).ready(function () {
                     data.parts.forEach((part, j) => {
                         partsBody.append(buildPartRowHtml(itemIndex, j, part));
                     });
+                }
+
+                // Selling price of the scanned item = Agreed Value (the row's total).
+                // Marked manual so recalcRow() keeps it instead of overwriting it with
+                // the rate-based figure; items without a selling price stay automatic.
+                const scannedAgreed = parseFloat(data.agreed_value) || 0;
+                if (scannedAgreed > 0) {
+                    newRow.find('.agreed-value').val(scannedAgreed.toFixed(2)).data('manual', true);
                 }
 
                 recalcRow(newRow);
