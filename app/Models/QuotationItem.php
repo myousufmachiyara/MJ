@@ -33,6 +33,7 @@ class QuotationItem extends Model
         'diamond_rate',
         'remarks',
         'barcode_number',
+        'selling_price',
     ];
 
     protected $casts = [
@@ -51,6 +52,7 @@ class QuotationItem extends Model
         'item_total'      => 'float',
         'discount_value'  => 'float',
         'discount_amount' => 'float',
+        'selling_price'   => 'float',
         'gold_rate'       => 'float',
         'diamond_rate'    => 'float',
     ];

@@ -542,6 +542,8 @@ $(document).ready(function () {
         const isUSD = $(this).val() === 'USD';
         if (isUSD) { $('#exchangeRateBox').show(); $('#exchange_rate').attr('required', true); if (!$('#exchange_rate').val()) $('#exchange_rate').val('3.6725'); }
         else        { $('#exchangeRateBox').hide(); $('#exchange_rate').removeAttr('required').val(''); }
+        // each item's selling price is per currency (AED / USD) -> re-price the rows
+        $('#SaleTable tr.item-row').each(function() { calculateRow($(this)); updateProfitDisplay($(this)); });
         calculateTotals();
     });
     $('#exchange_rate').on('input', calculateTotals);
@@ -575,9 +577,24 @@ $(document).ready(function () {
             .appendTo(cell);
     }
 
-    function setSellingPrice(row, aed, usd) {
+    // The selling price of a scanned / selected item (AED and USD are two
+    // independent prices — nothing is converted). It is shown in the reference
+    // column AND used as the item's Item Total for the invoice currency
+    // (see calculateRow). Pass useAsTotal=false to keep it reference-only.
+    function setSellingPrice(row, aed, usd, useAsTotal) {
+        const toNum = function(v) { const n = parseFloat(v); return (isFinite(n) && n > 0) ? n : null; };
         row.find('.sp-aed').text(fmtSellingPrice(aed));
         row.find('.sp-usd').text(fmtSellingPrice(usd));
+        row.data('spAed', toNum(aed));
+        row.data('spUsd', toNum(usd));
+        row.data('spFlat', useAsTotal !== false);
+    }
+    // Selling price to use as this row's Item Total in the CURRENT invoice
+    // currency, or null (no price / not set) -> normal rate-based calculation.
+    function currentFlatPrice(row) {
+        if (!row.data('spFlat')) return null;
+        const v = ($('#currency').val() === 'USD') ? row.data('spUsd') : row.data('spAed');
+        return (v === undefined || v === null) ? null : v;
     }
 
     // ===== DISCOUNT HELPERS (mirror SaleInvoiceController::resolveDiscount / createItems) =====
@@ -1193,7 +1210,7 @@ $(document).ready(function () {
         newRow.find('.making-rate').val(item.making_rate || 0);
         newRow.find('.material-type').val(item.material_type || 'gold');
         newRow.find('.vat-percent').val(item.vat_percent || 0);
-        setSellingPrice(newRow, item.selling_price_aed, item.selling_price_usd);
+        setSellingPrice(newRow, item.selling_price_aed, item.selling_price_usd, false); // consignment item: reference only
         setItemImage(newRow, item.image_url, item.item_name);
 
         if (item.parts && item.parts.length > 0) {
@@ -1315,6 +1332,15 @@ $(document).ready(function () {
         const itemRow  = $('#SaleTable tr.item-row').last();
         const partsRow = itemRow.next('.parts-row');
         itemRow.find('.base-gross-weight').val(resolveBaseGross(itemData));
+        // Lines saved in selling-price mode keep that exact price (for the saved
+        // currency); older lines have none and keep their saved rate-based total.
+        const hasSavedPrice = itemData.flat_price !== null && itemData.flat_price !== undefined && itemData.flat_price !== '';
+        setSellingPrice(itemRow, itemData.selling_price_aed, itemData.selling_price_usd, hasSavedPrice);
+        if (hasSavedPrice) {
+            const savedPrice = parseFloat(itemData.flat_price);
+            if ($('#currency').val() === 'USD') { itemRow.data('spUsd', savedPrice); itemRow.find('.sp-usd').text(fmtSellingPrice(savedPrice)); }
+            else                                { itemRow.data('spAed', savedPrice); itemRow.find('.sp-aed').text(fmtSellingPrice(savedPrice)); }
+        }
         setItemImage(itemRow, itemData.image_url, itemData.item_name);
         if (itemData.parts && itemData.parts.length > 0) {
             partsRow.show();
@@ -1490,19 +1516,41 @@ $(document).ready(function () {
             partsTotal += parseFloat($(this).find('.part-total').val()) || 0;
         });
 
-        // Item-wise discount (Amount or %) — see computeItemMoney()
-        const money         = computeItemMoney(materialValue, makingValue, partsTotal, vatPercent,
-                                               row.find('.discount-type').val(), row.find('.discount-value').val());
+        // SELLING PRICE MODE: when the item has a selling price for the invoice
+        // currency, that price IS the Item Total (no rate / making / parts maths
+        // on top; VAT is then applied at invoice level). Item discount, if any,
+        // is taken off the price. Items without a price use the maths below.
+        const flat = currentFlatPrice(row);
+        let money, makingShown = makingValue, materialShown = materialValue, partsShown = partsTotal;
+        if (flat !== null) {
+            const fDisc = resolveDiscountJs(row.find('.discount-type').val(), row.find('.discount-value').val(), flat);
+            money = { base: flat, disc: fDisc, taxable: 0, vat: 0, total: flat - fDisc };
+            makingShown = 0; partsShown = 0; materialShown = flat;
+        } else {
+            // Item-wise discount (Amount or %) — see computeItemMoney()
+            money = computeItemMoney(materialValue, makingValue, partsTotal, vatPercent,
+                                     row.find('.discount-type').val(), row.find('.discount-value').val());
+        }
         const taxableAmount = money.taxable;
         const vatAmount     = money.vat;
         const itemTotal     = money.total;
         row.find('.discount-amount-display').text(money.disc > 0 ? '− ' + money.disc.toFixed(2) : '');
-        row.data('money', { making: makingValue, parts: partsTotal, disc: money.disc, vat: vatAmount });
+        row.data('money', { making: makingShown, parts: partsShown, disc: money.disc, vat: vatAmount });
+
+        // posted with the form so the server uses the very same price
+        let spInput = row.find('input.item-selling-price');
+        if (!spInput.length) {
+            const nm = row.find('.item-total').attr('name') || '';
+            spInput = $('<input type="hidden" class="item-selling-price">')
+                .attr('name', nm.replace('[item_total]', '[selling_price]'))
+                .insertAfter(row.find('.item-total'));
+        }
+        spInput.val(flat !== null ? flat.toFixed(2) : '');
 
         row.find('.purity-weight').val(purityWeight.toFixed(4));
         row.find('.col-995').val(col995.toFixed(4));
-        row.find('.making-value').val(makingValue.toFixed(4));
-        row.find('.material-value').val(materialValue.toFixed(4));
+        row.find('.making-value').val(makingShown.toFixed(4));
+        row.find('.material-value').val(materialShown.toFixed(4));
         row.find('.taxable-amount').val(taxableAmount.toFixed(4));
         row.find('.vat-amount').val(vatAmount.toFixed(4));
         row.find('.item-total').val(itemTotal.toFixed(4));

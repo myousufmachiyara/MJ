@@ -590,6 +590,7 @@ class SaleInvoiceController extends Controller
                 'taxable_amount'   => $item->taxable_amount,
                 'vat_amount'       => $item->vat_amount,
                 'item_total'       => $item->item_total,
+                'flat_price'       => $item->selling_price,
                 'parts' => $item->parts->map(function ($part) {
                     return [
                         'item_name'        => $part->item_name,
@@ -1738,6 +1739,18 @@ class SaleInvoiceController extends Controller
                 $itemStoneVal   += $stoneValue;
             }
 
+            // FEATURE (selling price = item total): when a selling price is
+            // posted (scanned item priced for this invoice's currency, or POS)
+            // it is the item's FULL value — stones / parts are already inside
+            // it, so they are not added on top, and no making VAT is derived
+            // (invoice-level VAT applies to the total). The part rows are still
+            // saved below for the printout; only the money is not double counted.
+            if ($isPosFlatPrice) {
+                $partsTotal     = 0.0;
+                $itemDiamondVal = 0.0;
+                $itemStoneVal   = 0.0;
+            }
+
             // FEATURE (discount, item-wise): optional per-item discount, either
             // a flat amount or a % (items[N][discount_type] = amount|percent,
             // items[N][discount_value]) in the invoice's currency.
@@ -1757,6 +1770,9 @@ class SaleInvoiceController extends Controller
             // untouched. For every other payment method the discount applies
             // to the whole item (material + making + parts).
             $materialPayment = $this->isMaterialPayment($request);
+            if ($isPosFlatPrice) {
+                $materialPayment = false; // a flat selling price is always discountable as a whole
+            }
             $discountBase    = ($materialPayment ? 0.0 : $materialValue) + $makingValue + $partsTotal;
             [$discType, $discValue, $discAmount] = $this->resolveDiscount(
                 $itemData['discount_type']  ?? null,
@@ -1808,6 +1824,12 @@ class SaleInvoiceController extends Controller
                     'discount_value'  => $discValue,
                     'discount_amount' => $discAmount,
                 ])->save();
+            }
+
+            // Remember the price so editing the invoice re-opens it in the same
+            // selling-price mode (column added by ..._add_selling_price_to_items).
+            if ($isPosFlatPrice) {
+                $invoiceItem->forceFill(['selling_price' => round((float) $itemData['selling_price'], 2)])->save();
             }
 
             foreach ($partsData as $partData) {

@@ -304,9 +304,37 @@ class ConsignmentController extends Controller
         }
     }
 
+    /** [AED, USD] selling price stored on the purchased item with this barcode. */
+    private function sellingPricesFor($barcode): array
+    {
+        if (!$barcode) {
+            return [null, null];
+        }
+
+        $p = PurchaseInvoiceItem::where('barcode_number', $barcode)
+            ->latest()
+            ->first(['selling_price', 'selling_price_usd']);
+
+        return [
+            $p && $p->selling_price !== null ? (float) $p->selling_price : null,
+            $p && $p->selling_price_usd !== null ? (float) $p->selling_price_usd : null,
+        ];
+    }
+
     /** One JSON shape for every scan source (purchase | sale | consignment). */
     private function formScanPayload(string $source, $item): array
     {
+        // Selling price (AED) set on the purchased item. A consignment is in AED,
+        // so this becomes the row's Agreed Value (the Item Total column) and
+        // flows into Total Agreed Value. Items without a price keep the
+        // automatic rate-based value; an item already on a consignment keeps
+        // the value agreed there.
+        [$sellingAed, $sellingUsd] = $this->sellingPricesFor($item->barcode_number);
+
+        $agreedValue = $source === 'consignment' && (float) ($item->agreed_value ?? 0) > 0
+            ? (float) $item->agreed_value
+            : (float) ($sellingAed ?? 0);
+
         $payload = [
             'success'          => true,
             'source'           => $source,
@@ -322,7 +350,9 @@ class ConsignmentController extends Controller
             'making_rate'      => $item->making_rate   ?? 0,
             'material_type'    => $item->material_type ?? 'gold',
             'vat_percent'      => $item->vat_percent   ?? 0,
-            'agreed_value'     => $source === 'consignment' ? ($item->agreed_value ?? 0) : 0,
+            'agreed_value'     => $agreedValue,
+            'selling_price_aed' => $sellingAed,
+            'selling_price_usd' => $sellingUsd,
             'parts'            => $item->parts->map(fn ($p) => [
                 'item_name'        => $p->item_name        ?? null,
                 'part_description' => $p->part_description ?? null,

@@ -185,6 +185,7 @@ class QuotationController extends Controller
                 'taxable_amount'    => $item->taxable_amount,
                 'vat_amount'        => $item->vat_amount,
                 'item_total'        => $item->item_total,
+                'flat_price'        => $item->selling_price,
                 'parts' => $item->parts->map(function ($part) {
                     return [
                         'item_name'        => $part->item_name,
@@ -1334,9 +1335,23 @@ class QuotationController extends Controller
 
             $purityWeight  = $grossWeight * $purity;
             $col995        = $purityWeight > 0 ? $purityWeight / 0.995 : 0;
-            $makingValue   = $grossWeight * $makingRate;
-            $rate          = $matType === 'gold' ? $goldRateAedGram : $diamondRateAed;
-            $materialValue = $rate * $purityWeight;
+            // SELLING PRICE = ITEM TOTAL: a scanned item priced for this
+            // quotation's currency posts its selling_price. That price is the
+            // item's full value (parts are inside it, no making VAT derived;
+            // quotation-level VAT applies on the total).
+            $isFlatPrice = isset($itemData['selling_price'])
+                && $itemData['selling_price'] !== ''
+                && (float) $itemData['selling_price'] > 0;
+
+            if ($isFlatPrice) {
+                $makingValue   = 0.0;
+                $rate          = 0.0;
+                $materialValue = round((float) $itemData['selling_price'], 2);
+            } else {
+                $makingValue   = $grossWeight * $makingRate;
+                $rate          = $matType === 'gold' ? $goldRateAedGram : $diamondRateAed;
+                $materialValue = $rate * $purityWeight;
+            }
 
             $partsData  = $itemData['parts'] ?? [];
             $partsTotal = 0.0;
@@ -1344,6 +1359,10 @@ class QuotationController extends Controller
             foreach ($partsData as $partData) {
                 $partsTotal += ((float) ($partData['qty'] ?? 0)       * (float) ($partData['rate'] ?? 0))
                              + ((float) ($partData['stone_qty'] ?? 0) * (float) ($partData['stone_rate'] ?? 0));
+            }
+
+            if ($isFlatPrice) {
+                $partsTotal = 0.0; // already inside the selling price
             }
 
             // Item-wise discount (flat amount or %). Material / making / parts
@@ -1384,6 +1403,7 @@ class QuotationController extends Controller
                 'discount_value'   => $discAmount > 0 ? $discValue : 0,
                 'discount_amount'  => $discAmount,
                 'barcode_number'   => ($itemData['barcode_number'] ?? null) ?: null,
+                'selling_price'    => $isFlatPrice ? round((float) $itemData['selling_price'], 2) : null,
             ]);
 
             foreach ($partsData as $partData) {
