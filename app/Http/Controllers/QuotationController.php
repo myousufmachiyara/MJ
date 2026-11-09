@@ -705,7 +705,7 @@ class QuotationController extends Controller
     // instead of a crash.
     // =========================================================================
 
-    public function exportExcel($id)
+    public function exportExcel(Request $request, $id)
     {
         if (!class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
             return back()->with('error', 'Excel export needs the phpoffice/phpspreadsheet package. Run: composer require phpoffice/phpspreadsheet');
@@ -720,7 +720,7 @@ class QuotationController extends Controller
         ])->findOrFail($id);
 
         try {
-            $spreadsheet = $this->buildInvoiceSpreadsheet($invoice);
+            $spreadsheet = $this->buildInvoiceSpreadsheet($invoice, $this->wantsPrintImages($request));
         } catch (\Throwable $e) {
             Log::error('Quotation Excel Export Error', [
                 'invoice_id' => $invoice->id,
@@ -742,8 +742,61 @@ class QuotationController extends Controller
         ]);
     }
 
-    private function buildInvoiceSpreadsheet(Quotation $invoice)
+    /**
+     * Places a product picture into an Excel cell (the "Picture" column of the
+     * Excel export). $src is what printImageSources() returns: a data-URI
+     * thumbnail, or a file path when GD is not available. Returns false when
+     * nothing was placed - a picture is cosmetic and must never break the export.
+     */
+    private function addExcelPicture($sheet, ?string $src, string $cell, int $px = 56): bool
     {
+        if (!$src) {
+            return false;
+        }
+
+        try {
+            if (str_starts_with($src, 'data:image')) {
+                $bin = base64_decode(substr($src, strpos($src, ',') + 1), true);
+                $gd  = $bin !== false ? @imagecreatefromstring($bin) : false;
+                if (!$gd) {
+                    return false;
+                }
+                $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing();
+                $drawing->setImageResource($gd);
+                $drawing->setRenderingFunction(\PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing::RENDERING_JPEG);
+                $drawing->setMimeType(\PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing::MIMETYPE_JPEG);
+                // thumbnails are letter-boxed squares, so a square box never distorts them
+                $drawing->setResizeProportional(false);
+                $drawing->setWidth($px);
+                $drawing->setHeight($px);
+            } else {
+                if (!is_file($src)) {
+                    return false;
+                }
+                $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+                $drawing->setPath($src);
+                $drawing->setResizeProportional(true);
+                $drawing->setHeight($px);
+            }
+
+            $drawing->setName('Item picture');
+            $drawing->setOffsetX(8);
+            $drawing->setOffsetY(4);
+            $drawing->setCoordinates($cell);
+            $drawing->setWorksheet($sheet);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('[Excel] item picture skipped: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    private function buildInvoiceSpreadsheet(Quotation $invoice, bool $showImages = false)
+    {
+        // optional "Picture" column (?images=1 on the export URL) - same pictures as the PDF
+        $imageSrc = $showImages ? $this->printImageSources($invoice) : [];
+
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet       = $spreadsheet->getActiveSheet();
         $sheet->setTitle(substr(preg_replace('/[\\\\\/\?\*\[\]:]/', '-', (string) $invoice->quotation_no), 0, 31) ?: 'Quotation');
@@ -827,6 +880,9 @@ class QuotationController extends Controller
         foreach ($widths as $col => $w) {
             $sheet->getColumnDimension($col)->setWidth($w);
         }
+        if ($showImages) {
+            $sheet->getColumnDimension('O')->setWidth(14); // Picture column sits after Item Total
+        }
         $sheet->setShowGridlines(false); // Worksheet method (SheetView has no such setter)
 
         // ── header: logo (left) + company details (right) ─────────────────
@@ -891,6 +947,9 @@ class QuotationController extends Controller
         $put("H{$hr}:I{$hr}", 'Making', [$thin, $headFill, $bold, $center]);
         $put('H' . ($hr + 1), 'Rate',  [$thin, $headFill, $bold, $center]);
         $put('I' . ($hr + 1), 'Value', [$thin, $headFill, $bold, $center]);
+        if ($showImages) {
+            $put("O{$hr}:O" . ($hr + 1), 'Picture', [$thin, $headFill, $bold, $center]);
+        }
 
         // ── item rows ─────────────────────────────────────────────────────
         $row = $hr + 2;
@@ -910,6 +969,14 @@ class QuotationController extends Controller
             $put("L{$row}", (float) $item->taxable_amount, [$thin, $center], $FMT_MONEY);
             $put("M{$row}", (float) $item->vat_percent / 100, [$thin, $center], '0%');
             $put("N{$row}", (float) $item->item_total,    [$thin, $center, $bold], $FMT_MONEY);
+            if ($showImages) {
+                $sheet->getStyle("O{$row}")->applyFromArray($thin);
+                if ($this->addExcelPicture($sheet, $imageSrc[$item->barcode_number] ?? null, "O{$row}")) {
+                    $sheet->getRowDimension($row)->setRowHeight(50);
+                } else {
+                    $put("O{$row}", '-', [$thin, $center]);
+                }
+            }
             $row++;
 
             // per-item discount sub-row (same as the PDF)

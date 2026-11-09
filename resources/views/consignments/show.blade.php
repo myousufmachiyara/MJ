@@ -59,6 +59,10 @@
          class="btn btn-sm btn-outline-secondary js-print-link" target="_blank">
         <i class="fas fa-file-pdf me-1"></i> Print Doc
       </a>
+      <a href="{{ route('consignments.export_excel', $consignment->id) }}"
+         class="btn btn-sm btn-outline-success js-print-link" data-download="1">
+        <i class="fas fa-file-excel me-1"></i> Excel
+      </a>
       @if($isInbound)
         <a href="{{ route('consignments.print_barcodes', $consignment->id) }}"
            class="btn btn-sm btn-outline-dark" target="_blank">
@@ -243,6 +247,9 @@
               <td class="text-center">{{ number_format($item->material_value, 2) }}</td>
               <td class="text-center fw-bold">
                 AED {{ number_format($item->agreed_value, 2) }}
+                @if(($item->discount_amount ?? 0) > 0)
+                  <br><small class="text-danger fw-normal">after discount (− {{ number_format($item->discount_amount, 2) }})</small>
+                @endif
               </td>
               <td class="text-center">
                 @if($item->item_status === 'sold')
@@ -336,6 +343,32 @@
             </td>
             <td colspan="2"></td>
           </tr>
+          @php
+            $itemDiscTotal = (float) $consignment->items->sum('discount_amount');
+            $overallDisc   = (float) ($consignment->discount_amount ?? 0);
+            $leadCols      = ($isInbound ? 5 : 4) + 3;
+          @endphp
+          @if($itemDiscTotal > 0)
+          <tr>
+            <td colspan="{{ $leadCols }}" class="text-end fw-normal">Item discounts (already deducted above)</td>
+            <td class="text-center text-danger fw-normal">− AED {{ number_format($itemDiscTotal, 2) }}</td>
+            <td colspan="2"></td>
+          </tr>
+          @endif
+          @if($overallDisc > 0)
+          <tr>
+            <td colspan="{{ $leadCols }}" class="text-end fw-normal">
+              Overall discount{{ ($consignment->discount_type ?? '') === 'percent' ? ' (' . rtrim(rtrim(number_format($consignment->discount_value, 2), '0'), '.') . '%)' : '' }}
+            </td>
+            <td class="text-center text-danger fw-normal">− AED {{ number_format($overallDisc, 2) }}</td>
+            <td colspan="2"></td>
+          </tr>
+          <tr>
+            <td colspan="{{ $leadCols }}" class="text-end">NET TOTAL</td>
+            <td class="text-center text-danger">AED {{ number_format($totalAgreed - $overallDisc, 2) }}</td>
+            <td colspan="2"></td>
+          </tr>
+          @endif
         </tfoot>
         @endif
       </table>

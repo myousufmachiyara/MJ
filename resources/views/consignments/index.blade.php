@@ -114,6 +114,9 @@
                     <a href="{{ route('consignments.print', $c->id) }}" class="btn btn-outline-secondary js-print-link" target="_blank" title="Print Document">
                       <i class="fas fa-file-pdf"></i>
                     </a>
+                    <a href="{{ route('consignments.export_excel', $c->id) }}" class="btn btn-outline-success text-success js-print-link" data-download="1" title="Export to Excel">
+                      <i class="fas fa-file-excel"></i>
+                    </a>
                     @if($c->direction === 'inbound')
                     <a href="{{ route('consignments.print_barcodes', $c->id) }}" class="btn btn-outline-dark" target="_blank" title="Print Barcodes">
                         <i class="fas fa-barcode"></i>

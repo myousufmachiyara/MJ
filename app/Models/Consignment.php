@@ -13,11 +13,14 @@ class Consignment extends Model
         'consignment_no', 'direction', 'partner_id',
         'start_date', 'end_date', 'duration_label',
         'status', 'remarks', 'created_by',
+        'discount_type', 'discount_value', 'discount_amount',
     ];
 
     protected $casts = [
         'start_date' => 'date',
         'end_date'   => 'date',
+        'discount_value'  => 'float',
+        'discount_amount' => 'float',
     ];
 
     public function partner()   { return $this->belongsTo(ChartOfAccounts::class, 'partner_id'); }

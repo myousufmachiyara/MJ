@@ -76,6 +76,7 @@ class ConsignmentController extends Controller
             ]);
 
             $this->persistItems($consignment, $this->resolveItems($request), $consignment->direction, $request);
+            $this->applyOverallDiscount($consignment, $request);
 
             DB::commit();
 
@@ -141,6 +142,11 @@ class ConsignmentController extends Controller
                 'vat_percent'      => $item->vat_percent,
                 'vat_amount'       => $item->vat_amount,
                 'agreed_value'     => $item->agreed_value,
+                // the form's Agreed Value box is the value BEFORE the item discount
+                'agreed_gross'     => round((float) $item->agreed_value + (float) ($item->discount_amount ?? 0), 2),
+                'discount_type'    => $item->discount_type,
+                'discount_value'   => $item->discount_value,
+                'discount_amount'  => $item->discount_amount,
                 'parts'            => $item->parts->map(fn($p) => [
                     'item_name'        => $p->item_name,
                     'part_description' => $p->part_description,
@@ -191,6 +197,7 @@ class ConsignmentController extends Controller
                 ->toArray();
 
             $this->persistItems($consignment, $incomingItems, $consignment->direction, $request);
+            $this->applyOverallDiscount($consignment, $request);
 
             $consignment->recalcStatus();
 
@@ -757,7 +764,7 @@ class ConsignmentController extends Controller
         // optional "Picture" column (see wantsPrintImages())
         $showImages = $this->wantsPrintImages($request);
         $imageSrc   = $showImages ? $this->printImageSources($consignment) : [];
-        $picTh      = $showImages ? '<th width="6%" rowspan="2">Picture</th>' : '';
+        $picTh      = $showImages ? '<th width="6%" rowspan="2" style="font-size:7pt;">Picture</th>' : '';
         $descW      = $showImages ? 9 : 15;      // keeps the row at 100%
         $colSpan    = $showImages ? 13 : 12;     // columns in an item row
 
@@ -828,7 +835,7 @@ class ConsignmentController extends Controller
                     <th width="5%"  rowspan="2">#</th>
                     ' . $picTh . '
                     <th width="11%" rowspan="2">Item Name</th>
-                    <th width="' . $descW . '%" rowspan="2">Description</th>
+                    <th width="' . $descW . '%" rowspan="2"' . ($showImages ? ' style="font-size:7pt;"' : '') . '>Description</th>
                     <th width="6%"  rowspan="2">Purity</th>
                     <th width="6%"  rowspan="2">Gross Wt</th>
                     <th width="6%"  rowspan="2">Purity Wt</th>
@@ -867,7 +874,9 @@ class ConsignmentController extends Controller
             $partsCount = $hasParts ? $item->parts->count() : 0;
 
             // ── Estimate how many mm this item (+ its parts) will need ───────────
+            $hasDisc      = (float) ($item->discount_amount ?? 0) > 0;
             $neededHeight = $ROW_ITEM_H
+                + ($hasDisc ? $ROW_LABEL_H : 0)
                 + ($hasParts ? $ROW_LABEL_H + ($partsCount * $ROW_PART_H) : 0)
                 + $SAFETY_MARGIN;
 
@@ -907,6 +916,18 @@ class ConsignmentController extends Controller
                         <td width="10%" style="text-align:right;">'  . number_format($item->material_value, 2) . '</td>
                         <td width="13%" style="text-align:right;font-weight:bold;">' . number_format($item->agreed_value, 2) . '</td>
                     </tr>';
+
+            // per-item discount sub-row (same idea as the Sale Invoice print)
+            if ($hasDisc) {
+                $discLabel = ($item->discount_type ?? '') === 'percent'
+                    ? 'Discount (' . rtrim(rtrim(number_format((float) $item->discount_value, 2), '0'), '.') . '%) — already deducted from Agreed Val:'
+                    : 'Discount — already deducted from Agreed Val:';
+                $rowHtml .= '
+                    <tr style="background-color:#fff8e6;font-style:italic;">
+                        <td colspan="' . ($colSpan - 1) . '" style="text-align:right;">' . $discLabel . '</td>
+                        <td style="text-align:right;">-' . number_format((float) $item->discount_amount, 2) . '</td>
+                    </tr>';
+            }
 
             if ($hasParts) {
                 $rowHtml .= '
@@ -972,6 +993,34 @@ class ConsignmentController extends Controller
 
         $pdf->writeHTML($summaryHtml, true, false, false, false);
 
+        // discounts: item-wise (already inside Agreed Val) + overall -> net total
+        $totItemDisc = (float) $consignment->items->sum('discount_amount');
+        $overallDisc = (float) ($consignment->discount_amount ?? 0);
+        if ($totItemDisc > 0 || $overallDisc > 0) {
+            $overallLabel = 'Overall Discount'
+                . (($consignment->discount_type ?? '') === 'percent'
+                    ? ' (' . rtrim(rtrim(number_format((float) $consignment->discount_value, 2), '0'), '.') . '%)'
+                    : '');
+            $discHtml = '
+        <table border="1" cellpadding="4" width="100%" style="font-size:9px;margin-top:2px;">
+            <thead>
+                <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
+                    <th width="34%">Item Discounts (already deducted)</th>
+                    <th width="33%">' . $overallLabel . '</th>
+                    <th width="33%">Net Total Agreed Val (AED)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="text-align:center;font-weight:bold;">
+                    <td>' . ($totItemDisc > 0 ? '-' : '') . number_format($totItemDisc, 2) . '</td>
+                    <td>' . ($overallDisc > 0 ? '-' : '') . number_format($overallDisc, 2) . '</td>
+                    <td style="background-color:#e8f5e9;">' . number_format($totAgreed - $overallDisc, 2) . '</td>
+                </tr>
+            </tbody>
+        </table>';
+            $pdf->writeHTML($discHtml, true, false, false, false);
+        }
+
         if ($consignment->remarks) {
             $pdf->Ln(3);
             $pdf->SetFont('helvetica', '', 8);
@@ -987,6 +1036,358 @@ class ConsignmentController extends Controller
         $pdf->SetXY(125, $y + 1); $pdf->Cell(65, 5, 'Authorized Signature', 0, 0, 'C');
 
         return $pdf->Output($consignment->consignment_no . '.pdf', 'I');
+    }
+
+    /**
+     * Places a product picture into an Excel cell (the "Picture" column of the
+     * Excel export). $src is what printImageSources() returns: a data-URI
+     * thumbnail, or a file path when GD is not available. Returns false when
+     * nothing was placed - a picture is cosmetic and must never break the export.
+     */
+    private function addExcelPicture($sheet, ?string $src, string $cell, int $px = 56): bool
+    {
+        if (!$src) {
+            return false;
+        }
+
+        try {
+            if (str_starts_with($src, 'data:image')) {
+                $bin = base64_decode(substr($src, strpos($src, ',') + 1), true);
+                $gd  = $bin !== false ? @imagecreatefromstring($bin) : false;
+                if (!$gd) {
+                    return false;
+                }
+                $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing();
+                $drawing->setImageResource($gd);
+                $drawing->setRenderingFunction(\PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing::RENDERING_JPEG);
+                $drawing->setMimeType(\PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing::MIMETYPE_JPEG);
+                // thumbnails are letter-boxed squares, so a square box never distorts them
+                $drawing->setResizeProportional(false);
+                $drawing->setWidth($px);
+                $drawing->setHeight($px);
+            } else {
+                if (!is_file($src)) {
+                    return false;
+                }
+                $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+                $drawing->setPath($src);
+                $drawing->setResizeProportional(true);
+                $drawing->setHeight($px);
+            }
+
+            $drawing->setName('Item picture');
+            $drawing->setOffsetX(8);
+            $drawing->setOffsetY(4);
+            $drawing->setCoordinates($cell);
+            $drawing->setWorksheet($sheet);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('[Excel] item picture skipped: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // =========================================================================
+    // EXCEL EXPORT - same content as print(); ?images=1 adds the Picture column
+    // (needs phpoffice/phpspreadsheet - installed with maatwebsite/excel)
+    // =========================================================================
+
+    public function exportExcel(Request $request, $id)
+    {
+        if (!class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
+            return back()->with('error', 'Excel export needs the phpoffice/phpspreadsheet package. Run: composer require phpoffice/phpspreadsheet');
+        }
+
+        $consignment = Consignment::with(['partner', 'items.parts', 'createdBy'])->findOrFail($id);
+
+        try {
+            $spreadsheet = $this->buildConsignmentSpreadsheet($consignment, $this->wantsPrintImages($request));
+        } catch (\Throwable $e) {
+            Log::error('Consignment Excel Export Error', [
+                'consignment_id' => $consignment->id,
+                'message'        => $e->getMessage(),
+                'line'           => $e->getLine(),
+                'file'           => $e->getFile(),
+            ]);
+            return back()->with('error', 'Excel export failed: ' . $e->getMessage());
+        }
+
+        $filename = preg_replace('/[^A-Za-z0-9._-]/', '_', (string) $consignment->consignment_no) . '.xlsx';
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+            $writer->save('php://output');
+            $spreadsheet->disconnectWorksheets();
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    private function buildConsignmentSpreadsheet(Consignment $consignment, bool $showImages = false)
+    {
+        $imageSrc = $showImages ? $this->printImageSources($consignment) : [];
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet       = $spreadsheet->getActiveSheet();
+        $sheet->setTitle(substr(preg_replace('/[\\\\\/\?\*\[\]:]/', '-', (string) $consignment->consignment_no), 0, 31) ?: 'Consignment');
+
+        // ── totals - identical to print() ───────────────────────────────────
+        $totGross    = (float) $consignment->items->sum('gross_weight');
+        $totMaking   = (float) $consignment->items->sum('making_value');
+        $totMaterial = (float) $consignment->items->sum('material_value');
+        $totParts    = (float) $consignment->items->sum(fn ($i) => $i->parts->sum('total'));
+        $totAgreed   = (float) $consignment->items->sum('agreed_value');
+        $totItemDisc = (float) $consignment->items->sum(fn ($i) => (float) ($i->discount_amount ?? 0));
+        $overallDisc = (float) ($consignment->discount_amount ?? 0);
+
+        // ── styling helpers (same look as the Sale Invoice export) ─────────
+        $thin = ['borders' => ['allBorders' => [
+            'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+            'color'       => ['rgb' => '808080'],
+        ]]];
+        $fill = fn (string $rgb) => ['fill' => [
+            'fillType'   => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+            'startColor' => ['rgb' => $rgb],
+        ]];
+        $headFill  = $fill('F5F5F5');
+        $totalFill = $fill('EEEEEE');
+        $align = fn (string $h) => ['alignment' => [
+            'horizontal' => $h,
+            'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+            'wrapText'   => true,
+        ]];
+        $center = $align(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+        $left   = $align(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT);
+        $right  = $align(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_RIGHT);
+        $bold   = ['font' => ['bold' => true]];
+        $italic = ['font' => ['italic' => true, 'size' => 8]];
+
+        $FMT_MONEY = '#,##0.00';
+        $FMT_WT    = '0.000';
+
+        $put = function (string $range, $value, array $styles = [], ?string $fmt = null) use ($sheet) {
+            $first = explode(':', $range)[0];
+            if (str_contains($range, ':')) {
+                $sheet->mergeCells($range);
+            }
+            if (is_string($value)) {
+                $sheet->setCellValueExplicit($first, $value, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            } else {
+                $sheet->setCellValue($first, $value);
+            }
+            foreach ($styles as $style) {
+                $sheet->getStyle($range)->applyFromArray($style);
+            }
+            if ($fmt !== null) {
+                $sheet->getStyle($range)->getNumberFormat()->setFormatCode($fmt);
+            }
+        };
+
+        // ── columns: key => letter (the Picture column only exists with pictures) ──
+        $order = ['no'];
+        if ($showImages) {
+            $order[] = 'pic';
+        }
+        $order = array_merge($order, ['name', 'desc', 'purity', 'gross', 'pwt', 'c995', 'mrate', 'mval', 'mat', 'matval', 'agreed']);
+        $c = [];
+        foreach ($order as $i => $key) {
+            $c[$key] = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+        }
+        $last = $c['agreed'];
+
+        $widths = ['no' => 5, 'pic' => 14, 'name' => 22, 'desc' => 26, 'purity' => 9, 'gross' => 10, 'pwt' => 10,
+                   'c995' => 9, 'mrate' => 10, 'mval' => 11, 'mat' => 10, 'matval' => 12, 'agreed' => 14];
+        foreach ($c as $key => $letter) {
+            $sheet->getColumnDimension($letter)->setWidth($widths[$key]);
+        }
+        $sheet->setShowGridlines(false);
+
+        // ── header: logo (left) + company details (right) ─────────────────
+        for ($r = 1; $r <= 4; $r++) {
+            $sheet->getRowDimension($r)->setRowHeight(18);
+        }
+        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        if (file_exists($logoPath)) {
+            try {
+                $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();
+                $drawing->setName('Logo');
+                $drawing->setPath($logoPath);
+                $drawing->setHeight(60);
+                $drawing->setCoordinates('A1');
+                $drawing->setWorksheet($sheet);
+            } catch (\Throwable $e) {
+                // logo is cosmetic - never let it break the export
+            }
+        }
+        $put("{$c['purity']}1:{$last}4",
+            "MUSFIRA JEWELRY L.L.C\nSuite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai\nTRN No: 104902647700003",
+            [$right]);
+
+        // ── title ─────────────────────────────────────────────────────────
+        $docTitle = $consignment->direction === 'inbound'
+            ? 'CONSIGNMENT RECEIPT NOTE (Inbound)'
+            : 'CONSIGNMENT DELIVERY NOTE (Outbound)';
+        $put("A6:{$last}6", $docTitle, [$center, $bold]);
+        $sheet->getStyle('A6')->getFont()->setSize(13);
+        $sheet->getRowDimension(6)->setRowHeight(22);
+
+        // ── partner (left) + consignment details box (right) ──────────────
+        $partner = $consignment->partner;
+        $put("A8:{$c['desc']}13",
+            ($consignment->direction === 'inbound' ? 'Received From' : 'Delivered To') . ":\n" .
+            ($partner->name ?? '-') . "\n" . ($partner->address ?? '') . "\nTel: " . ($partner->contact_no ?? '-'),
+            [$left]);
+        $sheet->getStyle("A8:{$c['desc']}13")->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP);
+
+        $metaRows = [
+            ['Consignment No', (string) $consignment->consignment_no],
+            ['Start Date',     $consignment->start_date->format('d.m.Y')],
+            ['End Date',       $consignment->end_date ? $consignment->end_date->format('d.m.Y') : 'Open-ended'],
+            ['Duration',       (string) ($consignment->duration_label ?: '-')],
+            ['Status',         ucwords(str_replace('_', ' ', (string) $consignment->status))],
+        ];
+        $r = 8;
+        foreach ($metaRows as [$label, $value]) {
+            $put("{$c['purity']}{$r}:{$c['gross']}{$r}", $label, [$thin, $bold, $left]);
+            $put("{$c['pwt']}{$r}:{$c['mval']}{$r}", $value, [$thin, $right]);
+            $r++;
+        }
+
+        // ── items table header (two rows, "Making" spans Rate + Value) ─────
+        $hr = 15;
+        $headers = [
+            'no' => '#', 'pic' => 'Picture', 'name' => 'Item Name', 'desc' => 'Description', 'purity' => 'Purity',
+            'gross' => 'Gross Wt', 'pwt' => 'Purity Wt', 'c995' => '995', 'mat' => 'Material',
+            'matval' => 'Material Val', 'agreed' => 'Agreed Val',
+        ];
+        foreach ($headers as $key => $text) {
+            if (!isset($c[$key])) {
+                continue;
+            }
+            $put("{$c[$key]}{$hr}:{$c[$key]}" . ($hr + 1), $text, [$thin, $headFill, $bold, $center]);
+        }
+        $put("{$c['mrate']}{$hr}:{$c['mval']}{$hr}", 'Making', [$thin, $headFill, $bold, $center]);
+        $put("{$c['mrate']}" . ($hr + 1), 'Rate',  [$thin, $headFill, $bold, $center]);
+        $put("{$c['mval']}"  . ($hr + 1), 'Value', [$thin, $headFill, $bold, $center]);
+
+        // ── item rows ─────────────────────────────────────────────────────
+        $row = $hr + 2;
+        foreach ($consignment->items as $index => $item) {
+            $rowFill = match ($item->item_status) {
+                'sold'     => 'D4EDDA',
+                'returned' => 'FFF3CD',
+                default    => null,
+            };
+
+            $put("{$c['no']}{$row}", $index + 1, [$thin, $center]);
+            $put("{$c['name']}{$row}",   (string) ($item->item_name ?: '-'), [$thin, $left]);
+            $put("{$c['desc']}{$row}",   (string) ($item->item_description ?: '-'), [$thin, $left]);
+            $put("{$c['purity']}{$row}", (float) $item->purity,        [$thin, $center], $FMT_WT);
+            $put("{$c['gross']}{$row}",  (float) $item->gross_weight,  [$thin, $center], $FMT_WT);
+            $put("{$c['pwt']}{$row}",    (float) $item->purity_weight, [$thin, $center], $FMT_WT);
+            $put("{$c['c995']}{$row}",   (float) ($item->col_995 ?? 0), [$thin, $center], $FMT_WT);
+            $put("{$c['mrate']}{$row}",  (float) ($item->making_rate ?? 0), [$thin, $center], $FMT_MONEY);
+            $put("{$c['mval']}{$row}",   (float) $item->making_value,  [$thin, $center], $FMT_MONEY);
+            $put("{$c['mat']}{$row}",    ucfirst((string) $item->material_type), [$thin, $center]);
+            $put("{$c['matval']}{$row}", (float) $item->material_value, [$thin, $center], $FMT_MONEY);
+            $put("{$c['agreed']}{$row}", (float) $item->agreed_value,  [$thin, $center, $bold], $FMT_MONEY);
+
+            if ($showImages) {
+                $sheet->getStyle("{$c['pic']}{$row}")->applyFromArray($thin);
+                if ($this->addExcelPicture($sheet, $imageSrc[$item->source_barcode] ?? null, "{$c['pic']}{$row}")) {
+                    $sheet->getRowDimension($row)->setRowHeight(50);
+                } else {
+                    $put("{$c['pic']}{$row}", '-', [$thin, $center]);
+                }
+            }
+            if ($rowFill) {
+                $sheet->getStyle("A{$row}:{$last}{$row}")->applyFromArray($fill($rowFill));
+            }
+            $row++;
+
+            // per-item discount sub-row (same as the PDF)
+            if ((float) ($item->discount_amount ?? 0) > 0) {
+                $discLabel = ($item->discount_type ?? '') === 'percent'
+                    ? 'Discount (' . rtrim(rtrim(number_format((float) $item->discount_value, 2), '0'), '.') . '%) — already deducted from Agreed Val:'
+                    : 'Discount — already deducted from Agreed Val:';
+                $sheet->getStyle("A{$row}:" . ($showImages ? $c['pic'] : 'A') . "{$row}")->applyFromArray($thin);
+                $put("{$c['name']}{$row}:{$c['matval']}{$row}", $discLabel, [$thin, $italic, $right]);
+                $put("{$c['agreed']}{$row}", -1 * (float) $item->discount_amount, [$thin, $italic, $right], $FMT_MONEY);
+                $sheet->getStyle("A{$row}:{$last}{$row}")->applyFromArray($fill('FFF8E6'));
+                $row++;
+            }
+
+            // parts detail (same as the PDF)
+            if ($item->parts && $item->parts->count() > 0) {
+                $sheet->getStyle("A{$row}:" . ($showImages ? $c['pic'] : 'A') . "{$row}")->applyFromArray($thin);
+                $put("{$c['name']}{$row}:{$last}{$row}", 'Parts:', [$thin, $italic, $left]);
+                $row++;
+
+                foreach ($item->parts as $part) {
+                    $sheet->getStyle("A{$row}:" . ($showImages ? $c['pic'] : 'A') . "{$row}")->applyFromArray($thin);
+                    $put("{$c['name']}{$row}", (string) ($part->item_name ?: 'Part'), [$thin, $italic, $left]);
+                    $put("{$c['desc']}{$row}", (string) ($part->part_description ?? ''), [$thin, $italic, $left]);
+                    $put("{$c['purity']}{$row}:{$c['gross']}{$row}", (float) $part->qty, [$thin, $italic, $center], '0.000" Ct"');
+                    $put("{$c['pwt']}{$row}:{$c['c995']}{$row}", (float) $part->rate, [$thin, $italic, $center], '"Rate: "#,##0.00');
+                    $put("{$c['mrate']}{$row}:{$c['mval']}{$row}", (float) ($part->stone_qty ?? 0), [$thin, $italic, $center], '"St. "0.00');
+                    $put("{$c['mat']}{$row}:{$c['matval']}{$row}", (float) ($part->stone_rate ?? 0), [$thin, $italic, $center], '"SR: "#,##0.00');
+                    $put("{$c['agreed']}{$row}", (float) $part->total, [$thin, $italic, $right, $bold], $FMT_MONEY);
+                    $row++;
+                }
+            }
+        }
+        $row++;
+
+        // ── summary (right side) ──────────────────────────────────────────
+        $sumRows = [
+            ['Total Gross Wt (g)',        $totGross,    $FMT_WT,    false],
+            ['Total Making Val (AED)',    $totMaking,   $FMT_MONEY, false],
+            ['Total Material Val (AED)',  $totMaterial, $FMT_MONEY, false],
+            ['Total Parts Val (AED)',     $totParts,    $FMT_MONEY, false],
+            ['Total Agreed Val (AED)',    $totAgreed,   $FMT_MONEY, true],
+        ];
+        if ($totItemDisc > 0) {
+            $sumRows[] = ['Item Discounts (already deducted)', -1 * $totItemDisc, $FMT_MONEY, false];
+        }
+        if ($overallDisc > 0) {
+            $pct = ($consignment->discount_type ?? '') === 'percent'
+                ? ' (' . rtrim(rtrim(number_format((float) $consignment->discount_value, 2), '0'), '.') . '%)'
+                : '';
+            $sumRows[] = ['Overall Discount' . $pct, -1 * $overallDisc, $FMT_MONEY, false];
+            $sumRows[] = ['Net Total Agreed Val (AED)', $totAgreed - $overallDisc, $FMT_MONEY, true];
+        }
+
+        $put("{$c['c995']}{$row}:{$last}{$row}", 'Summary (AED)', [$thin, $headFill, $bold, $center]);
+        $r = $row + 1;
+        foreach ($sumRows as [$label, $value, $fmt, $isBold]) {
+            $lStyles = array_filter([$thin, $left,  $isBold ? $bold : null, $isBold ? $totalFill : null]);
+            $vStyles = array_filter([$thin, $right, $isBold ? $bold : null, $isBold ? $totalFill : null]);
+            $put("{$c['c995']}{$r}:{$c['matval']}{$r}", $label, $lStyles);
+            $put("{$c['agreed']}{$r}", $value, $vStyles, $fmt);
+            $r++;
+        }
+        $row = $r + 1;
+
+        if ($consignment->remarks) {
+            $put("A{$row}:{$last}{$row}", 'Remarks: ' . $consignment->remarks, [$left]);
+            $row++;
+        }
+        $row += 3;
+
+        $put("{$c['name']}{$row}:{$c['desc']}{$row}", 'Partner Signature', [$center]);
+        $sheet->getStyle("{$c['name']}{$row}:{$c['desc']}{$row}")->getBorders()->getTop()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+        $put("{$c['mat']}{$row}:{$last}{$row}", 'Authorized Signature', [$center]);
+        $sheet->getStyle("{$c['mat']}{$row}:{$last}{$row}")->getBorders()->getTop()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+
+        // ── print setup: landscape A4, fit to one page wide ────────────────
+        $sheet->getPageSetup()->setOrientation(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::ORIENTATION_LANDSCAPE);
+        $sheet->getPageSetup()->setPaperSize(\PhpOffice\PhpSpreadsheet\Worksheet\PageSetup::PAPERSIZE_A4);
+        $sheet->getPageSetup()->setFitToWidth(1);
+        $sheet->getPageSetup()->setFitToHeight(0);
+        $sheet->getPageSetup()->setFitToPage(true);
+
+        return $spreadsheet;
     }
 
     // =========================================================================
@@ -1105,6 +1506,8 @@ class ConsignmentController extends Controller
             'duration_label' => 'nullable|string|max:60',
             'remarks'        => 'nullable|string',
             'items_json'     => 'nullable|string',
+            'overall_discount_type'  => 'nullable|in:amount,percent',
+            'overall_discount_value' => 'nullable|numeric|min:0',
         ];
 
         if (!$updating) {
@@ -1120,6 +1523,52 @@ class ConsignmentController extends Controller
                 'items_json' => ['No items found. Please add at least one item before saving.'],
             ]);
         }
+    }
+
+    /**
+     * (type = amount|percent, value) + base -> [type|null, value, amount].
+     * Never negative, never above the base. Same rules as
+     * SaleInvoiceController::resolveDiscount().
+     */
+    private function resolveDiscount($type, $value, float $base): array
+    {
+        $value = max(0.0, (float) $value);
+
+        if (!in_array($type, ['amount', 'percent'], true) || $value <= 0 || $base <= 0) {
+            return [null, 0.0, 0.0];
+        }
+
+        if ($type === 'percent') {
+            $value  = min($value, 100.0);
+            $amount = $base * $value / 100;
+        } else {
+            $amount = $value;
+        }
+
+        return [$type, $value, round(min($amount, $base), 2)];
+    }
+
+    /**
+     * Overall discount on the whole consignment, applied on top of the already
+     * item-discounted Agreed Values of the in-stock items (the rows on the form).
+     * It is stored on the consignment as a document figure only - item
+     * agreed_values are not changed, so settling items one by one is unaffected.
+     */
+    private function applyOverallDiscount(Consignment $consignment, Request $request): void
+    {
+        $base = (float) $consignment->items()->where('item_status', 'in_stock')->sum('agreed_value');
+
+        [$type, $value, $amount] = $this->resolveDiscount(
+            $request->input('overall_discount_type'),
+            $request->input('overall_discount_value'),
+            $base
+        );
+
+        $consignment->forceFill([
+            'discount_type'   => $amount > 0 ? $type : null,
+            'discount_value'  => $amount > 0 ? $value : 0,
+            'discount_amount' => $amount,
+        ])->save();
     }
 
     /**
@@ -1181,6 +1630,16 @@ class ConsignmentController extends Controller
                 $agreedValue = $materialValue + $makingValue + $partsTotal + $vatAmount;
             }
 
+            // Item-wise discount (amount | percent) comes off the Agreed Value. agreed_value is
+            // stored AFTER the discount, so everything that reads it (settlement, dashboard,
+            // inventory reports) automatically sees the discounted value.
+            [$discType, $discValue, $discAmount] = $this->resolveDiscount(
+                $itemData['discount_type']  ?? null,
+                $itemData['discount_value'] ?? 0,
+                $agreedValue
+            );
+            $agreedValue -= $discAmount;
+
             $item = $consignment->items()->create([
                 'item_name'        => $itemData['item_name']        ?? null,
                 'product_id'       => $itemData['product_id']       ?? null,
@@ -1202,6 +1661,9 @@ class ConsignmentController extends Controller
                 'vat_percent'      => $vatPercent,
                 'vat_amount'       => round($vatAmount, 2),
                 'agreed_value'     => round($agreedValue, 2),
+                'discount_type'    => $discAmount > 0 ? $discType : null,
+                'discount_value'   => $discAmount > 0 ? $discValue : 0,
+                'discount_amount'  => $discAmount,
                 'item_status'      => 'in_stock',
             ]);
 

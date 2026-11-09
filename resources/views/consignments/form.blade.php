@@ -185,6 +185,8 @@
                   <th rowspan="2">Material Val</th>
                   <th rowspan="2">VAT %</th>
                   <th rowspan="2">Agreed Value<br><small class="text-muted">(Override)</small></th>
+                  <th rowspan="2" class="text-danger" style="min-width:150px;">Discount<br><small class="fw-normal text-muted" style="font-size:.65rem;">Amt or %</small></th>
+                  <th rowspan="2">Net Value</th>
                   <th width="5%" rowspan="2">Action</th>
                 </tr>
                 <tr>
@@ -220,6 +222,33 @@
             <div class="col-md-2">
               <label>Total Agreed Value</label>
               <input type="text" id="sum_agreed_value" class="form-control text-danger fw-bold" readonly>
+            </div>
+
+            {{-- ===== DISCOUNTS (same two levels as the Sale Invoice) ===== --}}
+            <div class="col-md-3 mt-3">
+              <label class="text-danger">Item Discounts</label>
+              <input type="text" id="sum_item_discount" class="form-control text-danger fw-bold" readonly>
+            </div>
+            <div class="col-md-3 mt-3">
+              <label>Subtotal <small class="text-muted">(before overall discount)</small></label>
+              <input type="text" id="subtotal_before_overall_discount" class="form-control" readonly>
+            </div>
+            <div class="col-md-4 mt-3">
+              <label class="fw-bold text-danger">Overall Discount <small class="text-muted fw-normal">(whole consignment)</small></label>
+              <div class="input-group">
+                <input type="number" step="any" min="0" name="overall_discount_value" id="overall_discount_value"
+                       class="form-control border-danger" placeholder="0"
+                       value="{{ old('overall_discount_value', ($isEdit ?? false) ? (float) ($consignment->discount_value ?? 0) : 0) }}">
+                <select name="overall_discount_type" id="overall_discount_type" class="form-select border-danger" style="max-width:85px;flex:0 0 85px;">
+                  <option value="amount"  @selected(old('overall_discount_type', ($isEdit ?? false) ? ($consignment->discount_type ?? 'amount') : 'amount') === 'amount')>Amount</option>
+                  <option value="percent" @selected(old('overall_discount_type', ($isEdit ?? false) ? ($consignment->discount_type ?? 'amount') : 'amount') === 'percent')>%</option>
+                </select>
+              </div>
+              <small class="text-muted">Applied on the whole consignment, after item discounts</small>
+            </div>
+            <div class="col-md-2 mt-3">
+              <label>Overall Discount Amt</label>
+              <input type="text" id="overall_discount_amount_display" class="form-control bg-light fw-bold text-danger" readonly>
             </div>
           </div>
         </section>
@@ -597,6 +626,20 @@ $(document).ready(function () {
                        value="0" class="form-control vat-percent"></td>
             <td><input type="number" name="items[${nextIndex}][agreed_value]" step="any"
                        value="0" class="form-control agreed-value fw-bold text-danger"></td>
+            <td style="min-width:150px;">
+                <div class="input-group input-group-sm">
+                    <input type="number" step="any" min="0" name="items[${nextIndex}][discount_value]"
+                           class="form-control discount-value" value="0">
+                    <select name="items[${nextIndex}][discount_type]" class="form-select discount-type"
+                            style="max-width:62px;flex:0 0 62px;">
+                        <option value="amount">Amt</option>
+                        <option value="percent">%</option>
+                    </select>
+                </div>
+                <small class="text-danger fw-bold discount-amount-display"></small>
+            </td>
+            <td><input type="number" name="items[${nextIndex}][net_agreed]" step="any"
+                       value="0" class="form-control net-agreed fw-bold bg-light" readonly></td>
             <td>
                 <button type="button" class="btn btn-danger btn-sm remove-row-btn" title="Remove">
                     <i class="fas fa-times"></i>
@@ -607,7 +650,7 @@ $(document).ready(function () {
             </td>
         </tr>
         <tr class="parts-row" style="display:none;background:#efefef">
-            <td colspan="13">
+            <td colspan="15">
                 <div class="parts-wrapper">
                     <table class="table table-sm table-bordered parts-table">
                         <thead>
@@ -641,9 +684,12 @@ $(document).ready(function () {
 
             snapPurity(newItemRow.find('.purity'), data.purity);
 
-            const agreedVal = parseFloat(data.agreed_value || 0);
+            // the Agreed Value box holds the value BEFORE the item discount
+            const agreedVal = parseFloat(data.agreed_gross ?? data.agreed_value ?? 0);
             newItemRow.find('.agreed-value').val(agreedVal);
             if (agreedVal > 0) newItemRow.find('.agreed-value').data('manual', true);
+            newItemRow.find('.discount-type').val(data.discount_type || 'amount');
+            newItemRow.find('.discount-value').val(parseFloat(data.discount_value || 0));
 
             if (data.parts && data.parts.length > 0) {
                 const partsRow  = newItemRow.next('.parts-row');
@@ -766,6 +812,11 @@ $(document).ready(function () {
         calculateTotals();
     });
 
+    // item-wise discount + overall discount
+    $(document).on('input change', '.discount-value, .discount-type', calculateTotals);
+    $('#overall_discount_value').on('input', calculateTotals);
+    $('#overall_discount_type').on('change', calculateTotals);
+
     $(document).on('input', '#gold_rate_aed, #diamond_rate_aed', function () {
         $('#ConsignmentTable tr.item-row').each(function () { recalcRow($(this)); });
     });
@@ -821,9 +872,30 @@ $(document).ready(function () {
     // SUMMARY TOTALS
     // =========================================================================
 
+    // ----- discount helpers (mirror ConsignmentController::resolveDiscount) -----
+    function round2(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
+    function resolveDiscountJs(type, value, base) {
+        value = Math.max(0, parseFloat(value) || 0);
+        if ((type !== 'amount' && type !== 'percent') || value <= 0 || base <= 0) return 0;
+        let amount;
+        if (type === 'percent') { value = Math.min(value, 100); amount = base * value / 100; }
+        else                    { amount = value; }
+        return round2(Math.min(amount, base));
+    }
+
+    // Net Value of one row = Agreed Value (before discount) - item discount.
+    function syncNet(row) {
+        const agreedInput = row.find('.agreed-value');
+        if (!agreedInput.length) return;           // sold / returned rows have no inputs
+        const gross = parseFloat(agreedInput.val()) || 0;
+        const disc  = resolveDiscountJs(row.find('.discount-type').val(), row.find('.discount-value').val(), gross);
+        row.find('.discount-amount-display').text(disc > 0 ? '− ' + disc.toFixed(2) : '');
+        row.find('.net-agreed').val(round2(gross - disc).toFixed(2));
+    }
+
     function calculateTotals() {
         let sumGross = 0, sumPurity = 0, sumMaking = 0,
-            sumMaterial = 0, sumParts = 0, sumAgreed = 0;
+            sumMaterial = 0, sumParts = 0, sumAgreedGross = 0, sumNet = 0;
 
         $('#ConsignmentTable tr.item-row').each(function () {
             const baseGross = parseFloat($(this).find('.gross-weight').val()) || 0;
@@ -838,7 +910,9 @@ $(document).ready(function () {
             sumPurity   += parseFloat($(this).find('.purity-weight').val())  || 0;
             sumMaking   += parseFloat($(this).find('.making-value').val())   || 0;
             sumMaterial += parseFloat($(this).find('.material-value').val()) || 0;
-            sumAgreed   += parseFloat($(this).find('.agreed-value').val())   || 0;
+            syncNet($(this));
+            sumAgreedGross += parseFloat($(this).find('.agreed-value').val()) || 0;
+            sumNet         += parseFloat($(this).find('.net-agreed').val())   || 0;
 
             $(this).next('.parts-row').find('.part-item-row').each(function () {
                 sumParts += parseFloat($(this).find('.part-total').val()) || 0;
@@ -850,7 +924,14 @@ $(document).ready(function () {
         $('#sum_making_value').val(sumMaking.toFixed(2));
         $('#sum_material_value').val(sumMaterial.toFixed(2));
         $('#sum_parts_value').val(sumParts.toFixed(2));
-        $('#sum_agreed_value').val(sumAgreed.toFixed(2));
+
+        // discounts: item-wise (already inside the net values) + overall on top
+        const itemDisc   = round2(sumAgreedGross - sumNet);
+        const overallAmt = resolveDiscountJs($('#overall_discount_type').val(), $('#overall_discount_value').val(), sumNet);
+        $('#sum_item_discount').val(itemDisc.toFixed(2));
+        $('#subtotal_before_overall_discount').val(sumNet.toFixed(2));
+        $('#overall_discount_amount_display').val(overallAmt.toFixed(2));
+        $('#sum_agreed_value').val(round2(sumNet - overallAmt).toFixed(2));
     }
 
     // =========================================================================
@@ -934,6 +1015,8 @@ $(document).ready(function () {
                 material_value:   row.find('.material-value').val() || 0,
                 vat_percent:      row.find('.vat-percent').val()    || 0,
                 agreed_value:     row.find('.agreed-value').val()   || 0,
+                discount_type:    row.find('.discount-type').val()  || 'amount',
+                discount_value:   row.find('.discount-value').val() || 0,
                 parts:            parts,
             });
         });
@@ -989,7 +1072,7 @@ $(document).ready(function () {
 
         $('#ConsignmentTable').append(`
         <tr class="item-row ${rowClass}" data-item-index="${$('#ConsignmentTable tr.item-row').length}">
-            <td colspan="12">
+            <td colspan="14">
                 ${badge}
                 ${item.barcode_number ? '<code class="ms-2">' + item.barcode_number + '</code>' : ''}
                 <strong class="ms-2">${escVal(item.item_name || '-')}</strong>

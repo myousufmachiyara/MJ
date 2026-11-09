@@ -190,6 +190,7 @@ Route::middleware(['auth'])->group(function () {
     Route::put   ('consignments/{id}',                                        [ConsignmentController::class, 'update'])      ->name('consignments.update');
     Route::delete('consignments/{id}',                                        [ConsignmentController::class, 'destroy'])     ->name('consignments.destroy');
     Route::get   ('consignments/{id}/print',                                  [ConsignmentController::class, 'print'])       ->name('consignments.print');
+    Route::get   ('consignments/{id}/export-excel',                           [ConsignmentController::class, 'exportExcel']) ->name('consignments.export_excel');
     Route::get   ('consignments/{id}/barcodes',                               [ConsignmentController::class, 'printBarcodes'])->name('consignments.print_barcodes');
     Route::post  ('consignments/{consignmentId}/return-item/{itemId}',        [ConsignmentController::class, 'returnItem'])  ->name('consignments.return-item');
     Route::post ('consignments/{consignmentId}/return-all',    [ConsignmentController::class, 'returnAll']) ->name('consignments.return-all');

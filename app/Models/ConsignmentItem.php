@@ -14,6 +14,7 @@ class ConsignmentItem extends Model
         'material_type', 'material_rate', 'material_value',
         'parts_total', 'taxable_amount', 'vat_percent', 'vat_amount',
         'agreed_value', 'item_status',
+        'discount_type', 'discount_value', 'discount_amount',
         'settled_by_sale_invoice_id', 'settled_date',
     ];
 
@@ -32,6 +33,8 @@ class ConsignmentItem extends Model
         'vat_percent'    => 'float',
         'vat_amount'     => 'float',
         'agreed_value'   => 'float',
+        'discount_value'  => 'float',
+        'discount_amount' => 'float',
         'is_printed'     => 'boolean',
         'settled_date'   => 'date',
     ];
