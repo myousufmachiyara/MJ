@@ -935,7 +935,7 @@ class SaleInvoiceController extends Controller
                 <tr>
                     <td width="40%">' . $logoHtml . '</td>
                     <td width="60%" style="text-align:right;font-size:10px;">
-                        <strong>YUNEEQ FINE JEWELERY L.L.C</strong><br>
+                        <strong>YUNEEQ FINE JEWELRY L.L.C</strong><br>
                         Suite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai<br>
                         TRN No: 104902647700003
                     </td>
@@ -1425,7 +1425,7 @@ class SaleInvoiceController extends Controller
             }
         }
         $put('H1:N4',
-            "YUNEEQ FINE JEWELERY L.L.C\nSuite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai\nTRN No: 104902647700003",
+            "YUNEEQ FINE JEWELRY L.L.C\nSuite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai\nTRN No: 104902647700003",
             [$right]);
 
         // ── title ─────────────────────────────────────────────────────────
@@ -2529,7 +2529,7 @@ class SaleInvoiceController extends Controller
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
-        $pdf->SetCreator('YUNEEQ FINE JEWELERY');
+        $pdf->SetCreator('YUNEEQ FINE JEWELRY');
         $pdf->SetTitle($invoice->invoice_no . ' — Receipt');
         $pdf->SetMargins(10, 10, 10);
         $pdf->setCellPadding(1.2);
@@ -2543,7 +2543,7 @@ class SaleInvoiceController extends Controller
                 <tr>
                     <td width="40%">' . $logoHtml . '</td>
                     <td width="60%" style="text-align:right;font-size:10px;">
-                        <strong>YUNEEQ FINE JEWELERY L.L.C</strong><br>
+                        <strong>YUNEEQ FINE JEWELRY L.L.C</strong><br>
                         Suite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai<br>
                         TRN No: 104902647700003
                     </td>
