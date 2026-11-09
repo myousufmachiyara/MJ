@@ -1672,6 +1672,7 @@ class SaleInvoiceController extends Controller
                 AccountingEntry::where('voucher_id', $voucher->id)->delete();
                 $voucher->delete();
             }
+            ConsignmentController::releaseItems($invoice->id);
             $invoice->delete();
             DB::commit();
             return redirect()->route('sale_invoices.index')->with('success', 'Invoice deleted.');

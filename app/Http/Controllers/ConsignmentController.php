@@ -506,43 +506,99 @@ class ConsignmentController extends Controller
     public static function settleItems(SaleInvoice $invoice): void
     {
         try {
+            $invoice->loadMissing('items');
+            $linkedId  = $invoice->consignment_id ?: null;
+            $claimedIds = [];
+
+            // A sale line can only settle an item that is still in stock, or one
+            // this very invoice already settled (editing an invoice re-runs this).
+            $open = function ($q) use ($invoice) {
+                $q->where('item_status', 'in_stock')
+                  ->orWhere(fn($w) => $w->where('item_status', 'sold')
+                      ->where('settled_by_sale_invoice_id', $invoice->id));
+            };
+
             foreach ($invoice->items as $saleItem) {
-                if (!$saleItem->barcode_number) continue;
+                $code = trim((string) $saleItem->barcode_number);
+                $found = null;
 
-                // Inbound: CSG- barcode scanned directly at sale
-                if (str_starts_with($saleItem->barcode_number, 'CSG-')) {
-                    $consignmentItem = ConsignmentItem::where('barcode_number', $saleItem->barcode_number)
-                        ->where('item_status', 'in_stock')
-                        ->first();
-
-                    if ($consignmentItem) {
-                        $consignmentItem->update([
-                            'item_status'                => 'sold',
-                            'settled_by_sale_invoice_id' => $invoice->id,
-                            'settled_date'               => $invoice->invoice_date,
-                        ]);
-                        $consignmentItem->consignment->recalcStatus();
+                if ($code !== '') {
+                    // Inbound: CSG- barcode scanned directly at sale
+                    if (str_starts_with($code, 'CSG-')) {
+                        $found = ConsignmentItem::where('barcode_number', $code)
+                            ->where($open)->whereNotIn('id', $claimedIds)->first();
+                    } else {
+                        // Outbound: the item's original barcode — linked consignment first
+                        if ($linkedId) {
+                            $found = ConsignmentItem::where('consignment_id', $linkedId)
+                                ->where('source_barcode', $code)
+                                ->where($open)->whereNotIn('id', $claimedIds)->first();
+                        }
+                        if (!$found) {
+                            $found = ConsignmentItem::where('source_barcode', $code)
+                                ->whereHas('consignment', fn($q) => $q->where('direction', 'outbound'))
+                                ->where($open)->whereNotIn('id', $claimedIds)->first();
+                        }
                     }
-                    continue;
                 }
 
-                // Outbound: MJ-/MJT- barcode — match directly on source_barcode
-                $consignmentItem = ConsignmentItem::where('source_barcode', $saleItem->barcode_number)
-                    ->whereHas('consignment', fn($q) => $q->where('direction', 'outbound'))
-                    ->where('item_status', 'in_stock')
-                    ->first();
+                // Fallback for lines that carry no usable barcode (typed by hand,
+                // or items saved before barcodes were stored): inside the LINKED
+                // consignment only, match on name + description, and only when the
+                // match is unambiguous.
+                if (!$found && $linkedId && trim((string) $saleItem->item_description) !== '') {
+                    $cands = ConsignmentItem::where('consignment_id', $linkedId)
+                        ->where($open)->whereNotIn('id', $claimedIds)
+                        ->where('item_description', trim($saleItem->item_description))
+                        ->when($saleItem->item_name, fn($q, $n) => $q->where('item_name', $n))
+                        ->get();
+                    if ($cands->count() === 1) {
+                        $found = $cands->first();
+                    }
+                }
 
-                if ($consignmentItem) {
-                    $consignmentItem->update([
+                if (!$found) continue;
+
+                $claimedIds[] = $found->id;
+                if ($found->item_status !== 'sold' || (int) $found->settled_by_sale_invoice_id !== (int) $invoice->id) {
+                    $found->update([
                         'item_status'                => 'sold',
                         'settled_by_sale_invoice_id' => $invoice->id,
                         'settled_date'               => $invoice->invoice_date,
                     ]);
-                    $consignmentItem->consignment->recalcStatus();
                 }
             }
+
+            // Items this invoice used to settle but no longer contains go back in stock.
+            self::releaseItems($invoice->id, $claimedIds);
+
+            // Refresh the status of every consignment touched.
+            $ids = ConsignmentItem::where('settled_by_sale_invoice_id', $invoice->id)->pluck('consignment_id')
+                ->merge($linkedId ? [$linkedId] : [])->unique();
+            Consignment::whereIn('id', $ids)->get()->each->recalcStatus();
         } catch (\Throwable $e) {
-            Log::error('ConsignmentController::settleItems — ' . $e->getMessage());
+            Log::error('ConsignmentController::settleItems — ' . $e->getMessage(), ['invoice_id' => $invoice->id ?? null]);
+        }
+    }
+
+    /**
+     * Put back in stock every item settled by $invoiceId, except $keepIds.
+     * Called when a sale invoice is edited (line removed) or deleted.
+     */
+    public static function releaseItems(int $invoiceId, array $keepIds = []): void
+    {
+        $items = ConsignmentItem::where('settled_by_sale_invoice_id', $invoiceId)
+            ->where('item_status', 'sold')
+            ->when($keepIds, fn($q) => $q->whereNotIn('id', $keepIds))
+            ->get();
+
+        foreach ($items as $item) {
+            $item->update([
+                'item_status'                => 'in_stock',
+                'settled_by_sale_invoice_id' => null,
+                'settled_date'               => null,
+            ]);
+            optional($item->consignment)->recalcStatus();
         }
     }
 
