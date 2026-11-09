@@ -75,7 +75,7 @@ class SalesReportController extends Controller
             $pdf->setCellPadding(1.2);
             $pdf->AddPage();
 
-            $logoPath = public_path('assets/img/mj-logo.jpeg');
+            $logoPath = public_path('assets/img/mj-logo.png');
             $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="85">' : '';
 
             $pdf->writeHTML('

@@ -833,7 +833,7 @@ class ConsignmentController extends Controller
         $pdf->setCellPadding(1.5);
         $pdf->AddPage();
 
-        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoPath = public_path('assets/img/mj-logo.png');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="85">' : '';
 
         $pdf->writeHTML('
@@ -1254,7 +1254,7 @@ class ConsignmentController extends Controller
         for ($r = 1; $r <= 4; $r++) {
             $sheet->getRowDimension($r)->setRowHeight(18);
         }
-        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoPath = public_path('assets/img/mj-logo.png');
         if (file_exists($logoPath)) {
             try {
                 $drawing = new \PhpOffice\PhpSpreadsheet\Worksheet\Drawing();

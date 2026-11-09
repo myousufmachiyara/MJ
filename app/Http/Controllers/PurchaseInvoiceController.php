@@ -702,7 +702,7 @@ class PurchaseInvoiceController extends Controller
  
         $pdf->AddPage();
  
-        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoPath = public_path('assets/img/mj-logo.png');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="85">' : '';
         $pdf->writeHTML('
             <table width="100%" cellpadding="3">
@@ -1000,7 +1000,7 @@ class PurchaseInvoiceController extends Controller
         float $totalMaterial = 0,
         string $copyType = 'PARTY COPY'
     ): void {
-        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoPath = public_path('assets/img/mj-logo.png');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
  
         $pdf->writeHTML('
@@ -2126,7 +2126,7 @@ class PurchaseInvoiceController extends Controller
 
     private function renderMetalFixingPage($pdf, $invoice, $totalMaterialVal, string $copyType = 'PARTY COPY'): void
     {
-        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoPath = public_path('assets/img/mj-logo.png');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
 
         $pdf->writeHTML('
@@ -2216,7 +2216,7 @@ class PurchaseInvoiceController extends Controller
     }
 
     private function renderMaterialReceivingPage($pdf,$invoice,float $totalMaterialVal,string $copyType = 'PARTY COPY'): void {
-        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoPath = public_path('assets/img/mj-logo.png');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
 
         // ── Header ──

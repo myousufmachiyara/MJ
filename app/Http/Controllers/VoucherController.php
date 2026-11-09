@@ -354,7 +354,7 @@ class VoucherController extends Controller
         $pdf->AddPage();
 
         // ── Company header ────────────────────────────────────────────────────
-        $logoPath = public_path('assets/img/mj-logo.jpeg');
+        $logoPath = public_path('assets/img/mj-logo.png');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="85">' : '';
 
         $pdf->writeHTML('
