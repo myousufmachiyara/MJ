@@ -374,7 +374,7 @@ class PurchaseReturnController extends Controller
         <table width="100%" cellpadding="3"><tr>
             <td width="40%">' . $logoHtml . '</td>
             <td width="60%" style="text-align:right;font-size:10px;">
-                <strong>MUSFIRA JEWELRY L.L.C</strong><br>
+                <strong>YUNEEQ FINE JEWELLERY L.L.C</strong><br>
                 Suite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai<br>
                 TRN No: 104902647700003
             </td>

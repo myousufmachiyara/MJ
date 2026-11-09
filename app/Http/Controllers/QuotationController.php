@@ -443,7 +443,7 @@ class QuotationController extends Controller
                 <tr>
                     <td width="40%">' . $logoHtml . '</td>
                     <td width="60%" style="text-align:right;font-size:10px;">
-                        <strong>MUSFIRA JEWELRY L.L.C</strong><br>
+                        <strong>YUNEEQ FINE JEWELLERY L.L.C</strong><br>
                         Suite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai<br>
                         TRN No: 104902647700003
                     </td>
@@ -894,7 +894,7 @@ class QuotationController extends Controller
             }
         }
         $put('H1:N4',
-            "MUSFIRA JEWELRY L.L.C\nSuite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai\nTRN No: 104902647700003",
+            "YUNEEQ FINE JEWELLERY L.L.C\nSuite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai\nTRN No: 104902647700003",
             [$right]);
 
         // ── title ─────────────────────────────────────────────────────────
@@ -1114,7 +1114,7 @@ class QuotationController extends Controller
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
-        $pdf->SetCreator('Musfira Jewelry');
+        $pdf->SetCreator('Yuneeq Fine Jewellery');
         $pdf->SetTitle($invoice->quotation_no . ' — Simple');
         $pdf->SetMargins(10, 10, 10);
         $pdf->setCellPadding(1.2);
@@ -1128,7 +1128,7 @@ class QuotationController extends Controller
                 <tr>
                     <td width="40%">' . $logoHtml . '</td>
                     <td width="60%" style="text-align:right;font-size:10px;">
-                        <strong>MUSFIRA JEWELRY L.L.C</strong><br>
+                        <strong>YUNEEQ FINE JEWELLERY L.L.C</strong><br>
                         Suite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai<br>
                         TRN No: 104902647700003
                     </td>

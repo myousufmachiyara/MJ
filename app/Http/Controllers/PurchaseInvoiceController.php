@@ -709,7 +709,7 @@ class PurchaseInvoiceController extends Controller
                 <tr>
                     <td width="40%">' . $logoHtml . '</td>
                     <td width="60%" style="text-align:right;font-size:10px;">
-                        <strong>MUSFIRA JEWELRY L.L.C</strong><br>
+                        <strong>YUNEEQ FINE JEWELLERY L.L.C</strong><br>
                         Suite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai<br>
                         TRN No: 104902647700003
                     </td>
@@ -1007,7 +1007,7 @@ class PurchaseInvoiceController extends Controller
         <table width="100%" cellpadding="2"><tr>
             <td width="30%">' . $logoHtml . '</td>
             <td width="70%" style="text-align:right;font-size:9px;">
-                <strong style="font-size:12px;">MUSFIRA JEWELRY L.L.C</strong><br>
+                <strong style="font-size:12px;">YUNEEQ FINE JEWELLERY L.L.C</strong><br>
                 M04 Al Buteen 2 Building, Old Baldiya Street, Gold Souq Gate 1 Dubai UAE.<br>
                 TRN: 104902647700003
             </td>
@@ -1111,7 +1111,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->Line(65, $y, 95, $y);   $pdf->SetXY(65, $y + 1); $pdf->Cell(30, 5, 'Prepared By', 0, 0, 'C');
         $pdf->Line(110, $y, 140, $y); $pdf->SetXY(110, $y + 1); $pdf->Cell(30, 5, 'Checked By', 0, 0, 'C');
         $pdf->SetXY(150, $y - 9); $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->Cell(50, 3, 'For MUSFIRA JEWELRY L L C', 0, 0, 'C');
+        $pdf->Cell(50, 3, 'For YUNEEQ FINE JEWELLERY L L C', 0, 0, 'C');
         $pdf->Line(155, $y, 195, $y); $pdf->SetXY(155, $y + 1);
         $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
     }
@@ -2133,7 +2133,7 @@ class PurchaseInvoiceController extends Controller
         <table width="100%" cellpadding="2"><tr>
             <td width="30%">' . $logoHtml . '</td>
             <td width="70%" style="text-align:right;font-size:9px;">
-                <strong style="font-size:12px;">MUSFIRA JEWELRY L.L.C</strong><br>
+                <strong style="font-size:12px;">YUNEEQ FINE JEWELLERY L.L.C</strong><br>
                 M04 Al Buteen 2 Building, Old Baldiya Street, Gold Souq Gate 1 Dubai UAE.<br>
                 TRN: 104902647700003
             </td>
@@ -2210,7 +2210,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->Line(65, $y, 95, $y);   $pdf->SetXY(65, $y + 1); $pdf->Cell(30, 5, 'For Accounts', 0, 0, 'C');
         $pdf->Line(110, $y, 140, $y); $pdf->SetXY(110, $y + 1); $pdf->Cell(30, 5, 'Checked By', 0, 0, 'C');
         $pdf->SetXY(150, $y - 9); $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->Cell(50, 3, 'For MUSFIRA JEWELRY L L C', 0, 0, 'C');
+        $pdf->Cell(50, 3, 'For YUNEEQ FINE JEWELLERY L L C', 0, 0, 'C');
         $pdf->Line(155, $y, 195, $y); $pdf->SetXY(155, $y + 1);
         $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
     }
@@ -2224,7 +2224,7 @@ class PurchaseInvoiceController extends Controller
         <table width="100%" cellpadding="2"><tr>
             <td width="30%">' . $logoHtml . '</td>
             <td width="70%" style="text-align:right;font-size:9px;">
-                <strong style="font-size:12px;">MUSFIRA JEWELRY L.L.C</strong><br>
+                <strong style="font-size:12px;">YUNEEQ FINE JEWELLERY L.L.C</strong><br>
                 M04 Al Buteen 2 Building, Old Baldiya Street, Gold Souq Gate 1 Dubai UAE.<br>
                 TRN: 104902647700003
             </td>
@@ -2245,7 +2245,7 @@ class PurchaseInvoiceController extends Controller
         <table width="100%" cellpadding="0"><tr>
             <td width="55%">
                 <b>From (Material Given By):</b><br>
-                <b>' . ($invoice->material_given_by ?? 'MUSFIRA JEWELRY L.L.C') . '</b><br><br>
+                <b>' . ($invoice->material_given_by ?? 'YUNEEQ FINE JEWELLERY L.L.C') . '</b><br><br>
                 <b>To (Vendor / Received By):</b><br>
                 ' . ($invoice->vendor->name    ?? '-') . '<br>
                 ' . ($invoice->vendor->address ?? '-') . '<br>
@@ -2357,7 +2357,7 @@ class PurchaseInvoiceController extends Controller
 
         $pdf->SetXY(150, $y - 9);
         $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->Cell(50, 3, 'For MUSFIRA JEWELRY L L C', 0, 0, 'C');
+        $pdf->Cell(50, 3, 'For YUNEEQ FINE JEWELLERY L L C', 0, 0, 'C');
 
         $pdf->Line(150, $y, 195, $y);
         $pdf->SetXY(150, $y + 1);
