@@ -764,9 +764,10 @@ class ConsignmentController extends Controller
         // optional "Picture" column (see wantsPrintImages())
         $showImages = $this->wantsPrintImages($request);
         $imageSrc   = $showImages ? $this->printImageSources($consignment) : [];
-        $picTh      = $showImages ? '<th width="6%" rowspan="2" style="font-size:7pt;">Picture</th>' : '';
-        $descW      = $showImages ? 9 : 15;      // keeps the row at 100%
-        $colSpan    = $showImages ? 13 : 12;     // columns in an item row
+        $picTh      = $showImages ? '<th width="6%" style="font-size:7pt;">Picture</th>' : '';
+        $nameW      = $showImages ? 14 : 16;     // the two removed Making columns (13%) went to
+        $descW      = $showImages ? 19 : 23;     // Item Name / Description; every row still adds up to 100%
+        $colSpan    = $showImages ? 11 : 10;     // columns in an item row
 
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
@@ -832,22 +833,17 @@ class ConsignmentController extends Controller
         <table border="1" cellpadding="2" width="100%">
             <thead>
                 <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
-                    <th width="5%"  rowspan="2">#</th>
+                    <th width="5%">#</th>
                     ' . $picTh . '
-                    <th width="11%" rowspan="2">Item Name</th>
-                    <th width="' . $descW . '%" rowspan="2"' . ($showImages ? ' style="font-size:7pt;"' : '') . '>Description</th>
-                    <th width="6%"  rowspan="2">Purity</th>
-                    <th width="6%"  rowspan="2">Gross Wt</th>
-                    <th width="6%"  rowspan="2">Purity Wt</th>
-                    <th width="6%"  rowspan="2">995</th>
-                    <th width="13%" colspan="2" style="text-align:center;">Making</th>
-                    <th width="9%"  rowspan="2">Material</th>
-                    <th width="10%" rowspan="2">Material Val</th>
-                    <th width="13%" rowspan="2">Agreed Val</th>
-                </tr>
-                <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
-                    <th width="6%">Rate</th>
-                    <th width="7%">Value</th>
+                    <th width="' . $nameW . '%">Item Name</th>
+                    <th width="' . $descW . '%">Description</th>
+                    <th width="6%">Purity</th>
+                    <th width="6%">Gross Wt</th>
+                    <th width="6%">Purity Wt</th>
+                    <th width="6%">995</th>
+                    <th width="9%">Material</th>
+                    <th width="10%">Material Val</th>
+                    <th width="13%">Agreed Val</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -904,14 +900,12 @@ class ConsignmentController extends Controller
                     <tr style="text-align:center;background-color:' . $bg . ';">
                         <td width="5%"  style="text-align:center;">' . ($index + 1) . '</td>
                         ' . ($showImages ? '<td width="6%" style="text-align:center;">' . $this->printImageCell($imageSrc[$item->source_barcode] ?? null, 26) . '</td>' : '') . '
-                        <td width="11%" style="text-align:left;">'   . htmlspecialchars($item->item_name        ?? '-') . '</td>
+                        <td width="' . $nameW . '%" style="text-align:left;">'   . htmlspecialchars($item->item_name        ?? '-') . '</td>
                         <td width="' . $descW . '%" style="text-align:left;">'   . htmlspecialchars($item->item_description ?? '-') . '</td>
                         <td width="6%"  style="text-align:center;">' . number_format($item->purity,        3) . '</td>
                         <td width="6%"  style="text-align:center;">' . number_format($item->gross_weight,  3) . '</td>
                         <td width="6%"  style="text-align:center;">' . number_format($item->purity_weight, 3) . '</td>
                         <td width="6%"  style="text-align:center;">' . number_format($item->col_995,       3) . '</td>
-                        <td width="6%"  style="text-align:right;">'  . number_format($item->making_rate,   2) . '</td>
-                        <td width="7%"  style="text-align:right;">'  . number_format($item->making_value,  2) . '</td>
                         <td width="9%"  style="text-align:center;">' . ucfirst($item->material_type)           . '</td>
                         <td width="10%" style="text-align:right;">'  . number_format($item->material_value, 2) . '</td>
                         <td width="13%" style="text-align:right;font-weight:bold;">' . number_format($item->agreed_value, 2) . '</td>
@@ -941,12 +935,9 @@ class ConsignmentController extends Controller
                     $rowHtml .= '
                     <tr style="background-color:#fafafa;text-align:center;">
                         <td colspan="' . ($showImages ? 3 : 2) . '" style="text-align:left;">'  . htmlspecialchars($part->item_name        ?? 'Part') . '</td>
-                        <td colspan="2" style="text-align:left;">'  . htmlspecialchars($part->part_description ?? '')     . '</td>
-                        <td colspan="3" style="text-align:center;">'
-                            . number_format($part->qty, 3) . ' Ct @ ' . number_format($part->rate, 2)
-                        . '</td>
-                        <td colspan="2" style="text-align:center;">St.' . number_format($part->stone_qty  ?? 0, 2) . '</td>
-                        <td colspan="2" style="text-align:center;">SR:' . number_format($part->stone_rate ?? 0, 2) . '</td>
+                        <td colspan="1" style="text-align:left;">'  . htmlspecialchars($part->part_description ?? '')     . '</td>
+                        <td colspan="3" style="text-align:center;">' . number_format($part->qty, 3) . ' Ct</td>
+                        <td colspan="3" style="text-align:center;">St.' . number_format($part->stone_qty ?? 0, 2) . '</td>
                         <td colspan="1" style="text-align:right;font-weight:bold;">' . number_format($part->total, 2) . '</td>
                     </tr>';
                 }

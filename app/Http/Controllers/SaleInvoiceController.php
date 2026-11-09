@@ -978,33 +978,28 @@ class SaleInvoiceController extends Controller
 
         // column widths (%): with the picture column Item Name / Description
         // give up some room so the table still adds up to the page width.
-        $wName = $showImages ? 10 : 12;
-        $wDesc = $showImages ? 10 : 14;
-        $picTh = $showImages ? '<th width="7%" rowspan="2">Picture</th>' : '';
+        $wName = $showImages ? 15 : 18;
+        $wDesc = $showImages ? 18 : 22;
+        $picTh = $showImages ? '<th width="7%">Picture</th>' : '';
         $x     = $showImages ? 1 : 0;   // extra column count for colspans below
 
         $html = '
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
-                    <th width="3%"  rowspan="2">#</th>
+                    <th width="3%">#</th>
                     ' . $picTh . '
-                    <th width="' . $wName . '%" rowspan="2">Item Name</th>
-                    <th width="' . $wDesc . '%" rowspan="2">Description</th>
-                    <th width="6%"  rowspan="2">Gross Wt</th>
-                    <th width="6%"  rowspan="2">Purity</th>
-                    <th width="6%"  rowspan="2">Purity Wt</th>
-                    <th width="6%"  rowspan="2">995</th>
-                    <th width="13%" colspan="2">Making</th>
-                    <th width="7%"  rowspan="2">Material</th>
-                    <th width="8%"  rowspan="2">Material Val</th>
-                    <th width="6%"  rowspan="2">MC</th>
-                    <th width="5%"  rowspan="2">VAT%</th>
-                    <th width="7%"  rowspan="2">Item Total</th>
-                </tr>
-                <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
-                    <th width="6%">Rate</th>
-                    <th width="7%">Value</th>
+                    <th width="' . $wName . '%">Item Name</th>
+                    <th width="' . $wDesc . '%">Description</th>
+                    <th width="6%">Gross Wt</th>
+                    <th width="6%">Purity</th>
+                    <th width="6%">Purity Wt</th>
+                    <th width="6%">995</th>
+                    <th width="7%">Material</th>
+                    <th width="8%">Material Val</th>
+                    <th width="6%">MC</th>
+                    <th width="5%">VAT%</th>
+                    <th width="7%">Item Total</th>
                 </tr>
             </thead>
             <tbody>';
@@ -1023,8 +1018,6 @@ class SaleInvoiceController extends Controller
                     <td width="6%">' . number_format($item->purity, 3) . '</td>
                     <td width="6%">' . number_format($item->purity_weight, 3) . '</td>
                     <td width="6%">' . number_format($item->col_995 ?? 0, 3) . '</td>
-                    <td width="6%">' . number_format($item->making_rate ?? 0, 2) . '</td>
-                    <td width="7%">' . number_format($item->making_value, 2) . '</td>
                     <td width="7%">' . ucfirst($item->material_type) . '</td>
                     <td width="8%">' . number_format($item->material_value, 2) . '</td>
                     <td width="6%">' . number_format($item->taxable_amount, 2) . '</td>
@@ -1033,20 +1026,20 @@ class SaleInvoiceController extends Controller
                 </tr>';
 
             // FEATURE (discount, item-wise): shown as its own sub-row so the
-            // 14-column table layout is unchanged.
+            // 12-column table layout is unchanged.
             if ((float) ($item->discount_amount ?? 0) > 0) {
                 $discLabel = ($item->discount_type ?? '') === 'percent'
                     ? 'Discount (' . rtrim(rtrim(number_format((float) $item->discount_value, 2), '0'), '.') . '%)'
                     : 'Discount';
                 $html .= '<tr style="background-color:#fff8e6;font-style:italic;font-size:7px;">
-                            <td></td><td colspan="' . (11 + $x) . '" align="right"><b>' . $discLabel . ' (already deducted from Item Total):</b></td>
+                            <td></td><td colspan="' . (9 + $x) . '" align="right"><b>' . $discLabel . ' (already deducted from Item Total):</b></td>
                             <td colspan="2" align="right">-' . number_format((float) $item->discount_amount, 2) . '</td>
                           </tr>';
             }
 
             if ($hasParts) {
                 $html .= '<tr style="background-color:#f9f9f9;font-style:italic;font-size:7px;">
-                            <td></td><td colspan="' . (13 + $x) . '"><b>Parts Detail:</b></td>
+                            <td></td><td colspan="' . (11 + $x) . '"><b>Parts Detail:</b></td>
                           </tr>';
 
                 foreach ($item->parts as $part) {
@@ -1057,17 +1050,15 @@ class SaleInvoiceController extends Controller
                         ' . ($showImages ? '<td width="7%"></td>' : '') . '
                         <td width="' . $wName . '%" style="text-align:left;">' . $displayPartName . '</td>
                         <td width="' . $wDesc . '%" style="text-align:left;">' . htmlspecialchars($part->part_description ?? '') . '</td>
-                        <td colspan="2">' . number_format($part->qty, 3) . ' Ct</td>
-                        <td colspan="2">Rate:' . number_format($part->rate, 2) . '</td>
-                        <td colspan="2">St.' . number_format($part->stone_qty ?? 0, 2) . '</td>
-                        <td colspan="2">SR:' . number_format($part->stone_rate ?? 0, 2) . '</td>
+                        <td colspan="3">' . number_format($part->qty, 3) . ' Ct</td>
+                        <td colspan="3">St.' . number_format($part->stone_qty ?? 0, 2) . '</td>
                         <td colspan="3" style="font-weight:bold;" align="right">' . number_format($part->total, 2) . '</td>
                     </tr>';
                 }
 
                 $html .= '
                     <tr style="background-color:#eeeeee;font-weight:bold;font-size:8px;">
-                        <td colspan="' . (12 + $x) . '" align="right">Product Grand Total (Material + MC + Parts + VAT):</td>
+                        <td colspan="' . (10 + $x) . '" align="right">Product Grand Total (Material + MC + Parts + VAT):</td>
                         <td colspan="2" align="right">' . number_format($productTotal, 2) . '</td>
                     </tr>';
             }
@@ -1075,7 +1066,7 @@ class SaleInvoiceController extends Controller
 
         $html .= '
                 <tr style="font-weight:bold;background-color:#f5f5f5;">
-                    <td colspan="' . (13 + $x) . '" align="right">Net Invoice Amount</td>
+                    <td colspan="' . (11 + $x) . '" align="right">Net Invoice Amount</td>
                     <td align="right">' . number_format($invoice->net_amount, 2) . '</td>
                 </tr>
             </tbody>
