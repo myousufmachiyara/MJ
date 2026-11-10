@@ -470,12 +470,17 @@ class SaleInvoiceController extends Controller
             ]);
 
             $invoiceVatPct    = $isTaxable ? (float) ($request->invoice_vat_percent ?? 0) : 0.0;
-            $invoiceVatAmount = round($calculatedNetAed * $invoiceVatPct / 100, 2);
+            $vatOnMaking      = (bool) $request->boolean('invoice_vat_on_making');
+            $invoiceVatBase   = $vatOnMaking
+                ? $this->makingVatBaseAed($invoice, $calculatedNet, (float) ($request->exchange_rate ?? 1))
+                : $calculatedNetAed;
+            $invoiceVatAmount = round($invoiceVatBase * $invoiceVatPct / 100, 2);
             $grandTotal       = round($calculatedNetAed + $invoiceVatAmount, 2);
 
             $invoice->update([
                 'invoice_vat_percent' => $invoiceVatPct,
                 'invoice_vat_amount'  => $invoiceVatAmount,
+                'invoice_vat_on_making' => $vatOnMaking,
                 'grand_total'         => $grandTotal,
             ]);
 
@@ -716,12 +721,17 @@ class SaleInvoiceController extends Controller
             ]);
 
             $invoiceVatPct    = $newIsTaxable ? (float) ($request->invoice_vat_percent ?? 0) : 0.0;
-            $invoiceVatAmount = round($calculatedNetAed * $invoiceVatPct / 100, 2);
+            $vatOnMaking      = (bool) $request->boolean('invoice_vat_on_making');
+            $invoiceVatBase   = $vatOnMaking
+                ? $this->makingVatBaseAed($invoice, $calculatedNet, (float) ($request->exchange_rate ?? 1))
+                : $calculatedNetAed;
+            $invoiceVatAmount = round($invoiceVatBase * $invoiceVatPct / 100, 2);
             $grandTotal       = round($calculatedNetAed + $invoiceVatAmount, 2);
 
             $invoice->update([
                 'invoice_vat_percent' => $invoiceVatPct,
                 'invoice_vat_amount'  => $invoiceVatAmount,
+                'invoice_vat_on_making' => $vatOnMaking,
                 'grand_total'         => $grandTotal,
             ]);
 
@@ -1004,6 +1014,8 @@ class SaleInvoiceController extends Controller
             </thead>
             <tbody>';
 
+        $detailCerts = $this->certificateMap($invoice->items->pluck('barcode_number'));
+
         foreach ($invoice->items as $index => $item) {
             $hasParts     = $item->parts && $item->parts->count() > 0;
             $productTotal = $item->item_total;
@@ -1012,7 +1024,7 @@ class SaleInvoiceController extends Controller
                 <tr style="text-align:center;background-color:#ffffff;">
                     <td width="3%">' . ($index + 1) . '</td>
                     ' . ($showImages ? '<td width="7%">' . $this->printImageCell($imageSrc[$item->barcode_number] ?? null, 32) . '</td>' : '') . '
-                    <td width="' . $wName . '%">' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
+                    <td width="' . $wName . '%">' . ($item->item_name ?: ($item->product->name ?? '-')) . $this->itemCodeHtml($item->barcode_number, $detailCerts->get($item->barcode_number)) . '</td>
                     <td width="' . $wDesc . '%">' . ($item->item_description ?? '-') . '</td>
                     <td width="6%">' . number_format($item->gross_weight, 3) . '</td>
                     <td width="6%">' . number_format($item->purity, 3) . '</td>
@@ -1152,7 +1164,7 @@ class SaleInvoiceController extends Controller
 
         if (($invoice->invoice_vat_amount ?? 0) > 0) {
             $summaryHtml .= '
-                        <tr><td>Invoice VAT (' . number_format($invoice->invoice_vat_percent, 2) . '%)</td>
+                        <tr><td>Invoice VAT (' . number_format($invoice->invoice_vat_percent, 2) . '%' . ($invoice->invoice_vat_on_making ? ' on making' : '') . ')</td>
                             <td align="right">' . number_format($invoice->invoice_vat_amount, 2) . '</td></tr>
                         <tr style="font-weight:bold;background-color:#ddeedd;">
                             <td>Grand Total (AED)</td>
@@ -1606,7 +1618,7 @@ class SaleInvoiceController extends Controller
         }
         $sumRows[] = ['Total (AED)', (float) $aedAmount, false];
         if (($invoice->invoice_vat_amount ?? 0) > 0) {
-            $sumRows[] = ['Invoice VAT (' . number_format((float) $invoice->invoice_vat_percent, 2) . '%)', (float) $invoice->invoice_vat_amount, false];
+            $sumRows[] = ['Invoice VAT (' . number_format((float) $invoice->invoice_vat_percent, 2) . '%' . ($invoice->invoice_vat_on_making ? ' on making' : '') . ')', (float) $invoice->invoice_vat_amount, false];
             $sumRows[] = ['Grand Total (AED)', (float) $grandTotal, true];
         }
 
@@ -1685,6 +1697,56 @@ class SaleInvoiceController extends Controller
     // =========================================================================
     // PRIVATE HELPERS
     // =========================================================================
+
+    /**
+     * FEATURE (VAT on making only): the AED amount invoice VAT is charged on
+     * when "VAT on making only" is ticked = the making cost of all items after
+     * item discounts (their stored taxable_amount), reduced in proportion to
+     * any invoice-level discount, converted to AED for USD invoices.
+     * Items priced by a flat selling price carry no making and add nothing.
+     */
+    private function makingVatBaseAed(SaleInvoice $invoice, float $netAfterDiscount, float $exchangeRate): float
+    {
+        $items    = $invoice->items()->get(['taxable_amount', 'item_total']);
+        $making   = (float) $items->sum('taxable_amount');
+        $itemsSum = (float) $items->sum('item_total');
+        if ($making <= 0 || $itemsSum <= 0) {
+            return 0.0;
+        }
+        $making *= max(0.0, min(1.0, $netAfterDiscount / $itemsSum));
+        if ($invoice->currency === 'USD') {
+            $making *= $exchangeRate;
+        }
+        return round($making, 2);
+    }
+
+    /**
+     * FEATURE (item code + certificate under the item name in prints).
+     * $codes = barcodes to look up; returns barcode => certificate_no.
+     */
+    private function certificateMap($codes): \Illuminate\Support\Collection
+    {
+        $codes = collect($codes)->filter()->unique()->values();
+        if ($codes->isEmpty()) {
+            return collect();
+        }
+        return PurchaseInvoiceItem::whereIn('barcode_number', $codes)
+            ->whereNotNull('certificate_no')
+            ->where('certificate_no', '!=', '')
+            ->orderBy('id')
+            ->pluck('certificate_no', 'barcode_number');
+    }
+
+    /** "Code: X | Cert#: Y" caption placed under an item name (empty when neither exists). */
+    private function itemCodeHtml(?string $code, ?string $cert): string
+    {
+        $lines = [];
+        if ($code)  $lines[] = 'Code: '  . htmlspecialchars($code);
+        if ($cert)  $lines[] = 'Cert#: ' . htmlspecialchars($cert);
+        return $lines
+            ? '<br><span style="font-size:7px;color:#555555;">' . implode('<br>', $lines) . '</span>'
+            : '';
+    }
 
     private function generateInvoiceNo(bool $isTaxable): string
     {
@@ -2529,7 +2591,7 @@ class SaleInvoiceController extends Controller
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
-        $pdf->SetCreator('YUNEEQ FINE JEWELRY');
+        $pdf->SetCreator('Yuneeq Fine JEWELRY');
         $pdf->SetTitle($invoice->invoice_no . ' — Receipt');
         $pdf->SetMargins(10, 10, 10);
         $pdf->setCellPadding(1.2);
@@ -2748,7 +2810,7 @@ class SaleInvoiceController extends Controller
 
         if (($invoice->invoice_vat_amount ?? 0) > 0) {
             $summaryHtml .= '
-                        <tr><td>VAT (' . number_format($invoice->invoice_vat_percent, 2) . '%)</td>
+                        <tr><td>VAT (' . number_format($invoice->invoice_vat_percent, 2) . '%' . ($invoice->invoice_vat_on_making ? ' on making' : '') . ')</td>
                             <td align="right">' . number_format($invoice->invoice_vat_amount, 2) . '</td></tr>
                         <tr style="font-weight:bold;background-color:#ddeedd;">
                             <td>Grand Total (AED)</td>

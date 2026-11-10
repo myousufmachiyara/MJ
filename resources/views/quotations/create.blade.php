@@ -156,6 +156,7 @@
           <section class="card">
             <header class="card-header d-flex justify-content-between align-items-center">
               <h2 class="card-title">Quotation Items</h2>
+              <span class="badge bg-primary fs-6 ms-3 js-item-count">Quotation Items: 0</span>
               <div class="">
                 <input type="file" id="excel_import" class="d-none" accept=".xlsx, .xls, .csv">
                 <button type="button" class="btn btn-success" onclick="document.getElementById('excel_import').click()">
@@ -1348,6 +1349,28 @@ $(document).ready(function () {
     });
 });
 </script>
-@endsection
 
-----------
+{{-- Live item counter (header badge + floating pill) --}}
+<style>
+  .js-item-count-pill{position:fixed;right:18px;bottom:18px;z-index:1040;background:#0d6efd;color:#fff;
+    border-radius:999px;padding:8px 18px;font-weight:700;font-size:1rem;box-shadow:0 4px 14px rgba(0,0,0,.3);pointer-events:none}
+</style>
+<div class="js-item-count-pill" id="item_count_pill">Items: 0</div>
+<script>
+(function () {
+    var tbody = document.getElementById('SaleTable');
+    if (!tbody) return;
+    function refresh() {
+        var rows   = tbody.querySelectorAll('tr.item-row');
+        var locked = tbody.querySelectorAll('tr.item-row.table-success, tr.item-row.table-warning').length;
+        var text   = 'Items: ' + rows.length + (locked ? ' (' + locked + ' sold/returned)' : '');
+        document.querySelectorAll('.js-item-count').forEach(function (el) { el.textContent = text; });
+        var pill = document.getElementById('item_count_pill');
+        if (pill) pill.textContent = text;
+    }
+    new MutationObserver(refresh).observe(tbody, { childList: true });
+    refresh();
+})();
+</script>
+
+@endsection

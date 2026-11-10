@@ -804,6 +804,31 @@ class ConsignmentController extends Controller
         }
     }
 
+    /** barcode => certificate_no for items carrying a certificate (purchase items). */
+    private function certificateMap($codes): \Illuminate\Support\Collection
+    {
+        $codes = collect($codes)->filter()->unique()->values();
+        if ($codes->isEmpty()) {
+            return collect();
+        }
+        return PurchaseInvoiceItem::whereIn('barcode_number', $codes)
+            ->whereNotNull('certificate_no')
+            ->where('certificate_no', '!=', '')
+            ->orderBy('id')
+            ->pluck('certificate_no', 'barcode_number');
+    }
+
+    /** "Code: X | Cert#: Y" caption placed under an item name (empty when neither exists). */
+    private function itemCodeHtml(?string $code, ?string $cert): string
+    {
+        $parts = [];
+        if ($code) $parts[] = 'Code: '  . htmlspecialchars($code);
+        if ($cert) $parts[] = 'Cert#: ' . htmlspecialchars($cert);
+        return $parts
+            ? '<br><span style="font-size:7px;color:#555555;">' . implode('<br>', $parts) . '</span>'
+            : '';
+    }
+
     /** <img> (or a dash) for the picture column of a print row. */
     private function printImageCell(?string $src, int $sizePx = 34): string
     {
@@ -913,12 +938,15 @@ class ConsignmentController extends Controller
         // Tune these if rows appear too tight or too loose on the actual PDF.
         // =========================================================================
         $ROW_ITEM_H    = $showImages ? 12 : 6;   // height of one item data row (taller with a picture)
+        $ROW_CODE_H    = 3;                      // extra line for "Code | Cert#" under the item name
         $ROW_LABEL_H   = 5;   // height of the "Parts:" label row
         $ROW_PART_H    = 5;   // height of one part detail row
         $ROW_HEADER_H  = 14;  // height of the two-row thead (written after page break)
         $SAFETY_MARGIN = 4;   // extra buffer so nothing clips at the very bottom
 
         $totGross = $totMaking = $totMaterial = $totAgreed = 0;
+
+        $certs = $this->certificateMap($consignment->items->pluck('source_barcode'));
 
         foreach ($consignment->items as $index => $item) {
 
@@ -927,7 +955,10 @@ class ConsignmentController extends Controller
 
             // ── Estimate how many mm this item (+ its parts) will need ───────────
             $hasDisc      = (float) ($item->discount_amount ?? 0) > 0;
+            $itemCode     = $item->source_barcode ?: $item->barcode_number;
+            $itemCert     = $certs->get($item->source_barcode);
             $neededHeight = $ROW_ITEM_H
+                + (($itemCode && !$showImages) ? $ROW_CODE_H : 0)
                 + ($hasDisc ? $ROW_LABEL_H : 0)
                 + ($hasParts ? $ROW_LABEL_H + ($partsCount * $ROW_PART_H) : 0)
                 + $SAFETY_MARGIN;
@@ -956,7 +987,7 @@ class ConsignmentController extends Controller
                     <tr style="text-align:center;background-color:' . $bg . ';">
                         <td width="5%"  style="text-align:center;">' . ($index + 1) . '</td>
                         ' . ($showImages ? '<td width="6%" style="text-align:center;">' . $this->printImageCell($imageSrc[$item->source_barcode] ?? null, 26) . '</td>' : '') . '
-                        <td width="' . $nameW . '%" style="text-align:left;">'   . htmlspecialchars($item->item_name        ?? '-') . '</td>
+                        <td width="' . $nameW . '%" style="text-align:left;">'   . htmlspecialchars($item->item_name        ?? '-') . $this->itemCodeHtml($itemCode, $itemCert) . '</td>
                         <td width="' . $descW . '%" style="text-align:left;">'   . htmlspecialchars($item->item_description ?? '-') . '</td>
                         <td width="6%"  style="text-align:center;">' . number_format($item->purity,        3) . '</td>
                         <td width="6%"  style="text-align:center;">' . number_format($item->gross_weight,  3) . '</td>

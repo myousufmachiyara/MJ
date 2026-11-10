@@ -512,6 +512,8 @@ class QuotationController extends Controller
             </thead>
             <tbody>';
 
+        $detailCerts = $this->certificateMap($invoice->items->pluck('barcode_number'));
+
         foreach ($invoice->items as $index => $item) {
             $hasParts     = $item->parts && $item->parts->count() > 0;
             $productTotal = $item->item_total;
@@ -520,7 +522,7 @@ class QuotationController extends Controller
                 <tr style="text-align:center;background-color:#ffffff;">
                     <td width="3%">' . ($index + 1) . '</td>
                     ' . ($showImages ? '<td width="7%">' . $this->printImageCell($imageSrc[$item->barcode_number] ?? null, 32) . '</td>' : '') . '
-                    <td width="' . $wName . '%">' . ($item->item_name ?: ($item->product->name ?? '-')) . '</td>
+                    <td width="' . $wName . '%">' . ($item->item_name ?: ($item->product->name ?? '-')) . $this->itemCodeHtml($item->barcode_number, $detailCerts->get($item->barcode_number)) . '</td>
                     <td width="' . $wDesc . '%">' . ($item->item_description ?? '-') . '</td>
                     <td width="6%">' . number_format($item->gross_weight, 3) . '</td>
                     <td width="6%">' . number_format($item->purity, 3) . '</td>
@@ -1114,7 +1116,7 @@ class QuotationController extends Controller
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
-        $pdf->SetCreator('YUNEEQ FINE JEWELRY');
+        $pdf->SetCreator('Yuneeq Fine JEWELRY');
         $pdf->SetTitle($invoice->quotation_no . ' — Simple');
         $pdf->SetMargins(10, 10, 10);
         $pdf->setCellPadding(1.2);
@@ -1581,5 +1583,33 @@ class QuotationController extends Controller
             'invoice_discount_type'    => 'nullable|in:amount,percent',
             'invoice_discount_value'   => 'nullable|numeric|min:0',
         ]);
+    }
+
+    /**
+     * FEATURE (item code + certificate under the item name in prints).
+     * $codes = barcodes to look up; returns barcode => certificate_no.
+     */
+    private function certificateMap($codes): \Illuminate\Support\Collection
+    {
+        $codes = collect($codes)->filter()->unique()->values();
+        if ($codes->isEmpty()) {
+            return collect();
+        }
+        return PurchaseInvoiceItem::whereIn('barcode_number', $codes)
+            ->whereNotNull('certificate_no')
+            ->where('certificate_no', '!=', '')
+            ->orderBy('id')
+            ->pluck('certificate_no', 'barcode_number');
+    }
+
+    /** "Code: X | Cert#: Y" caption placed under an item name (empty when neither exists). */
+    private function itemCodeHtml(?string $code, ?string $cert): string
+    {
+        $lines = [];
+        if ($code)  $lines[] = 'Code: '  . htmlspecialchars($code);
+        if ($cert)  $lines[] = 'Cert#: ' . htmlspecialchars($cert);
+        return $lines
+            ? '<br><span style="font-size:7px;color:#555555;">' . implode('<br>', $lines) . '</span>'
+            : '';
     }
 }

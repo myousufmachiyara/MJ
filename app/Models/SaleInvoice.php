@@ -22,6 +22,7 @@ class SaleInvoice extends Model
         'net_amount_aed',
         'invoice_vat_percent',
         'invoice_vat_amount',
+        'invoice_vat_on_making',
         'grand_total',
         'payment_method',
         'payment_term',
@@ -86,6 +87,7 @@ class SaleInvoice extends Model
         'purchase_making_rate_aed' => 'float',
         'invoice_vat_percent'      => 'float',
         'invoice_vat_amount'       => 'float',
+        'invoice_vat_on_making'    => 'boolean',
         'grand_total'              => 'float',
     ];
 

@@ -170,6 +170,7 @@
           <section class="card">
             <header class="card-header d-flex justify-content-between align-items-center">
               <h2 class="card-title">Invoice Items</h2>
+              <span class="badge bg-primary fs-6 ms-3 js-item-count">Invoice Items: 0</span>
               <div class="">
                 <input type="file" id="excel_import" class="d-none" accept=".xlsx, .xls, .csv">
                 <button type="button" class="btn btn-success" onclick="document.getElementById('excel_import').click()">
@@ -387,6 +388,10 @@
               <input type="number" step="0.01" min="0" max="100" name="invoice_vat_percent" id="invoice_vat_percent"
                      class="form-control border-danger" value="0" placeholder="e.g. 5">
               <small class="text-muted d-block fw-normal" style="font-size:.75rem">B2C: on total | B2B: per-item</small>
+              <div class="form-check mt-1">
+                <input class="form-check-input" type="checkbox" name="invoice_vat_on_making" id="invoice_vat_on_making" value="1" >
+                <label class="form-check-label small fw-bold" for="invoice_vat_on_making">VAT on Making cost only</label>
+              </div>
             </div>
             <div class="col-md-2 mt-3">
               <label>Invoice VAT Amt (AED)</label>
@@ -638,6 +643,7 @@ $(document).ready(function () {
     });
     $('#exchange_rate').on('input', calculateTotals);
     $('#invoice_vat_percent').on('input', calculateTotals);
+    $('#invoice_vat_on_making').on('change', calculateTotals);
     $('#invoice_discount_value').on('input', calculateTotals);
     $('#invoice_discount_type').on('change', calculateTotals);
     $('.select2-js').select2({ width: '100%' });
@@ -1556,7 +1562,7 @@ $(document).ready(function () {
         const vatAmount     = money.vat;
         const itemTotal     = money.total;
         row.find('.discount-amount-display').text(money.disc > 0 ? '− ' + money.disc.toFixed(2) : '');
-        row.data('money', { making: makingShown, parts: partsShown, disc: money.disc, vat: vatAmount });
+        row.data('money', { making: makingShown, parts: partsShown, disc: money.disc, vat: vatAmount, taxable: taxableAmount });
 
         // posted with the form so the server uses the very same price
         let spInput = row.find('input.item-selling-price');
@@ -1598,7 +1604,7 @@ $(document).ready(function () {
         let sumGoldGross = 0, sumPurityWeight = 0, sum995 = 0, sumMaking = 0;
         let sumMaterial = 0, sumVAT = 0, sumItemTotal = 0, totalCost = 0;
         let totalDiamondCTS = 0, totalStoneQty = 0, totalDiamondVal = 0, totalStoneVal = 0;
-        let sumItemDisc = 0, sumCurrencyPortion = 0;
+        let sumItemDisc = 0, sumCurrencyPortion = 0, sumTaxableMaking = 0;
         const purGoldR = parseFloat($('#purchase_gold_rate_aed').val()) || 0;
         const purMkR   = parseFloat($('#purchase_making_rate_aed').val()) || 0;
 
@@ -1615,7 +1621,8 @@ $(document).ready(function () {
             sumMaterial     += parseFloat(row.find('.material-value').val())   || 0;
             sumVAT          += parseFloat(row.find('.vat-amount').val())       || 0;
             sumItemTotal    += parseFloat(row.find('.item-total').val())        || 0;
-            const mny = row.data('money') || { making: 0, parts: 0, disc: 0, vat: 0 };
+            const mny = row.data('money') || { making: 0, parts: 0, disc: 0, vat: 0, taxable: 0 };
+            sumTaxableMaking += mny.taxable || 0;
             sumItemDisc        += mny.disc;
             sumCurrencyPortion += mny.making + mny.parts - mny.disc + mny.vat;
             totalCost       += (purGoldR * purWt) + (baseGros * purMkR);
@@ -1666,7 +1673,13 @@ $(document).ready(function () {
         // Invoice-level VAT
         const invVatPct = parseFloat($('#invoice_vat_percent').val()) || 0;
         const netAed    = currency === 'USD' ? round2(netAfter * exRate) : netAfter;
-        const invVatAmt = Math.round(netAed * invVatPct / 100 * 100) / 100;
+        // VAT on making only: making after item discounts, scaled by the invoice discount, in AED
+        let vatBase = netAed;
+        if ($('#invoice_vat_on_making').is(':checked')) {
+            const f = sumItemTotal > 0 ? Math.max(0, Math.min(1, netAfter / sumItemTotal)) : 0;
+            vatBase = round2(sumTaxableMaking * f * (currency === 'USD' ? exRate : 1));
+        }
+        const invVatAmt = Math.round(vatBase * invVatPct / 100 * 100) / 100;
         $('#invoice_vat_amount_display').val(invVatAmt.toFixed(2));
         $('#grand_total_display').val((Math.round((netAed + invVatAmt) * 100) / 100).toFixed(2));
 
@@ -1739,6 +1752,28 @@ $(document).ready(function () {
     });
 });
 </script>
-@endsection
 
-----------
+{{-- Live item counter (header badge + floating pill) --}}
+<style>
+  .js-item-count-pill{position:fixed;right:18px;bottom:18px;z-index:1040;background:#0d6efd;color:#fff;
+    border-radius:999px;padding:8px 18px;font-weight:700;font-size:1rem;box-shadow:0 4px 14px rgba(0,0,0,.3);pointer-events:none}
+</style>
+<div class="js-item-count-pill" id="item_count_pill">Items: 0</div>
+<script>
+(function () {
+    var tbody = document.getElementById('SaleTable');
+    if (!tbody) return;
+    function refresh() {
+        var rows   = tbody.querySelectorAll('tr.item-row');
+        var locked = tbody.querySelectorAll('tr.item-row.table-success, tr.item-row.table-warning').length;
+        var text   = 'Items: ' + rows.length + (locked ? ' (' + locked + ' sold/returned)' : '');
+        document.querySelectorAll('.js-item-count').forEach(function (el) { el.textContent = text; });
+        var pill = document.getElementById('item_count_pill');
+        if (pill) pill.textContent = text;
+    }
+    new MutationObserver(refresh).observe(tbody, { childList: true });
+    refresh();
+})();
+</script>
+
+@endsection

@@ -155,6 +155,7 @@
         <section class="card">
           <header class="card-header d-flex justify-content-between align-items-center">
             <h2 class="card-title">Consignment Items</h2>
+              <span class="badge bg-primary fs-6 ms-3 js-item-count">Consignment Items: 0</span>
             <div class="d-flex gap-2">
               <input type="file" id="excel_import" class="d-none" accept=".xlsx,.xls,.csv">
               <button type="button" class="btn btn-success btn-sm"
@@ -222,6 +223,24 @@
             <div class="col-md-2">
               <label>Total Agreed Value</label>
               <input type="text" id="sum_agreed_value" class="form-control text-danger fw-bold" readonly>
+            </div>
+
+            {{-- ===== WEIGHTS: gold and parts shown separately ===== --}}
+            <div class="col-md-3 mt-3">
+              <label>Gold Wt <small class="text-muted">(items only, excl. parts)</small></label>
+              <input type="text" id="sum_gold_weight" class="form-control text-primary fw-bold" readonly>
+            </div>
+            <div class="col-md-3 mt-3">
+              <label>Total Diamond Wt <small class="text-muted">(Ct)</small></label>
+              <input type="text" id="sum_diamond_cts" class="form-control fw-bold" style="color:#0aa2c0" readonly>
+            </div>
+            <div class="col-md-3 mt-3">
+              <label>Total Stone Wt <small class="text-muted">(Ct)</small></label>
+              <input type="text" id="sum_stone_cts" class="form-control fw-bold" style="color:#6f42c1" readonly>
+            </div>
+            <div class="col-md-3 mt-3">
+              <label>Total Parts Wt <small class="text-muted">(Diamond + Stone, Ct)</small></label>
+              <input type="text" id="sum_parts_cts" class="form-control text-warning fw-bold" readonly>
             </div>
 
             {{-- ===== DISCOUNTS (same two levels as the Sale Invoice) ===== --}}
@@ -895,7 +914,8 @@ $(document).ready(function () {
 
     function calculateTotals() {
         let sumGross = 0, sumPurity = 0, sumMaking = 0,
-            sumMaterial = 0, sumParts = 0, sumAgreedGross = 0, sumNet = 0;
+            sumMaterial = 0, sumParts = 0, sumAgreedGross = 0, sumNet = 0,
+            sumGold = 0, sumDiaCts = 0, sumStoneCts = 0;
 
         $('#ConsignmentTable tr.item-row').each(function () {
             const baseGross = parseFloat($(this).find('.gross-weight').val()) || 0;
@@ -907,6 +927,9 @@ $(document).ready(function () {
             const calcGross = baseGross + (diaCTS / 5) + (stoneCTS / 5);
 
             sumGross    += calcGross;
+            sumGold     += baseGross;
+            sumDiaCts   += diaCTS;
+            sumStoneCts += stoneCTS;
             sumPurity   += parseFloat($(this).find('.purity-weight').val())  || 0;
             sumMaking   += parseFloat($(this).find('.making-value').val())   || 0;
             sumMaterial += parseFloat($(this).find('.material-value').val()) || 0;
@@ -920,6 +943,10 @@ $(document).ready(function () {
         });
 
         $('#sum_gross_weight').val(sumGross.toFixed(4));
+        $('#sum_gold_weight').val(sumGold.toFixed(4));
+        $('#sum_diamond_cts').val(sumDiaCts.toFixed(3));
+        $('#sum_stone_cts').val(sumStoneCts.toFixed(3));
+        $('#sum_parts_cts').val((sumDiaCts + sumStoneCts).toFixed(3));
         $('#sum_purity_weight').val(sumPurity.toFixed(4));
         $('#sum_making_value').val(sumMaking.toFixed(2));
         $('#sum_material_value').val(sumMaterial.toFixed(2));
@@ -1110,6 +1137,29 @@ $(document).ready(function () {
         });
     }
 });
+</script>
+
+{{-- Live item counter (header badge + floating pill) --}}
+<style>
+  .js-item-count-pill{position:fixed;right:18px;bottom:18px;z-index:1040;background:#0d6efd;color:#fff;
+    border-radius:999px;padding:8px 18px;font-weight:700;font-size:1rem;box-shadow:0 4px 14px rgba(0,0,0,.3);pointer-events:none}
+</style>
+<div class="js-item-count-pill" id="item_count_pill">Items: 0</div>
+<script>
+(function () {
+    var tbody = document.getElementById('ConsignmentTable');
+    if (!tbody) return;
+    function refresh() {
+        var rows   = tbody.querySelectorAll('tr.item-row');
+        var locked = tbody.querySelectorAll('tr.item-row.table-success, tr.item-row.table-warning').length;
+        var text   = 'Items: ' + rows.length + (locked ? ' (' + locked + ' sold/returned)' : '');
+        document.querySelectorAll('.js-item-count').forEach(function (el) { el.textContent = text; });
+        var pill = document.getElementById('item_count_pill');
+        if (pill) pill.textContent = text;
+    }
+    new MutationObserver(refresh).observe(tbody, { childList: true });
+    refresh();
+})();
 </script>
 
 @endsection
