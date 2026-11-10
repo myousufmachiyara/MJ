@@ -21740,3 +21740,7 @@ input[type="number"] {
     -moz-appearance: textfield;
 }
 
+.form-check-input{
+	height: 1.2em !important;
+	margin-top: 0.3em !important;
+}
