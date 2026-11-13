@@ -989,8 +989,13 @@ class SaleInvoiceController extends Controller
 
         // column widths (%): with the picture column Item Name / Description
         // give up some room so the table still adds up to the page width.
-        $wName = $showImages ? 15 : 18;
-        $wDesc = $showImages ? 18 : 22;
+        // MC (making cost) column + MC summary rows are shown only when the invoice
+        // was made with "VAT on Making cost only" ticked.
+        $showMC = (bool) ($invoice->invoice_vat_on_making ?? false);
+        $mc     = $showMC ? 1 : 0;
+        $wName  = $showImages ? 15 : 18;
+        $wDesc  = ($showImages ? 18 : 22) + ($showMC ? 0 : 6);   // the hidden MC column's 6% goes to Description
+        $mcTh   = $showMC ? '<th width="6%">MC</th>' : '';
         $picTh = $showImages ? '<th width="7%">Picture</th>' : '';
         $x     = $showImages ? 1 : 0;   // extra column count for colspans below
 
@@ -1008,7 +1013,7 @@ class SaleInvoiceController extends Controller
                     <th width="6%">995</th>
                     <th width="7%">Material</th>
                     <th width="8%">Material Val</th>
-                    <th width="6%">MC</th>
+                    ' . $mcTh . '
                     <th width="5%">VAT%</th>
                     <th width="7%">Item Total</th>
                 </tr>
@@ -1033,7 +1038,7 @@ class SaleInvoiceController extends Controller
                     <td width="6%">' . number_format($item->col_995 ?? 0, 3) . '</td>
                     <td width="7%">' . ucfirst($item->material_type) . '</td>
                     <td width="8%">' . number_format($item->material_value, 2) . '</td>
-                    <td width="6%">' . number_format($item->taxable_amount, 2) . '</td>
+                    ' . ($showMC ? '<td width="6%">' . number_format($item->taxable_amount, 2) . '</td>' : '') . '
                     <td width="5%">' . number_format($item->vat_percent, 0) . '%</td>
                     <td width="7%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
                 </tr>';
@@ -1045,14 +1050,14 @@ class SaleInvoiceController extends Controller
                     ? 'Discount (' . rtrim(rtrim(number_format((float) $item->discount_value, 2), '0'), '.') . '%)'
                     : 'Discount';
                 $html .= '<tr style="background-color:#fff8e6;font-style:italic;font-size:7px;">
-                            <td></td><td colspan="' . (9 + $x) . '" align="right"><b>' . $discLabel . ' (already deducted from Item Total):</b></td>
+                            <td></td><td colspan="' . (8 + $mc + $x) . '" align="right"><b>' . $discLabel . ' (already deducted from Item Total):</b></td>
                             <td colspan="2" align="right">-' . number_format((float) $item->discount_amount, 2) . '</td>
                           </tr>';
             }
 
             if ($hasParts) {
                 $html .= '<tr style="background-color:#f9f9f9;font-style:italic;font-size:7px;">
-                            <td></td><td colspan="' . (11 + $x) . '"><b>Parts Detail:</b></td>
+                            <td></td><td colspan="' . (10 + $mc + $x) . '"><b>Parts Detail:</b></td>
                           </tr>';
 
                 foreach ($item->parts as $part) {
@@ -1065,13 +1070,13 @@ class SaleInvoiceController extends Controller
                         <td width="' . $wDesc . '%" style="text-align:left;">' . htmlspecialchars($part->part_description ?? '') . '</td>
                         <td colspan="3">' . number_format($part->qty, 3) . ' Ct</td>
                         <td colspan="3">St.' . number_format($part->stone_qty ?? 0, 2) . '</td>
-                        <td colspan="3" style="font-weight:bold;" align="right">' . number_format($part->total, 2) . '</td>
+                        <td colspan="' . (2 + $mc) . '" style="font-weight:bold;" align="right">' . number_format($part->total, 2) . '</td>
                     </tr>';
                 }
 
                 $html .= '
                     <tr style="background-color:#eeeeee;font-weight:bold;font-size:8px;">
-                        <td colspan="' . (10 + $x) . '" align="right">Product Grand Total (Material + MC + Parts + VAT):</td>
+                        <td colspan="' . (9 + $mc + $x) . '" align="right">Product Grand Total (' . ($showMC ? 'Material + MC + Parts + VAT' : 'Material + Parts + VAT') . '):</td>
                         <td colspan="2" align="right">' . number_format($productTotal, 2) . '</td>
                     </tr>';
             }
@@ -1079,7 +1084,7 @@ class SaleInvoiceController extends Controller
 
         $html .= '
                 <tr style="font-weight:bold;background-color:#f5f5f5;">
-                    <td colspan="' . (11 + $x) . '" align="right">Net Invoice Amount</td>
+                    <td colspan="' . (10 + $mc + $x) . '" align="right">Net Invoice Amount</td>
                     <td align="right">' . number_format($invoice->net_amount, 2) . '</td>
                 </tr>
             </tbody>
@@ -1141,15 +1146,15 @@ class SaleInvoiceController extends Controller
                         <tr><td width="60%">Material Value</td>              <td width="40%" align="right">' . number_format($totalMaterialAed, 2) . '</td></tr>
                         <tr><td>Diamond Parts Val.</td>                      <td align="right">' . number_format($totalDiamondVal, 2) . '</td></tr>
                         <tr><td>Stone Parts Val.</td>                        <td align="right">' . number_format($totalStoneVal, 2) . '</td></tr>
-                        <tr><td>Making Charges (MC)</td>                     <td align="right">' . number_format($totalMakingAed, 2) . '</td></tr>
-                        <tr><td>VAT on MC</td>                               <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>'
+                        ' . ($showMC ? '<tr><td>Making Charges (MC)</td>                     <td align="right">' . number_format($totalMakingAed, 2) . '</td></tr>
+                        <tr><td>VAT on MC</td>                               <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>' : '')
                         . ($totalItemDiscount > 0 ? '<tr><td>Item Discounts</td><td align="right">-' . number_format($totalItemDiscount, 2) . '</td></tr>' : '')
                         . ($invoiceDiscount   > 0 ? '<tr><td>Invoice Discount' . (($invoice->discount_type ?? '') === 'percent' ? ' (' . rtrim(rtrim(number_format((float) $invoice->discount_value, 4), '0'), '.') . '%)' : '') . '</td><td align="right">-' . number_format($invoiceDiscount, 2) . '</td></tr>' : '')
-                        . '
-                        <tr style="font-weight:bold;background-color:#ddeeee;">
+                        . ($showMC ? '<tr style="font-weight:bold;background-color:#ddeeee;">
                             <td>Currency Payable (MC + Parts + VAT)</td>
                             <td align="right">' . number_format($totalCurrencyPayable, 2) . '</td>
-                        </tr>
+                        </tr>' : '')
+                        . '
                         <tr style="font-weight:bold;background-color:#eeeeee;">
                             <td>Invoice Total</td>
                             <td align="right">' . number_format($invoice->net_amount, 2) . '</td>
