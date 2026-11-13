@@ -891,7 +891,8 @@ class ConsignmentController extends Controller
             <strong>' . $direction . ':</strong><br>
             ' . e($consignment->partner->name ?? '-') . '<br>
             ' . e($consignment->partner->address ?? '') . '<br>
-            Tel: ' . e($consignment->partner->contact_no ?? '-') . '
+            Tel: ' . e($consignment->partner->contact_no ?? '-') . '<br>
+            TRN: ' . (trim((string) ($consignment->partner->trn ?? '')) !== '' ? e($consignment->partner->trn) : '-') . '
             </td>
             <td width="50%">
             <table border="1" cellpadding="3" width="100%" style="font-size:9px;">
@@ -1314,7 +1315,7 @@ class ConsignmentController extends Controller
         $partner = $consignment->partner;
         $put("A8:{$c['desc']}13",
             ($consignment->direction === 'inbound' ? 'Received From' : 'Delivered To') . ":\n" .
-            ($partner->name ?? '-') . "\n" . ($partner->address ?? '') . "\nTel: " . ($partner->contact_no ?? '-'),
+            ($partner->name ?? '-') . "\n" . ($partner->address ?? '') . "\nTel: " . ($partner->contact_no ?? '-') . "\nTRN: " . (trim((string) ($partner->trn ?? '')) !== '' ? $partner->trn : '-'),
             [$left]);
         $sheet->getStyle("A8:{$c['desc']}13")->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP);
 
