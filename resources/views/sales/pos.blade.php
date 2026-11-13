@@ -306,11 +306,19 @@ $(document).ready(function () {
     // discount_value, entered in the invoice's billing currency. The server
     // recalculates everything; this is only for the on-screen totals.
     function round2(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
-    function resolveDiscountJs(type, value, base) {
+    // Show an overall discount with up to 4 decimals (at least 2).
+    function fmtDisc(v) {
+        var s = (Math.round(((+v || 0) + Number.EPSILON) * 10000) / 10000).toFixed(4);
+        while (s.slice(-1) === '0' && s.split('.')[1].length > 2) s = s.slice(0, -1);
+        return s;
+    }
+    function resolveDiscountJs(type, value, base, dp) {
+        dp = (dp === undefined) ? 2 : dp;
         value = Math.max(0, parseFloat(value) || 0);
         if ((type !== 'amount' && type !== 'percent') || value <= 0 || base <= 0) return 0;
         const amount = type === 'percent' ? base * Math.min(value, 100) / 100 : value;
-        return round2(Math.min(amount, base));
+        const k = Math.pow(10, dp);
+        return Math.round((Math.min(amount, base) + Number.EPSILON) * k) / k;
     }
     function itemBase(item) { return priceIn(item, activeCurrency) || 0; }
     function itemDiscount(item) { return resolveDiscountJs(item.discount_type, item.discount_value, itemBase(item)); }
@@ -457,7 +465,7 @@ $(document).ready(function () {
         // on the remaining subtotal.
         const itemDiscTotal = cart.reduce((s, i) => s + itemDiscount(i), 0);
         const subtotal      = totalPrice - itemDiscTotal;
-        const invDisc       = resolveDiscountJs($('#pos_invoice_discount_type').val(), $('#pos_invoice_discount_value').val(), subtotal);
+        const invDisc       = resolveDiscountJs($('#pos_invoice_discount_type').val(), $('#pos_invoice_discount_value').val(), subtotal, 4);
         const netPayable    = round2(subtotal - invDisc);
         $('#pos_summary_item_disc').text(itemDiscTotal.toFixed(2));
         $('#pos_summary_subtotal').text(subtotal.toFixed(2));

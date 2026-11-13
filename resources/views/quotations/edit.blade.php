@@ -393,13 +393,21 @@ $(document).ready(function () {
     // ===== DISCOUNT HELPERS (mirror QuotationController::resolveDiscount / createItems) =====
     function round2(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
     function isMaterialPay() { return false; } // a quotation has no payment method
-    function resolveDiscountJs(type, value, base) {
+    // Show an overall discount with up to 4 decimals (at least 2).
+    function fmtDisc(v) {
+        var s = (Math.round(((+v || 0) + Number.EPSILON) * 10000) / 10000).toFixed(4);
+        while (s.slice(-1) === '0' && s.split('.')[1].length > 2) s = s.slice(0, -1);
+        return s;
+    }
+    function resolveDiscountJs(type, value, base, dp) {
+        dp = (dp === undefined) ? 2 : dp;
         value = Math.max(0, parseFloat(value) || 0);
         if ((type !== 'amount' && type !== 'percent') || value <= 0 || base <= 0) return 0;
         let amount;
         if (type === 'percent') { value = Math.min(value, 100); amount = base * value / 100; }
         else                    { amount = value; }
-        return round2(Math.min(amount, base));
+        const k = Math.pow(10, dp);
+        return Math.round((Math.min(amount, base) + Number.EPSILON) * k) / k;
     }
     // Item money with discount. For material-payment invoices the discount only
     // applies to the currency part (making + parts), never to the metal value.
@@ -1224,11 +1232,11 @@ $(document).ready(function () {
         // Invoice-level discount (mirrors QuotationController::applyInvoiceLevelDiscount):
         // base = whole net, or only the currency portion (making+parts+VAT) for material payments.
         const invDiscBase = isMaterialPay() ? sumCurrencyPortion : sumItemTotal;
-        const invDiscAmt  = resolveDiscountJs($('#invoice_discount_type').val(), $('#invoice_discount_value').val(), invDiscBase);
+        const invDiscAmt  = resolveDiscountJs($('#invoice_discount_type').val(), $('#invoice_discount_value').val(), invDiscBase, 4);
         const netAfter    = round2(sumItemTotal - invDiscAmt);
         $('#sum_item_discount').val(sumItemDisc.toFixed(2));
         $('#subtotal_before_invoice_discount').val(sumItemTotal.toFixed(2));
-        $('#invoice_discount_amount_display').val(invDiscAmt.toFixed(2));
+        $('#invoice_discount_amount_display').val(fmtDisc(invDiscAmt));
 
         $('#net_amount_display').val(netAfter.toFixed(4));
         $('#net_amount').val(netAfter.toFixed(4));

@@ -358,7 +358,7 @@
           @if($overallDisc > 0)
           <tr>
             <td colspan="{{ $leadCols }}" class="text-end fw-normal">
-              Overall discount{{ ($consignment->discount_type ?? '') === 'percent' ? ' (' . rtrim(rtrim(number_format($consignment->discount_value, 2), '0'), '.') . '%)' : '' }}
+              Overall discount{{ ($consignment->discount_type ?? '') === 'percent' ? ' (' . rtrim(rtrim(number_format($consignment->discount_value, 4), '0'), '.') . '%)' : '' }}
             </td>
             <td class="text-center text-danger fw-normal">− AED {{ number_format($overallDisc, 2) }}</td>
             <td colspan="2"></td>

@@ -611,7 +611,7 @@ class QuotationController extends Controller
                         <tr><td>Making Charges (MC)</td>                     <td align="right">' . number_format($totalMakingAed, 2) . '</td></tr>
                         <tr><td>VAT on MC</td>                               <td align="right">' . number_format($totalVatAed, 2) . '</td></tr>'
                         . ($totalItemDiscount > 0 ? '<tr><td>Item Discounts</td><td align="right">-' . number_format($totalItemDiscount, 2) . '</td></tr>' : '')
-                        . ($invoiceDiscount   > 0 ? '<tr><td>Invoice Discount' . (($invoice->discount_type ?? '') === 'percent' ? ' (' . rtrim(rtrim(number_format((float) $invoice->discount_value, 2), '0'), '.') . '%)' : '') . '</td><td align="right">-' . number_format($invoiceDiscount, 2) . '</td></tr>' : '')
+                        . ($invoiceDiscount   > 0 ? '<tr><td>Invoice Discount' . (($invoice->discount_type ?? '') === 'percent' ? ' (' . rtrim(rtrim(number_format((float) $invoice->discount_value, 4), '0'), '.') . '%)' : '') . '</td><td align="right">-' . number_format($invoiceDiscount, 2) . '</td></tr>' : '')
                         . '
                         <tr style="font-weight:bold;background-color:#ddeeee;">
                             <td>Currency Payable (MC + Parts + VAT)</td>
@@ -1041,7 +1041,7 @@ class QuotationController extends Controller
         }
         if ($invoiceDiscount > 0) {
             $pct = ($invoice->discount_type ?? '') === 'percent'
-                ? ' (' . rtrim(rtrim(number_format((float) $invoice->discount_value, 2), '0'), '.') . '%)'
+                ? ' (' . rtrim(rtrim(number_format((float) $invoice->discount_value, 4), '0'), '.') . '%)'
                 : '';
             $sumRows[] = ['Invoice Discount' . $pct, -1 * $invoiceDiscount, false];
         }
@@ -1286,7 +1286,7 @@ class QuotationController extends Controller
                     <table border="1" cellpadding="4" width="100%" style="font-size:9px;">
                         <tr style="background-color:#f5f5f5;"><td colspan="2" align="center"><b>Summary (' . $invoice->currency . ')</b></td></tr>'
                         . ((float) ($invoice->discount_amount ?? 0) > 0
-                            ? '<tr><td width="60%">Invoice Discount' . (($invoice->discount_type ?? '') === 'percent' ? ' (' . rtrim(rtrim(number_format((float) $invoice->discount_value, 2), '0'), '.') . '%)' : '') . '</td><td width="40%" align="right">-' . number_format((float) $invoice->discount_amount, 2) . '</td></tr>'
+                            ? '<tr><td width="60%">Invoice Discount' . (($invoice->discount_type ?? '') === 'percent' ? ' (' . rtrim(rtrim(number_format((float) $invoice->discount_value, 4), '0'), '.') . '%)' : '') . '</td><td width="40%" align="right">-' . number_format((float) $invoice->discount_amount, 2) . '</td></tr>'
                             : '')
                         . '
                         <tr style="font-weight:bold;background-color:#eeeeee;">
@@ -1500,7 +1500,8 @@ class QuotationController extends Controller
         [$type, $value, $amount] = $this->resolveDiscount(
             $request->invoice_discount_type,
             $request->invoice_discount_value,
-            $netBefore
+            $netBefore,
+            4   // overall discount keeps up to 4 decimals
         );
 
         $net    = round($netBefore - $amount, 2);
@@ -1527,7 +1528,7 @@ class QuotationController extends Controller
      * (type = amount|percent, value) + base -> [type|null, value, amount].
      * Never negative, never above the base.
      */
-    private function resolveDiscount($type, $value, float $base): array
+    private function resolveDiscount($type, $value, float $base, int $decimals = 2): array
     {
         $value = max(0.0, (float) $value);
 
@@ -1542,7 +1543,7 @@ class QuotationController extends Controller
             $amount = $value;
         }
 
-        return [$type, $value, round(min($amount, $base), 2)];
+        return [$type, $value, round(min($amount, $base), $decimals)];
     }
 
     private function storeAttachments(Request $request, Quotation $quotation): void

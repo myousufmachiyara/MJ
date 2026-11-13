@@ -1095,7 +1095,7 @@ class ConsignmentController extends Controller
         if ($totItemDisc > 0 || $overallDisc > 0) {
             $overallLabel = 'Overall Discount'
                 . (($consignment->discount_type ?? '') === 'percent'
-                    ? ' (' . rtrim(rtrim(number_format((float) $consignment->discount_value, 2), '0'), '.') . '%)'
+                    ? ' (' . rtrim(rtrim(number_format((float) $consignment->discount_value, 4), '0'), '.') . '%)'
                     : '');
             $discHtml = '
         <table border="1" cellpadding="4" width="100%" style="font-size:9px;margin-top:2px;">
@@ -1448,7 +1448,7 @@ class ConsignmentController extends Controller
         }
         if ($overallDisc > 0) {
             $pct = ($consignment->discount_type ?? '') === 'percent'
-                ? ' (' . rtrim(rtrim(number_format((float) $consignment->discount_value, 2), '0'), '.') . '%)'
+                ? ' (' . rtrim(rtrim(number_format((float) $consignment->discount_value, 4), '0'), '.') . '%)'
                 : '';
             $sumRows[] = ['Overall Discount' . $pct, -1 * $overallDisc, $FMT_MONEY, false];
             $sumRows[] = ['Net Total Agreed Val (AED)', $totAgreed - $overallDisc, $FMT_MONEY, true];
@@ -1626,7 +1626,7 @@ class ConsignmentController extends Controller
      * Never negative, never above the base. Same rules as
      * SaleInvoiceController::resolveDiscount().
      */
-    private function resolveDiscount($type, $value, float $base): array
+    private function resolveDiscount($type, $value, float $base, int $decimals = 2): array
     {
         $value = max(0.0, (float) $value);
 
@@ -1641,7 +1641,7 @@ class ConsignmentController extends Controller
             $amount = $value;
         }
 
-        return [$type, $value, round(min($amount, $base), 2)];
+        return [$type, $value, round(min($amount, $base), $decimals)];
     }
 
     /**
@@ -1657,7 +1657,8 @@ class ConsignmentController extends Controller
         [$type, $value, $amount] = $this->resolveDiscount(
             $request->input('overall_discount_type'),
             $request->input('overall_discount_value'),
-            $base
+            $base,
+            4   // overall discount keeps up to 4 decimals
         );
 
         $consignment->forceFill([

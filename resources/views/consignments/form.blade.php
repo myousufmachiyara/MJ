@@ -893,13 +893,21 @@ $(document).ready(function () {
 
     // ----- discount helpers (mirror ConsignmentController::resolveDiscount) -----
     function round2(v) { return Math.round((v + Number.EPSILON) * 100) / 100; }
-    function resolveDiscountJs(type, value, base) {
+    // Show an overall discount with up to 4 decimals (at least 2).
+    function fmtDisc(v) {
+        var s = (Math.round(((+v || 0) + Number.EPSILON) * 10000) / 10000).toFixed(4);
+        while (s.slice(-1) === '0' && s.split('.')[1].length > 2) s = s.slice(0, -1);
+        return s;
+    }
+    function resolveDiscountJs(type, value, base, dp) {
+        dp = (dp === undefined) ? 2 : dp;
         value = Math.max(0, parseFloat(value) || 0);
         if ((type !== 'amount' && type !== 'percent') || value <= 0 || base <= 0) return 0;
         let amount;
         if (type === 'percent') { value = Math.min(value, 100); amount = base * value / 100; }
         else                    { amount = value; }
-        return round2(Math.min(amount, base));
+        const k = Math.pow(10, dp);
+        return Math.round((Math.min(amount, base) + Number.EPSILON) * k) / k;
     }
 
     // Net Value of one row = Agreed Value (before discount) - item discount.
@@ -954,10 +962,10 @@ $(document).ready(function () {
 
         // discounts: item-wise (already inside the net values) + overall on top
         const itemDisc   = round2(sumAgreedGross - sumNet);
-        const overallAmt = resolveDiscountJs($('#overall_discount_type').val(), $('#overall_discount_value').val(), sumNet);
+        const overallAmt = resolveDiscountJs($('#overall_discount_type').val(), $('#overall_discount_value').val(), sumNet, 4);
         $('#sum_item_discount').val(itemDisc.toFixed(2));
         $('#subtotal_before_overall_discount').val(sumNet.toFixed(2));
-        $('#overall_discount_amount_display').val(overallAmt.toFixed(2));
+        $('#overall_discount_amount_display').val(fmtDisc(overallAmt));
         $('#sum_agreed_value').val(round2(sumNet - overallAmt).toFixed(2));
     }
 
