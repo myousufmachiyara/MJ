@@ -503,12 +503,13 @@ class ConsignmentController extends Controller
     // SETTLE ITEMS — called after sale invoice saved
     // =========================================================================
 
-    public static function settleItems(SaleInvoice $invoice): void
+    public static function settleItems(SaleInvoice $invoice): array
     {
         try {
             $invoice->loadMissing('items');
             $linkedId  = $invoice->consignment_id ?: null;
             $claimedIds = [];
+            $unmatched  = [];
 
             // A sale line can only settle an item that is still in stock, or one
             // this very invoice already settled (editing an invoice re-runs this).
@@ -542,22 +543,35 @@ class ConsignmentController extends Controller
                     }
                 }
 
-                // Fallback for lines that carry no usable barcode (typed by hand,
-                // or items saved before barcodes were stored): inside the LINKED
-                // consignment only, match on name + description, and only when the
-                // match is unambiguous.
-                if (!$found && $linkedId && trim((string) $saleItem->item_description) !== '') {
-                    $cands = ConsignmentItem::where('consignment_id', $linkedId)
-                        ->where($open)->whereNotIn('id', $claimedIds)
-                        ->where('item_description', trim($saleItem->item_description))
-                        ->when($saleItem->item_name, fn($q, $n) => $q->where('item_name', $n))
-                        ->get();
-                    if ($cands->count() === 1) {
-                        $found = $cands->first();
+                // Fallback for lines whose barcode did not match (typed by hand, edited,
+                // or saved before barcodes were stored). Only inside the LINKED consignment.
+                // Tier 1: same item name + description; tier 2: same description only.
+                // When several identical items remain, take the one whose gross weight
+                // is closest to the sale line, so duplicates are claimed one-by-one.
+                if (!$found && $linkedId) {
+                    $desc = trim((string) $saleItem->item_description);
+                    $tiers = [];
+                    if ($desc !== '' && trim((string) $saleItem->item_name) !== '') {
+                        $tiers[] = ['item_description' => $desc, 'item_name' => trim($saleItem->item_name)];
+                    }
+                    if ($desc !== '') {
+                        $tiers[] = ['item_description' => $desc];
+                    }
+                    foreach ($tiers as $where) {
+                        $cands = ConsignmentItem::where('consignment_id', $linkedId)
+                            ->where($open)->whereNotIn('id', $claimedIds)
+                            ->where($where)->get();
+                        if ($cands->isEmpty()) continue;
+                        $w = (float) $saleItem->gross_weight;
+                        $found = $cands->sortBy(fn($c) => abs((float) $c->gross_weight - $w))->first();
+                        break;
                     }
                 }
 
-                if (!$found) continue;
+                if (!$found) {
+                    $unmatched[] = trim(($saleItem->item_name ?? '') . ' ' . ($saleItem->item_description ?? '')) . ' [' . ($code !== '' ? $code : 'no barcode') . ']';
+                    continue;
+                }
 
                 $claimedIds[] = $found->id;
                 if ($found->item_status !== 'sold' || (int) $found->settled_by_sale_invoice_id !== (int) $invoice->id) {
@@ -576,8 +590,11 @@ class ConsignmentController extends Controller
             $ids = ConsignmentItem::where('settled_by_sale_invoice_id', $invoice->id)->pluck('consignment_id')
                 ->merge($linkedId ? [$linkedId] : [])->unique();
             Consignment::whereIn('id', $ids)->get()->each->recalcStatus();
+
+            return $unmatched;
         } catch (\Throwable $e) {
             Log::error('ConsignmentController::settleItems — ' . $e->getMessage(), ['invoice_id' => $invoice->id ?? null]);
+            return ['ERROR: ' . $e->getMessage()];
         }
     }
 

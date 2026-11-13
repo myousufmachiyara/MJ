@@ -26,9 +26,12 @@ class ResettleConsignments extends Command
 
         $n = 0;
         foreach ($q->get() as $invoice) {
-            ConsignmentController::settleItems($invoice);
+            $missed = ConsignmentController::settleItems($invoice);
             $n++;
-            $this->line("Processed {$invoice->invoice_no}");
+            $this->line("Processed {$invoice->invoice_no} (" . $invoice->items->count() . ' lines)');
+            foreach ($missed as $m) {
+                $this->warn("   not matched to a consignment item: {$m}");
+            }
         }
         $this->info("Done — {$n} invoice(s) processed.");
         return self::SUCCESS;
