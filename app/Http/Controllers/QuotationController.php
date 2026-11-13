@@ -468,7 +468,8 @@ class QuotationController extends Controller
                     ' . ($invoice->customer->name ?? '-') . '<br>
                     ' . ($invoice->customer->address ?? '-') . '<br>
                     Contact: ' . ($invoice->customer->contact_no ?? '-') . '<br>
-                    TRN: ' . ($invoice->customer->trn ?? '-') . '<br>
+                    TRN: ' . (trim((string) ($invoice->customer->trn ?? '')) !== '' ? e($invoice->customer->trn) : '-') . '<br>
+                    Ref: ' . (trim((string) ($invoice->customer->remarks ?? '')) !== '' ? e($invoice->customer->remarks) : '-') . '<br>
                 </td>
                 <td width="50%">
                     <table border="1" cellpadding="3" width="100%">
@@ -1116,7 +1117,7 @@ class QuotationController extends Controller
         $pdf = new myPDF();
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
-        $pdf->SetCreator('Yuneeq Fine JEWELRY');
+        $pdf->SetCreator('Yuneeq Fine Jewelry');
         $pdf->SetTitle($invoice->quotation_no . ' — Simple');
         $pdf->SetMargins(10, 10, 10);
         $pdf->setCellPadding(1.2);
@@ -1156,7 +1157,8 @@ class QuotationController extends Controller
                     ' . ($invoice->customer->name ?? 'Walk-in Customer') . '<br>
                     ' . ($invoice->customer->address ?? '') . '<br>
                     Contact: ' . ($invoice->customer->contact_no ?? '-') . '<br>
-                    <b>Ref:</b> ' . ($invoice->customer->remarks ?? '-') . '<br>
+                    TRN: ' . (trim((string) ($invoice->customer->trn ?? '')) !== '' ? e($invoice->customer->trn) : '-') . '<br>
+                    <b>Ref:</b> ' . (trim((string) ($invoice->customer->remarks ?? '')) !== '' ? e($invoice->customer->remarks) : '-') . '<br>
                 </td>
                 <td width="50%">
                     <table border="1" cellpadding="3" width="100%">
