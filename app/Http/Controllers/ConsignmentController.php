@@ -1132,9 +1132,9 @@ class ConsignmentController extends Controller
             </thead>
             <tbody>
                 <tr style="text-align:center;font-weight:bold;">
-                    <td>' . ($totItemDisc > 0 ? '-' : '') . number_format($totItemDisc, 2) . '</td>
-                    <td>' . ($overallDisc > 0 ? '-' : '') . number_format($overallDisc, 2) . '</td>
-                    <td style="background-color:#e8f5e9;">' . number_format($totAgreed - $overallDisc, 2) . '</td>
+                    <td width="34%">' . ($totItemDisc > 0 ? '-' : '') . number_format($totItemDisc, 2) . '</td>
+                    <td width="33%">' . ($overallDisc > 0 ? '-' : '') . number_format($overallDisc, 2) . '</td>
+                    <td width="33%" style="background-color:#e8f5e9;">' . number_format($totAgreed - $overallDisc, 2) . '</td>
                 </tr>
             </tbody>
         </table>';
