@@ -1285,14 +1285,14 @@ class ConsignmentController extends Controller
         if ($showImages) {
             $order[] = 'pic';
         }
-        $order = array_merge($order, ['name', 'desc', 'purity', 'gross', 'pwt', 'c995', 'mrate', 'mval', 'mat', 'matval', 'agreed']);
+        $order = array_merge($order, ['name', 'code', 'cert', 'desc', 'purity', 'gross', 'pwt', 'c995', 'mrate', 'mval', 'mat', 'matval', 'agreed']);
         $c = [];
         foreach ($order as $i => $key) {
             $c[$key] = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
         }
         $last = $c['agreed'];
 
-        $widths = ['no' => 5, 'pic' => 14, 'name' => 22, 'desc' => 26, 'purity' => 9, 'gross' => 10, 'pwt' => 10,
+        $widths = ['no' => 5, 'pic' => 14, 'name' => 22, 'code' => 16, 'cert' => 18, 'desc' => 26, 'purity' => 9, 'gross' => 10, 'pwt' => 10,
                    'c995' => 9, 'mrate' => 10, 'mval' => 11, 'mat' => 10, 'matval' => 12, 'agreed' => 14];
         foreach ($c as $key => $letter) {
             $sheet->getColumnDimension($letter)->setWidth($widths[$key]);
@@ -1353,7 +1353,7 @@ class ConsignmentController extends Controller
         // ── items table header (two rows, "Making" spans Rate + Value) ─────
         $hr = 15;
         $headers = [
-            'no' => '#', 'pic' => 'Picture', 'name' => 'Item Name', 'desc' => 'Description', 'purity' => 'Purity',
+            'no' => '#', 'pic' => 'Picture', 'name' => 'Item Name', 'code' => 'Item Code', 'cert' => 'Certificate #', 'desc' => 'Description', 'purity' => 'Purity',
             'gross' => 'Gross Wt', 'pwt' => 'Purity Wt', 'c995' => '995', 'mat' => 'Material',
             'matval' => 'Material Val', 'agreed' => 'Agreed Val',
         ];
@@ -1368,6 +1368,7 @@ class ConsignmentController extends Controller
         $put("{$c['mval']}"  . ($hr + 1), 'Value', [$thin, $headFill, $bold, $center]);
 
         // ── item rows ─────────────────────────────────────────────────────
+        $certs = $this->certificateMap($consignment->items->pluck('source_barcode'));
         $row = $hr + 2;
         foreach ($consignment->items as $index => $item) {
             $rowFill = match ($item->item_status) {
@@ -1378,6 +1379,8 @@ class ConsignmentController extends Controller
 
             $put("{$c['no']}{$row}", $index + 1, [$thin, $center]);
             $put("{$c['name']}{$row}",   (string) ($item->item_name ?: '-'), [$thin, $left]);
+            $put("{$c['code']}{$row}",   (string) (($item->source_barcode ?: $item->barcode_number) ?: '-'), [$thin, $left]);
+            $put("{$c['cert']}{$row}",   (string) ($certs->get($item->source_barcode) ?: '-'), [$thin, $left]);
             $put("{$c['desc']}{$row}",   (string) ($item->item_description ?: '-'), [$thin, $left]);
             $put("{$c['purity']}{$row}", (float) $item->purity,        [$thin, $center], $FMT_WT);
             $put("{$c['gross']}{$row}",  (float) $item->gross_weight,  [$thin, $center], $FMT_WT);
@@ -1423,7 +1426,7 @@ class ConsignmentController extends Controller
                 foreach ($item->parts as $part) {
                     $sheet->getStyle("A{$row}:" . ($showImages ? $c['pic'] : 'A') . "{$row}")->applyFromArray($thin);
                     $put("{$c['name']}{$row}", (string) ($part->item_name ?: 'Part'), [$thin, $italic, $left]);
-                    $put("{$c['desc']}{$row}", (string) ($part->part_description ?? ''), [$thin, $italic, $left]);
+                    $put("{$c['code']}{$row}:{$c['desc']}{$row}", (string) ($part->part_description ?? ''), [$thin, $italic, $left]);
                     $put("{$c['purity']}{$row}:{$c['gross']}{$row}", (float) $part->qty, [$thin, $italic, $center], '0.000" Ct"');
                     $put("{$c['pwt']}{$row}:{$c['c995']}{$row}", (float) $part->rate, [$thin, $italic, $center], '"Rate: "#,##0.00');
                     $put("{$c['mrate']}{$row}:{$c['mval']}{$row}", (float) ($part->stone_qty ?? 0), [$thin, $italic, $center], '"St. "0.00');
