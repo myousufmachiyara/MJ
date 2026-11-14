@@ -1089,6 +1089,30 @@ class ConsignmentController extends Controller
 
         $pdf->writeHTML($summaryHtml, true, false, false, false);
 
+        // weights: gold and parts (diamond / stone) shown separately, same as the form
+        $totDiaCt   = (float) $consignment->items->sum(fn($i) => $i->parts->sum('qty'));
+        $totStoneCt = (float) $consignment->items->sum(fn($i) => $i->parts->sum('stone_qty'));
+        $weightHtml = '
+        <table border="1" cellpadding="4" width="100%" style="font-size:9px;margin-top:2px;">
+            <thead>
+                <tr style="font-weight:bold;background-color:#f0f0f0;text-align:center;">
+                    <th width="25%">Gold Wt (g)</th>
+                    <th width="25%">Total Diamond Wt (Ct)</th>
+                    <th width="25%">Total Stone Wt (Ct)</th>
+                    <th width="25%">Total Parts Wt (Ct)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="text-align:center;font-weight:bold;">
+                    <td>' . number_format($totGross, 3) . '</td>
+                    <td>' . number_format($totDiaCt, 3) . '</td>
+                    <td>' . number_format($totStoneCt, 3) . '</td>
+                    <td>' . number_format($totDiaCt + $totStoneCt, 3) . '</td>
+                </tr>
+            </tbody>
+        </table>';
+        $pdf->writeHTML($weightHtml, true, false, false, false);
+
         // discounts: item-wise (already inside Agreed Val) + overall -> net total
         $totItemDisc = (float) $consignment->items->sum('discount_amount');
         $overallDisc = (float) ($consignment->discount_amount ?? 0);
@@ -1236,6 +1260,8 @@ class ConsignmentController extends Controller
         $totAgreed   = (float) $consignment->items->sum('agreed_value');
         $totItemDisc = (float) $consignment->items->sum(fn ($i) => (float) ($i->discount_amount ?? 0));
         $overallDisc = (float) ($consignment->discount_amount ?? 0);
+        $totDiaCt    = (float) $consignment->items->sum(fn ($i) => $i->parts->sum('qty'));
+        $totStoneCt  = (float) $consignment->items->sum(fn ($i) => $i->parts->sum('stone_qty'));
 
         // ── styling helpers (same look as the Sale Invoice export) ─────────
         $thin = ['borders' => ['allBorders' => [
@@ -1441,6 +1467,9 @@ class ConsignmentController extends Controller
         // ── summary (right side) ──────────────────────────────────────────
         $sumRows = [
             ['Total Gross Wt (g)',        $totGross,    $FMT_WT,    false],
+            ['Total Diamond Wt (Ct)',     $totDiaCt,    $FMT_WT,    false],
+            ['Total Stone Wt (Ct)',       $totStoneCt,  $FMT_WT,    false],
+            ['Total Parts Wt (Ct)',       $totDiaCt + $totStoneCt, $FMT_WT, false],
             ['Total Making Val (AED)',    $totMaking,   $FMT_MONEY, false],
             ['Total Material Val (AED)',  $totMaterial, $FMT_MONEY, false],
             ['Total Parts Val (AED)',     $totParts,    $FMT_MONEY, false],
