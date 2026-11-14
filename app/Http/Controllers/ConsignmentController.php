@@ -1453,10 +1453,9 @@ class ConsignmentController extends Controller
                     $sheet->getStyle("A{$row}:" . ($showImages ? $c['pic'] : 'A') . "{$row}")->applyFromArray($thin);
                     $put("{$c['name']}{$row}", (string) ($part->item_name ?: 'Part'), [$thin, $italic, $left]);
                     $put("{$c['code']}{$row}:{$c['desc']}{$row}", (string) ($part->part_description ?? ''), [$thin, $italic, $left]);
-                    $put("{$c['purity']}{$row}:{$c['gross']}{$row}", (float) $part->qty, [$thin, $italic, $center], '0.000" Ct"');
-                    $put("{$c['pwt']}{$row}:{$c['c995']}{$row}", (float) $part->rate, [$thin, $italic, $center], '"Rate: "#,##0.00');
-                    $put("{$c['mrate']}{$row}:{$c['mval']}{$row}", (float) ($part->stone_qty ?? 0), [$thin, $italic, $center], '"St. "0.00');
-                    $put("{$c['mat']}{$row}:{$c['matval']}{$row}", (float) ($part->stone_rate ?? 0), [$thin, $italic, $center], '"SR: "#,##0.00');
+                    // diamond / stone rates are intentionally not exported (same as the PDF)
+                    $put("{$c['purity']}{$row}:{$c['c995']}{$row}", (float) $part->qty, [$thin, $italic, $center], '0.000" Ct"');
+                    $put("{$c['mrate']}{$row}:{$c['matval']}{$row}", (float) ($part->stone_qty ?? 0), [$thin, $italic, $center], '"St. "0.00');
                     $put("{$c['agreed']}{$row}", (float) $part->total, [$thin, $italic, $right, $bold], $FMT_MONEY);
                     $row++;
                 }
