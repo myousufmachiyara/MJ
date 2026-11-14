@@ -531,7 +531,7 @@ class SaleInvoiceController extends Controller
 
     public function edit($id)
     {
-        $saleInvoice = SaleInvoice::with(['items.parts', 'attachments'])->findOrFail($id);
+        $saleInvoice = SaleInvoice::with(['items' => fn ($q) => $q->orderBy('id'), 'items.parts' => fn ($q) => $q->orderBy('id'), 'attachments'])->findOrFail($id);
         $purities    = Purity::all();
         $customers   = ChartOfAccounts::where('account_type', 'customer')->get();
         $banks       = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();
@@ -887,9 +887,9 @@ class SaleInvoiceController extends Controller
     {
         $invoice = SaleInvoice::with([
             'customer',
-            'items',
+            'items'       => fn ($q) => $q->orderBy('id'),
             'items.product.measurementUnit',
-            'items.parts',
+            'items.parts' => fn ($q) => $q->orderBy('id'),
             'items.parts.product.measurementUnit',
             'bank',
             'transferBank',
@@ -1248,9 +1248,9 @@ class SaleInvoiceController extends Controller
 
         $invoice = SaleInvoice::with([
             'customer',
-            'items',
+            'items'       => fn ($q) => $q->orderBy('id'),
             'items.product.measurementUnit',
-            'items.parts',
+            'items.parts' => fn ($q) => $q->orderBy('id'),
             'items.parts.product.measurementUnit',
             'bank',
             'transferBank',
@@ -2583,9 +2583,9 @@ class SaleInvoiceController extends Controller
     {
         $invoice = SaleInvoice::with([
             'customer',
-            'items',
+            'items'       => fn ($q) => $q->orderBy('id'),
             // FEATURE (parts on the B2C receipt): same relations print() loads.
-            'items.parts',
+            'items.parts' => fn ($q) => $q->orderBy('id'),
             'items.parts.product.measurementUnit',
             'bank',
             'transferBank',

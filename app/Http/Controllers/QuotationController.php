@@ -139,7 +139,7 @@ class QuotationController extends Controller
 
     public function edit($id)
     {
-        $quotation = Quotation::with(['items.parts', 'attachments'])->findOrFail($id);
+        $quotation = Quotation::with(['items' => fn ($q) => $q->orderBy('id'), 'items.parts' => fn ($q) => $q->orderBy('id'), 'attachments'])->findOrFail($id);
         $purities  = Purity::all();
         $customers = ChartOfAccounts::where('account_type', 'customer')->get();
         $products  = Product::with('measurementUnit')->get();
@@ -393,9 +393,9 @@ class QuotationController extends Controller
     {
         $invoice = Quotation::with([
             'customer',
-            'items',
+            'items'       => fn ($q) => $q->orderBy('id'),
             'items.product.measurementUnit',
-            'items.parts',
+            'items.parts' => fn ($q) => $q->orderBy('id'),
             'items.parts.product.measurementUnit',
         ])->findOrFail($id);
 
@@ -707,9 +707,9 @@ class QuotationController extends Controller
 
         $invoice = Quotation::with([
             'customer',
-            'items',
+            'items'       => fn ($q) => $q->orderBy('id'),
             'items.product.measurementUnit',
-            'items.parts',
+            'items.parts' => fn ($q) => $q->orderBy('id'),
             'items.parts.product.measurementUnit',
         ])->findOrFail($id);
 
@@ -1104,9 +1104,9 @@ class QuotationController extends Controller
     {
         $invoice = Quotation::with([
             'customer',
-            'items',
+            'items'       => fn ($q) => $q->orderBy('id'),
             // FEATURE (parts on the B2C receipt): same relations print() loads.
-            'items.parts',
+            'items.parts' => fn ($q) => $q->orderBy('id'),
             'items.parts.product.measurementUnit',
         ])->findOrFail($id);
 

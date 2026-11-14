@@ -99,7 +99,7 @@ class ConsignmentController extends Controller
 
     public function edit($id)
     {
-        $consignment = Consignment::with(['items.parts'])->findOrFail($id);
+        $consignment = Consignment::with(['items' => fn ($q) => $q->orderBy('id'), 'items.parts' => fn ($q) => $q->orderBy('id')])->findOrFail($id);
 
         if (!in_array($consignment->status, ['active', 'partially_settled'])) {
             return redirect()->route('consignments.show', $id)
@@ -857,7 +857,7 @@ class ConsignmentController extends Controller
 
     public function print(Request $request, $id)
     {
-        $consignment = Consignment::with(['partner', 'items.parts', 'createdBy'])->findOrFail($id);
+        $consignment = Consignment::with(['partner', 'items' => fn ($q) => $q->orderBy('id'), 'items.parts' => fn ($q) => $q->orderBy('id'), 'createdBy'])->findOrFail($id);
 
         // optional "Picture" column (see wantsPrintImages())
         $showImages = $this->wantsPrintImages($request);
@@ -1219,7 +1219,7 @@ class ConsignmentController extends Controller
             return back()->with('error', 'Excel export needs the phpoffice/phpspreadsheet package. Run: composer require phpoffice/phpspreadsheet');
         }
 
-        $consignment = Consignment::with(['partner', 'items.parts', 'createdBy'])->findOrFail($id);
+        $consignment = Consignment::with(['partner', 'items' => fn ($q) => $q->orderBy('id'), 'items.parts' => fn ($q) => $q->orderBy('id'), 'createdBy'])->findOrFail($id);
 
         try {
             $spreadsheet = $this->buildConsignmentSpreadsheet($consignment, $this->wantsPrintImages($request));
@@ -1526,7 +1526,8 @@ class ConsignmentController extends Controller
     {
         $consignment = Consignment::with([
             'partner',
-            'items.parts',
+            'items'       => fn ($q) => $q->orderBy('id'),
+            'items.parts' => fn ($q) => $q->orderBy('id'),
             'items.settledBySaleInvoice',
         ])->findOrFail($id);
 
@@ -1830,7 +1831,7 @@ class ConsignmentController extends Controller
     public function itemsForSale($id)
     {
         $consignment = Consignment::with(['items' => function ($q) {
-            $q->where('item_status', 'in_stock')->with('parts');
+            $q->where('item_status', 'in_stock')->orderBy('id')->with(['parts' => fn ($q) => $q->orderBy('id')]);
         }])->findOrFail($id);
 
         if ($consignment->direction !== 'outbound') {
