@@ -89,6 +89,14 @@ class PurchaseInvoiceController extends Controller
         // Pictures" and select the picture files — each is matched to its row
         // by this name (with or without the extension). If the column is left
         // empty the picture is matched by Certificate No, then by Item Name.
+        //
+        // ALTERNATIVELY: if you're building the import file in Excel yourself
+        // (not this downloaded CSV, since a CSV can't hold a picture), you can
+        // drop/paste an actual picture into a cell in the item's row instead
+        // of filling 'Image File' — Import Excel detects any picture embedded
+        // in the sheet and attaches it to that row automatically, matched by
+        // the row's Item Name. No separate "Import Pictures" step needed for
+        // those. This only works for a real .xlsx file, not .csv.
         $rows = [
             [
                 'Item Name', 'Description', 'Certificate No', 'Category Code', 'Subcategory Code', 'Tray No',
@@ -432,6 +440,145 @@ class PurchaseInvoiceController extends Controller
     }
 
     // =========================================================================
+    // EXTRACT IMAGES EMBEDDED IN AN IMPORTED EXCEL SHEET
+    // =========================================================================
+    // FEATURE: the "Import Excel" button already reads the sheet's row DATA
+    // entirely in the browser (SheetJS) — but SheetJS's free build cannot read
+    // pictures that are embedded/floating in the sheet, only cell values. So
+    // when the sheet is a real .xlsx (not .csv), the browser ALSO uploads the
+    // raw file here, where PhpSpreadsheet (already a dependency, via
+    // maatwebsite/excel) can read its drawing collection and pull each
+    // embedded picture out directly.
+    //
+    // Each picture is matched to a row by that row's "Item Name" cell (same
+    // row the picture is anchored to) so the browser can drop it straight
+    // into bulkPictures and reuse all of its existing matching/report code —
+    // no separate "Image File" column or manual "Import Pictures" step
+    // needed when the picture is embedded directly in a "Picture" column.
+    //
+    // Saved pictures are temporary: they live under storage/app/public/
+    // tmp_excel_images/<batch>/ only long enough for the browser to fetch
+    // them back as Files for the invoice form's own image inputs; nothing
+    // here is linked to the invoice itself. cleanupOldExtractedImages() below
+    // prunes anything older than a day so these don't pile up.
+    public function extractExcelImages(Request $request)
+    {
+        $file = $request->file('excel');
+
+        if (!$file || !$file->isValid()) {
+            return response()->json(['success' => false, 'images' => [], 'message' => 'No file received.'], 422);
+        }
+
+        $ext = strtolower($file->getClientOriginalExtension());
+        if (!in_array($ext, ['xlsx', 'xls'], true)) {
+            // .csv (and anything else) simply can't contain embedded pictures.
+            return response()->json(['success' => true, 'images' => []]);
+        }
+
+        $this->cleanupOldExtractedImages();
+
+        try {
+            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file->getRealPath());
+            $sheet       = $spreadsheet->getActiveSheet();
+
+            // Find which column the "Item Name" header is in (row 1), so each
+            // picture can be matched to the Item Name in its own row.
+            $itemNameCol = null;
+            $highestCol  = $sheet->getHighestColumn(1);
+            foreach ($sheet->getRowIterator(1, 1) as $headerRow) {
+                foreach ($headerRow->getCellIterator('A', $highestCol) as $cell) {
+                    if (strcasecmp(trim((string) $cell->getValue()), 'Item Name') === 0) {
+                        $itemNameCol = $cell->getColumn();
+                    }
+                }
+            }
+
+            $batch  = uniqid('x', true);
+            $dir    = 'tmp_excel_images/' . $batch;
+            $images = [];
+
+            foreach ($sheet->getDrawingCollection() as $drawing) {
+                $coords = $drawing->getCoordinates();
+                if (!preg_match('/^([A-Z]+)(\d+)$/i', $coords, $m)) {
+                    continue;
+                }
+                $rowNum = (int) $m[2];
+
+                $itemName = $itemNameCol ? (string) $sheet->getCell($itemNameCol . $rowNum)->getValue() : '';
+                if (trim($itemName) === '') {
+                    // a picture anchored to a row with no Item Name can't be
+                    // matched to anything — skip it rather than guess.
+                    continue;
+                }
+
+                [$contents, $imgExt] = $this->readDrawingContents($drawing);
+                if ($contents === null) {
+                    continue;
+                }
+
+                $filename = 'row' . $rowNum . '.' . $imgExt;
+                Storage::disk('public')->put($dir . '/' . $filename, $contents);
+
+                $images[] = [
+                    'row'  => $rowNum,
+                    'name' => $itemName,
+                    'url'  => Storage::disk('public')->url($dir . '/' . $filename),
+                ];
+            }
+
+            return response()->json(['success' => true, 'images' => $images]);
+        } catch (\Throwable $e) {
+            Log::warning('[PurchaseInvoice] extractExcelImages failed', ['message' => $e->getMessage()]);
+            // Non-fatal from the browser's point of view — Import Excel
+            // already finished with the row data; this only adds pictures.
+            return response()->json(['success' => false, 'images' => [], 'message' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Returns [binaryContents, fileExtension] for one embedded drawing, or
+     * [null, null] if it couldn't be read. Handles both the normal case (a
+     * picture embedded in the xlsx's zip, read via PhpSpreadsheet's Drawing
+     * class) and the rarer in-memory case (MemoryDrawing).
+     */
+    private function readDrawingContents($drawing): array
+    {
+        if ($drawing instanceof \PhpOffice\PhpSpreadsheet\Worksheet\MemoryDrawing) {
+            ob_start();
+            call_user_func($drawing->getRenderingFunction(), $drawing->getImageResource());
+            $contents = ob_get_clean();
+            return [$contents ?: null, 'png'];
+        }
+
+        if ($drawing instanceof \PhpOffice\PhpSpreadsheet\Worksheet\Drawing) {
+            $path = $drawing->getPath();
+            if (!$path || !@file_exists($path)) {
+                return [null, null];
+            }
+            $contents = @file_get_contents($path);
+            $imgExt   = strtolower(pathinfo($drawing->getFilename() ?: $path, PATHINFO_EXTENSION)) ?: 'png';
+            return [$contents !== false ? $contents : null, $imgExt];
+        }
+
+        return [null, null];
+    }
+
+    /** Deletes tmp_excel_images/* batches older than a day. */
+    private function cleanupOldExtractedImages(): void
+    {
+        try {
+            foreach (Storage::disk('public')->directories('tmp_excel_images') as $batchDir) {
+                $full = Storage::disk('public')->path($batchDir);
+                if (is_dir($full) && (time() - filemtime($full)) > 86400) {
+                    Storage::disk('public')->deleteDirectory($batchDir);
+                }
+            }
+        } catch (\Throwable $e) {
+            // best-effort only
+        }
+    }
+
+    // =========================================================================
     // UPDATE
     // =========================================================================
 
@@ -702,14 +849,14 @@ class PurchaseInvoiceController extends Controller
  
         $pdf->AddPage();
  
-        $logoPath = public_path('assets/img/mj-logo.png');
+        $logoPath = public_path('assets/img/mj-logo.jpeg');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="85">' : '';
         $pdf->writeHTML('
             <table width="100%" cellpadding="3">
                 <tr>
                     <td width="40%">' . $logoHtml . '</td>
                     <td width="60%" style="text-align:right;font-size:10px;">
-                        <strong>YUNEEQ FINE JEWELRY L.L.C</strong><br>
+                        <strong>YUNEEQ FINE JEWELLERY L.L.C</strong><br>
                         Suite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai<br>
                         TRN No: 104902647700003
                     </td>
@@ -1000,14 +1147,14 @@ class PurchaseInvoiceController extends Controller
         float $totalMaterial = 0,
         string $copyType = 'PARTY COPY'
     ): void {
-        $logoPath = public_path('assets/img/mj-logo.png');
+        $logoPath = public_path('assets/img/mj-logo.jpeg');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
  
         $pdf->writeHTML('
         <table width="100%" cellpadding="2"><tr>
             <td width="30%">' . $logoHtml . '</td>
             <td width="70%" style="text-align:right;font-size:9px;">
-                <strong style="font-size:12px;">YUNEEQ FINE JEWELRY L.L.C</strong><br>
+                <strong style="font-size:12px;">YUNEEQ FINE JEWELLERY L.L.C</strong><br>
                 M04 Al Buteen 2 Building, Old Baldiya Street, Gold Souq Gate 1 Dubai UAE.<br>
                 TRN: 104902647700003
             </td>
@@ -1111,7 +1258,7 @@ class PurchaseInvoiceController extends Controller
         $pdf->Line(65, $y, 95, $y);   $pdf->SetXY(65, $y + 1); $pdf->Cell(30, 5, 'Prepared By', 0, 0, 'C');
         $pdf->Line(110, $y, 140, $y); $pdf->SetXY(110, $y + 1); $pdf->Cell(30, 5, 'Checked By', 0, 0, 'C');
         $pdf->SetXY(150, $y - 9); $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->Cell(50, 3, 'For YUNEEQ FINE JEWELRY L L C', 0, 0, 'C');
+        $pdf->Cell(50, 3, 'For YUNEEQ FINE JEWELLERY L L C', 0, 0, 'C');
         $pdf->Line(155, $y, 195, $y); $pdf->SetXY(155, $y + 1);
         $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
     }
@@ -2126,14 +2273,14 @@ class PurchaseInvoiceController extends Controller
 
     private function renderMetalFixingPage($pdf, $invoice, $totalMaterialVal, string $copyType = 'PARTY COPY'): void
     {
-        $logoPath = public_path('assets/img/mj-logo.png');
+        $logoPath = public_path('assets/img/mj-logo.jpeg');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
 
         $pdf->writeHTML('
         <table width="100%" cellpadding="2"><tr>
             <td width="30%">' . $logoHtml . '</td>
             <td width="70%" style="text-align:right;font-size:9px;">
-                <strong style="font-size:12px;">YUNEEQ FINE JEWELRY L.L.C</strong><br>
+                <strong style="font-size:12px;">YUNEEQ FINE JEWELLERY L.L.C</strong><br>
                 M04 Al Buteen 2 Building, Old Baldiya Street, Gold Souq Gate 1 Dubai UAE.<br>
                 TRN: 104902647700003
             </td>
@@ -2210,13 +2357,13 @@ class PurchaseInvoiceController extends Controller
         $pdf->Line(65, $y, 95, $y);   $pdf->SetXY(65, $y + 1); $pdf->Cell(30, 5, 'For Accounts', 0, 0, 'C');
         $pdf->Line(110, $y, 140, $y); $pdf->SetXY(110, $y + 1); $pdf->Cell(30, 5, 'Checked By', 0, 0, 'C');
         $pdf->SetXY(150, $y - 9); $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->Cell(50, 3, 'For YUNEEQ FINE JEWELRY L L C', 0, 0, 'C');
+        $pdf->Cell(50, 3, 'For YUNEEQ FINE JEWELLERY L L C', 0, 0, 'C');
         $pdf->Line(155, $y, 195, $y); $pdf->SetXY(155, $y + 1);
         $pdf->SetFont('helvetica', '', 7); $pdf->Cell(40, 5, 'AUTHORISED SIGNATORY', 0, 0, 'C');
     }
 
     private function renderMaterialReceivingPage($pdf,$invoice,float $totalMaterialVal,string $copyType = 'PARTY COPY'): void {
-        $logoPath = public_path('assets/img/mj-logo.png');
+        $logoPath = public_path('assets/img/mj-logo.jpeg');
         $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="80">' : '';
 
         // ── Header ──
@@ -2224,7 +2371,7 @@ class PurchaseInvoiceController extends Controller
         <table width="100%" cellpadding="2"><tr>
             <td width="30%">' . $logoHtml . '</td>
             <td width="70%" style="text-align:right;font-size:9px;">
-                <strong style="font-size:12px;">YUNEEQ FINE JEWELRY L.L.C</strong><br>
+                <strong style="font-size:12px;">YUNEEQ FINE JEWELLERY L.L.C</strong><br>
                 M04 Al Buteen 2 Building, Old Baldiya Street, Gold Souq Gate 1 Dubai UAE.<br>
                 TRN: 104902647700003
             </td>
@@ -2245,7 +2392,7 @@ class PurchaseInvoiceController extends Controller
         <table width="100%" cellpadding="0"><tr>
             <td width="55%">
                 <b>From (Material Given By):</b><br>
-                <b>' . ($invoice->material_given_by ?? 'YUNEEQ FINE JEWELRY L.L.C') . '</b><br><br>
+                <b>' . ($invoice->material_given_by ?? 'YUNEEQ FINE JEWELLERY L.L.C') . '</b><br><br>
                 <b>To (Vendor / Received By):</b><br>
                 ' . ($invoice->vendor->name    ?? '-') . '<br>
                 ' . ($invoice->vendor->address ?? '-') . '<br>
@@ -2357,7 +2504,7 @@ class PurchaseInvoiceController extends Controller
 
         $pdf->SetXY(150, $y - 9);
         $pdf->SetFont('helvetica', 'B', 7);
-        $pdf->Cell(50, 3, 'For YUNEEQ FINE JEWELRY L L C', 0, 0, 'C');
+        $pdf->Cell(50, 3, 'For YUNEEQ FINE JEWELLERY L L C', 0, 0, 'C');
 
         $pdf->Line(150, $y, 195, $y);
         $pdf->SetXY(150, $y + 1);

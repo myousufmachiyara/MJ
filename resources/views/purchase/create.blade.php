@@ -144,7 +144,8 @@
               <h2 class="card-title">Invoice Items</h2>
               <div class="">
                 <input type="file" id="excel_import" class="d-none" accept=".xlsx, .xls, .csv">
-                <button type="button" class="btn btn-success" onclick="document.getElementById('excel_import').click()">
+                <button type="button" class="btn btn-success" onclick="document.getElementById('excel_import').click()"
+                        title="If the .xlsx file has a picture embedded in a row (e.g. a Picture column), it is detected and attached to that row automatically.">
                     <i class="fas fa-file-excel"></i> Import Excel
                 </button>
                 {{-- FEATURE: bulk pictures — matched to item rows by file name (Excel "Image File" column, else Cert. No, else Item Name) --}}
@@ -1538,10 +1539,65 @@
         openImportReport('<i class="fas fa-images text-warning"></i> Pictures', pictureSummaryHtml(sum));
     });
 
+    // FEATURE: pictures EMBEDDED in the Excel sheet itself (a floating
+    // picture dropped into a "Picture" column, as opposed to a plain text
+    // "Image File" column naming a separate file) — SheetJS (used below to
+    // read row data) cannot see these in its free build, so the raw file is
+    // also sent to the server, which uses PhpSpreadsheet to pull each
+    // picture out and match it to the Item Name in its own row. Runs in
+    // parallel with the row-data parse below; whichever finishes later just
+    // re-applies bulkPictures, so order doesn't matter. .csv files are
+    // skipped entirely since a CSV cannot contain an embedded picture.
+    function extractEmbeddedPictures(file) {
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        if (ext !== 'xlsx' && ext !== 'xls') return;
+
+        const status = $('#bulkImagesStatus');
+        status.text('Scanning sheet for embedded pictures…');
+
+        const fd = new FormData();
+        fd.append('excel', file);
+
+        fetch('{{ route('purchase_invoices.extract_excel_images') }}', {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+            body: fd,
+        })
+        .then(r => r.json())
+        .then(async (res) => {
+            const list = (res && res.images) || [];
+            if (!list.length) { status.text(''); return; }
+
+            let added = 0;
+            for (const img of list) {
+                try {
+                    const blobRes  = await fetch(img.url);
+                    const blob     = await blobRes.blob();
+                    const extGuess = (blob.type && blob.type.split('/')[1]) || 'jpg';
+                    const key      = normalizeRefKey(img.name || img.row);
+                    if (!key) continue;
+                    const f = new File([blob], (img.name || ('row' + img.row)).toString().trim() + '.' + extGuess, { type: blob.type || 'image/jpeg' });
+                    bulkPictures = bulkPictures.filter(p => p.key !== key).concat([{ key, name: f.name, file: f }]);
+                    added++;
+                } catch (e) { /* skip this one, keep going */ }
+            }
+
+            if (added) {
+                applyBulkPictures();
+                status.text(added + ' embedded picture(s) found in the sheet and attached.');
+            } else {
+                status.text('');
+            }
+        })
+        .catch(() => { status.text(''); });
+    }
+
     function runExcelImport(file, mode) {
         const unmatchedPurityRows   = [];
         const categorySubWarnings   = [];
         const importRows            = [];   // for the on-screen report
+
+        extractEmbeddedPictures(file);
 
         const reader = new FileReader();
         reader.onload = function(e) {
