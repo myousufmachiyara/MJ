@@ -1147,6 +1147,18 @@ class ConsignmentController extends Controller
             $pdf->MultiCell(0, 4, 'Remarks: ' . $consignment->remarks, 0, 'L');
         }
 
+        // ── Signature block — keep the line and its label on the same page ──────
+        // Line() never triggers TCPDF's auto page-break (only text-writing calls
+        // like Cell()/MultiCell() do), so without this check a line drawn near
+        // the bottom of the page would render there while the label Cell() right
+        // after it auto-breaks onto the next page — splitting the two apart.
+        // Same guard pattern used above for the item rows.
+        $sigBlockHeight = 20 /* Ln gap before the line */ + 6 /* line + label row */;
+        $sigAvailable   = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
+        if ($sigBlockHeight > $sigAvailable) {
+            $pdf->AddPage();
+        }
+
         $pdf->Ln(20);
         $y = $pdf->GetY();
         $pdf->Line(20,  $y, 85,  $y);
