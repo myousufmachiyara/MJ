@@ -1147,19 +1147,30 @@ class ConsignmentController extends Controller
             $pdf->MultiCell(0, 4, 'Remarks: ' . $consignment->remarks, 0, 'L');
         }
 
-        // ── Signature block — keep the line and its label on the same page ──────
+        // ── Signature block — keep the line and its label together, without ─────
+        // stranding them alone on an otherwise-blank new page.
         // Line() never triggers TCPDF's auto page-break (only text-writing calls
-        // like Cell()/MultiCell() do), so without this check a line drawn near
-        // the bottom of the page would render there while the label Cell() right
-        // after it auto-breaks onto the next page — splitting the two apart.
-        // Same guard pattern used above for the item rows.
-        $sigBlockHeight = 20 /* Ln gap before the line */ + 6 /* line + label row */;
-        $sigAvailable   = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
-        if ($sigBlockHeight > $sigAvailable) {
+        // like Cell()/MultiCell() do), so a line drawn near the bottom of the
+        // page would render there while the label Cell() right after it
+        // auto-breaks onto the next page — splitting the two apart. That's what
+        // the previous fix stopped. But it did so by requiring the FULL 20mm
+        // decorative gap to be free too, which forced a page break (and left a
+        // near-empty page behind) even when there was still plenty of room for
+        // the line + label itself. Now: only break to a new page when there
+        // isn't even room for the line + label (a small minimum); otherwise
+        // shrink the gap above it so it still lands on the current page.
+        $sigRowHeight = 6;  // line + label row itself
+        $sigMinGap    = 4;  // smallest acceptable breathing room above it
+        $sigAvailable = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
+
+        if ($sigAvailable < $sigRowHeight + $sigMinGap) {
             $pdf->AddPage();
+            $gap = 10; // fresh page already has plenty of room above the block
+        } else {
+            $gap = min(20, $sigAvailable - $sigRowHeight);
         }
 
-        $pdf->Ln(20);
+        $pdf->Ln($gap);
         $y = $pdf->GetY();
         $pdf->Line(20,  $y, 85,  $y);
         $pdf->Line(125, $y, 190, $y);
