@@ -1147,24 +1147,30 @@ class ConsignmentController extends Controller
             $pdf->MultiCell(0, 4, 'Remarks: ' . $consignment->remarks, 0, 'L');
         }
 
-        // ── Signature block — keep the line and its label together, without ─────
-        // stranding them alone on an otherwise-blank new page.
-        // Line() never triggers TCPDF's auto page-break (only text-writing calls
-        // like Cell()/MultiCell() do), so a line drawn near the bottom of the
-        // page would render there while the label Cell() right after it
-        // auto-breaks onto the next page — splitting the two apart.
+        // ── Signature block — keep both lines and both labels together as one ───
+        // unit, without stranding them alone on an otherwise-blank new page.
         //
-        // myPDF never sets its own bottom margin / auto-break margin, so
-        // getBreakMargin() falls back to TCPDF's library default (~25mm) —
-        // much bigger than the 10mm margin actually used everywhere else in
-        // this document (SetMargins(10, 10, 10) above). Reserving 25mm instead
-        // of 10mm was pushing the block to a new page even when there was
-        // still plenty of real room, leaving that extra page mostly blank. Use
-        // the document's real bottom margin (10mm) instead, and only break to
-        // a new page when there truly isn't room for the line + label even
-        // with a tight gap above it.
+        // Why this needs manual handling: TCPDF's own auto page-break is still
+        // switched on at this point, and it was firing in the MIDDLE of this
+        // block — e.g. after the "Partner Signature" line+label rendered fine,
+        // the "Authorized Signature" Cell() call alone would trigger it, even
+        // though both use the exact same $y. The two halves then ended up on
+        // different pages: "Partner Signature" at the bottom of page 1, and
+        // the "Authorized Signature" line + label at the very top of page 2
+        // (TCPDF resets Y to the page top on break, but our already-computed
+        // $y, $gap etc. don't know that happened).
+        //
+        // myPDF also never sets its own bottom margin, so TCPDF's auto-break
+        // margin defaults to its library value (~25mm) — much bigger than the
+        // 10mm margin used everywhere else in this document — which was also
+        // forcing a break onto a near-empty page even when there was plenty
+        // of real room left.
+        //
+        // Fix: decide for ourselves, once, whether the whole block fits using
+        // the document's real 10mm bottom margin, then turn auto page-break
+        // off while drawing it, so TCPDF cannot split it partway through.
         $pageBottomMargin = 10; // matches SetMargins(10, 10, 10) above
-        $sigRowHeight      = 6;  // line + label row itself
+        $sigRowHeight      = 6;  // both lines + both labels sit on one row
         $sigMinGap         = 4;  // smallest acceptable breathing room above it
         $sigAvailable      = $pdf->getPageHeight() - $pdf->GetY() - $pageBottomMargin;
 
@@ -1175,6 +1181,9 @@ class ConsignmentController extends Controller
             $gap = min(20, $sigAvailable - $sigRowHeight);
         }
 
+        $autoBreak = $pdf->getAutoPageBreak();
+        $pdf->SetAutoPageBreak(false);
+
         $pdf->Ln($gap);
         $y = $pdf->GetY();
         $pdf->Line(20,  $y, 85,  $y);
@@ -1182,6 +1191,8 @@ class ConsignmentController extends Controller
         $pdf->SetFont('helvetica', '', 9);
         $pdf->SetXY(20,  $y + 1); $pdf->Cell(65, 5, 'Partner Signature',    0, 0, 'C');
         $pdf->SetXY(125, $y + 1); $pdf->Cell(65, 5, 'Authorized Signature', 0, 0, 'C');
+
+        $pdf->SetAutoPageBreak($autoBreak, $pdf->getBreakMargin());
 
         return $pdf->Output($consignment->consignment_no . '.pdf', 'I');
     }
