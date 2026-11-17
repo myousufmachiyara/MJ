@@ -1152,16 +1152,21 @@ class ConsignmentController extends Controller
         // Line() never triggers TCPDF's auto page-break (only text-writing calls
         // like Cell()/MultiCell() do), so a line drawn near the bottom of the
         // page would render there while the label Cell() right after it
-        // auto-breaks onto the next page — splitting the two apart. That's what
-        // the previous fix stopped. But it did so by requiring the FULL 20mm
-        // decorative gap to be free too, which forced a page break (and left a
-        // near-empty page behind) even when there was still plenty of room for
-        // the line + label itself. Now: only break to a new page when there
-        // isn't even room for the line + label (a small minimum); otherwise
-        // shrink the gap above it so it still lands on the current page.
-        $sigRowHeight = 6;  // line + label row itself
-        $sigMinGap    = 4;  // smallest acceptable breathing room above it
-        $sigAvailable = $pdf->getPageHeight() - $pdf->GetY() - $pdf->getBreakMargin();
+        // auto-breaks onto the next page — splitting the two apart.
+        //
+        // myPDF never sets its own bottom margin / auto-break margin, so
+        // getBreakMargin() falls back to TCPDF's library default (~25mm) —
+        // much bigger than the 10mm margin actually used everywhere else in
+        // this document (SetMargins(10, 10, 10) above). Reserving 25mm instead
+        // of 10mm was pushing the block to a new page even when there was
+        // still plenty of real room, leaving that extra page mostly blank. Use
+        // the document's real bottom margin (10mm) instead, and only break to
+        // a new page when there truly isn't room for the line + label even
+        // with a tight gap above it.
+        $pageBottomMargin = 10; // matches SetMargins(10, 10, 10) above
+        $sigRowHeight      = 6;  // line + label row itself
+        $sigMinGap         = 4;  // smallest acceptable breathing room above it
+        $sigAvailable      = $pdf->getPageHeight() - $pdf->GetY() - $pageBottomMargin;
 
         if ($sigAvailable < $sigRowHeight + $sigMinGap) {
             $pdf->AddPage();
