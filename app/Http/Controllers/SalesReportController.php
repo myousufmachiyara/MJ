@@ -118,8 +118,23 @@ class SalesReportController extends Controller
                 </thead>
                 <tbody>';
 
+            // FIX (returned items still showing in the Profit report): the
+            // bottom TOTAL row already nets out any item since returned via
+            // Sale Return (see calcInvoiceProfit), but this per-item loop
+            // used to list every item at its full original value regardless
+            // — so a returned item still showed up here with its original
+            // profit, contradicting the netted total right below it. Pull
+            // out the returned ones, skip them from the normal rows, and
+            // list them separately so it's clear why they're excluded.
+            $returnedItemIds = SaleReturnItem::whereIn('sale_invoice_item_id', $invoice->items->pluck('id'))
+                ->pluck('sale_invoice_item_id')->flip();
+
             $rowNum = 1;
             foreach ($invoice->items as $item) {
+                if ($returnedItemIds->has($item->id)) {
+                    continue;
+                }
+
                 $purityWt    = (float) $item->purity_weight;
                 $grossWt     = (float) $item->gross_weight;
                 $costItem    = ($purGoldR * $purityWt) + ($grossWt * $purMkR);
@@ -143,6 +158,27 @@ class SalesReportController extends Controller
                         <td style="color:' . $marginColor . ';font-weight:bold;">' . number_format($profitItem, 2) . '</td>
                         <td style="color:' . $marginColor . ';">' . $marginItem . '%</td>
                     </tr>';
+            }
+
+            if ($returnedItemIds->count() > 0) {
+                foreach ($invoice->items as $item) {
+                    if (!$returnedItemIds->has($item->id)) {
+                        continue;
+                    }
+                    $html .= '
+                    <tr style="text-align:center;color:#999;font-style:italic;">
+                        <td>' . $rowNum++ . '</td>
+                        <td style="text-align:left;">' . ($item->item_name ?: '-') . ' (Returned)</td>
+                        <td>' . number_format((float) $item->gross_weight, 3) . '</td>
+                        <td>' . number_format((float) $item->purity_weight, 3) . '</td>
+                        <td>' . number_format($item->material_value, 2) . '</td>
+                        <td>' . number_format($item->making_value, 2) . '</td>
+                        <td>' . number_format($item->parts_total ?? 0, 2) . '</td>
+                        <td>' . number_format($item->vat_amount, 2) . '</td>
+                        <td>' . number_format($item->item_total, 2) . '</td>
+                        <td colspan="3" style="text-align:center;">Excluded from profit — returned</td>
+                    </tr>';
+                }
             }
 
             $marginColor = $margin >= 0 ? '#198754' : '#dc3545';
