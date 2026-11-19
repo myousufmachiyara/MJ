@@ -429,19 +429,19 @@ class SaleReturnController extends Controller
 
             $html .= '
             <tr style="text-align:center;">
-                <td>' . ($index + 1) . '</td>
-                <td style="text-align:left;">' . ($item->item_name ?? '-') . '</td>
-                <td style="text-align:left;">' . ($item->item_description ?? '-') . '</td>
-                <td>' . number_format($item->gross_weight,  3) . '</td>
-                <td>' . number_format($item->purity,        3) . '</td>
-                <td>' . number_format($item->purity_weight, 3) . '</td>
-                <td>' . number_format($item->col_995,       3) . '</td>
-                <td>' . number_format($item->making_rate,   2) . '</td>
-                <td>' . number_format($item->making_value,  2) . '</td>
-                <td>' . ucfirst($item->material_type)          . '</td>
-                <td>' . number_format($item->material_value, 2) . '</td>
-                <td>' . number_format($item->vat_percent,   0) . '%</td>
-                <td style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
+                <td width="3%">' . ($index + 1) . '</td>
+                <td width="12%" style="text-align:left;">' . ($item->item_name ?? '-') . '</td>
+                <td width="10%" style="text-align:left;">' . ($item->item_description ?? '-') . '</td>
+                <td width="6%">' . number_format($item->gross_weight,  3) . '</td>
+                <td width="6%">' . number_format($item->purity,        3) . '</td>
+                <td width="7%">' . number_format($item->purity_weight, 3) . '</td>
+                <td width="6%">' . number_format($item->col_995,       3) . '</td>
+                <td width="6%">' . number_format($item->making_rate,   2) . '</td>
+                <td width="7%">' . number_format($item->making_value,  2) . '</td>
+                <td width="8%">' . ucfirst($item->material_type)          . '</td>
+                <td width="8%">' . number_format($item->material_value, 2) . '</td>
+                <td width="5%">' . number_format($item->vat_percent,   0) . '%</td>
+                <td width="8%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
             </tr>';
 
             if ($hasParts) {
