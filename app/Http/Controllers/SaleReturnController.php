@@ -414,7 +414,7 @@ class SaleReturnController extends Controller
                     <th width="13%" colspan="2">Making</th>
                     <th width="7%"  rowspan="2">Material</th>
                     <th width="8%"  rowspan="2">Material Val</th>
-                    <th width="5%"  rowspan="2">VAT%</th>
+                    <th width="6%"  rowspan="2">VAT%</th>
                     <th width="8%"  rowspan="2">Item Total</th>
                 </tr>
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
@@ -440,7 +440,7 @@ class SaleReturnController extends Controller
                 <td width="7%">' . number_format($item->making_value,  2) . '</td>
                 <td width="7%">' . ucfirst($item->material_type)          . '</td>
                 <td width="8%">' . number_format($item->material_value, 2) . '</td>
-                <td width="5%">' . number_format($item->vat_percent,   0) . '%</td>
+                <td width="6%">' . number_format($item->vat_percent,   0) . '%</td>
                 <td width="8%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
             </tr>';
 
