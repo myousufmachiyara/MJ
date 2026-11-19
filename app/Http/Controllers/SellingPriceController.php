@@ -29,6 +29,12 @@ use Illuminate\Support\Facades\DB;
  * barcode_number (this app's only purchase<->sale link — see
  * ReformatPurchaseItemBarcodes's docblock for background). No new column
  * or stock table is introduced.
+ *
+ * FIX (returned items should show up here too): a SaleInvoiceItem that has
+ * since been matched by a SaleReturnItem means that specific sale was
+ * reversed — the item is back in stock, so it no longer counts as "sold"
+ * for any of the three places below (the list, bulkUpdate()'s guard, and
+ * import()'s guard). Same definition as SaleInvoiceItem::currentlySoldFor().
  */
 class SellingPriceController extends Controller
 {
@@ -48,14 +54,21 @@ class SellingPriceController extends Controller
             ->whereNotNull('barcode_number')
             // "Not sold yet" — identical definition to SaleInvoiceController::
             // posScan()'s already-sold guard: no SaleInvoiceItem exists with
-            // this same barcode_number. whereNotExists (rather than
-            // whereNotIn + a full pluck of every sold barcode) keeps this a
-            // single indexed correlated subquery regardless of how many
-            // items have ever been sold.
+            // this same barcode_number THAT HASN'T SINCE BEEN RETURNED.
+            // whereNotExists (rather than whereNotIn + a full pluck of every
+            // sold barcode) keeps this a single indexed correlated subquery
+            // regardless of how many items have ever been sold; the nested
+            // whereNotExists is the same "...unless a SaleReturnItem matches
+            // it" check SaleInvoiceItem::currentlySoldFor() does in PHP.
             ->whereNotExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('sale_invoice_items')
-                    ->whereColumn('sale_invoice_items.barcode_number', 'purchase_invoice_items.barcode_number');
+                    ->whereColumn('sale_invoice_items.barcode_number', 'purchase_invoice_items.barcode_number')
+                    ->whereNotExists(function ($returned) {
+                        $returned->select(DB::raw(1))
+                            ->from('sale_return_items')
+                            ->whereColumn('sale_return_items.sale_invoice_item_id', 'sale_invoice_items.id');
+                    });
             })
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
@@ -110,13 +123,20 @@ class SellingPriceController extends Controller
         // FEATURE (bulk Selling Price update): guard against saving a price
         // onto an item that got sold by someone else between this screen
         // loading and this save (e.g. sold from POS in another tab) — same
-        // "already sold" definition as index()/posScan().
+        // "already sold" definition as index()/posScan() (and, per the FIX
+        // above, an item whose sale has since been returned is NOT counted
+        // as sold here either).
         $ids = collect($validated['items'])->pluck('id')->all();
         $alreadySoldBarcodes = PurchaseInvoiceItem::whereIn('id', $ids)
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('sale_invoice_items')
-                    ->whereColumn('sale_invoice_items.barcode_number', 'purchase_invoice_items.barcode_number');
+                    ->whereColumn('sale_invoice_items.barcode_number', 'purchase_invoice_items.barcode_number')
+                    ->whereNotExists(function ($returned) {
+                        $returned->select(DB::raw(1))
+                            ->from('sale_return_items')
+                            ->whereColumn('sale_return_items.sale_invoice_item_id', 'sale_invoice_items.id');
+                    });
             })
             ->pluck('barcode_number', 'id');
 
@@ -235,7 +255,10 @@ class SellingPriceController extends Controller
                     continue;
                 }
 
-                $isSold = DB::table('sale_invoice_items')->where('barcode_number', $item->barcode_number)->exists();
+                // FIX: an item whose sale has since been returned is back in
+                // stock — currentlySoldFor() accounts for that (see its
+                // docblock on SaleInvoiceItem), so it's no longer skipped here.
+                $isSold = SaleInvoiceItem::currentlySoldFor($item->barcode_number) !== null;
                 if ($isSold) {
                     $alreadySold[] = $barcode;
                     continue;
