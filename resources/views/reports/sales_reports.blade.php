@@ -29,6 +29,11 @@
         Payment Summary
       </a>
     </li>
+    <li class="nav-item">
+      <a class="nav-link {{ $tab==='SRN'?'active':'' }}" href="{{ route('reports.sale', ['tab'=>'SRN','from_date'=>$from,'to_date'=>$to]) }}">
+        Sales Return
+      </a>
+    </li>
   </ul>
 
   <div class="tab-content mt-3">
@@ -216,6 +221,7 @@
             <tr>
               <th>Invoice No</th><th>Date</th><th>Customer</th><th>Currency</th>
               <th class="text-end">Revenue</th><th class="text-end">Revenue AED</th>
+              <th class="text-end">Returned</th>
               <th class="text-end">Cost</th>
               <th class="text-end">Profit</th><th class="text-end">Margin %</th>
               <th>Print</th>
@@ -231,6 +237,9 @@
                 <td>{{ $row['currency'] }}</td>
                 <td class="text-end">{{ number_format($row['revenue'], 2) }}</td>
                 <td class="text-end">{{ number_format($row['revenue_aed'], 2) }}</td>
+                <td class="text-end {{ $row['returned_amount'] > 0 ? 'text-warning' : '' }}">
+                  {{ $row['returned_amount'] > 0 ? number_format($row['returned_amount'], 2) : '-' }}
+                </td>
                 <td class="text-end">{{ number_format($row['cost'], 2) }}</td>
                 <td class="text-end {{ $mc }} fw-bold">{{ number_format($row['profit'], 2) }}</td>
                 <td class="text-end {{ $mc }}">{{ $row['margin'] }}%</td>
@@ -242,7 +251,7 @@
                 </td>
               </tr>
             @empty
-              <tr><td colspan="10" class="text-center text-muted">No profit data found.</td></tr>
+              <tr><td colspan="11" class="text-center text-muted">No profit data found.</td></tr>
             @endforelse
           </tbody>
           @if($profitReport->count())
@@ -251,6 +260,7 @@
               <td colspan="4">Totals</td>
               <td></td>
               <td class="text-end">{{ number_format($profitReport->sum('revenue_aed'), 2) }}</td>
+              <td class="text-end">{{ number_format($profitReport->sum('returned_amount'), 2) }}</td>
               <td class="text-end">{{ number_format($profitReport->sum('cost'), 2) }}</td>
               <td class="text-end {{ $profitReport->sum('profit') >= 0 ? 'text-success' : 'text-danger' }}">
                 {{ number_format($profitReport->sum('profit'), 2) }}
@@ -385,6 +395,81 @@
               <td></td>
               <td class="text-end">{{ number_format($paymentSummary->sum('net_amount_aed'), 2) }}</td>
               <td colspan="4"></td>
+            </tr>
+          </tfoot>
+          @endif
+        </table>
+      </div>
+    </div>
+
+    {{-- ================================================================== --}}
+    {{-- 6. SALES RETURN REGISTER                                            --}}
+    {{-- ================================================================== --}}
+    <div id="SRN" class="tab-pane fade {{ $tab==='SRN'?'show active':'' }}">
+      <form method="GET" action="{{ route('reports.sale') }}" class="row g-2 mb-3">
+        <input type="hidden" name="tab" value="SRN">
+        <div class="col-md-2"><input type="date" name="from_date" class="form-control" value="{{ $from }}"></div>
+        <div class="col-md-2"><input type="date" name="to_date" class="form-control" value="{{ $to }}"></div>
+        <div class="col-md-3">
+          <select name="customer_id" data-plugin-selecttwo class="form-control select2-js">
+            <option value="">-- All Customers --</option>
+            @foreach($customers as $c)
+              <option value="{{ $c->id }}" {{ $customerId==$c->id?'selected':'' }}>{{ $c->name }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button class="btn btn-primary w-100" type="submit">Filter</button>
+        </div>
+      </form>
+
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped table-sm datatable">
+          <thead class="table-light">
+            <tr>
+              <th>Return No</th><th>Date</th><th>Ref Invoice</th><th>Customer</th>
+              <th>Reason</th><th>Refund Method</th><th>Currency</th>
+              <th class="text-end">Items</th><th class="text-end">Gross Wt</th>
+              <th class="text-end">Purity Wt</th><th class="text-end">Material Val</th>
+              <th class="text-end">Making Val</th><th class="text-end">VAT</th>
+              <th class="text-end">Net Amount</th><th class="text-end">Net AED</th>
+            </tr>
+          </thead>
+          <tbody>
+            @forelse($salesReturnRegister as $row)
+              <tr>
+                <td><strong>{{ $row['return_no'] }}</strong></td>
+                <td>{{ $row['return_date'] }}</td>
+                <td>{{ $row['invoice_no'] }}</td>
+                <td>{{ $row['customer'] }}</td>
+                <td>{{ $row['reason'] }}</td>
+                <td><span class="badge bg-secondary">{{ $row['refund_method'] }}</span></td>
+                <td>{{ $row['currency'] }}</td>
+                <td class="text-end">{{ $row['total_items'] }}</td>
+                <td class="text-end">{{ number_format($row['total_gross_wt'], 3) }}</td>
+                <td class="text-end">{{ number_format($row['total_purity_wt'], 3) }}</td>
+                <td class="text-end">{{ number_format($row['total_material'], 2) }}</td>
+                <td class="text-end">{{ number_format($row['total_making'], 2) }}</td>
+                <td class="text-end">{{ number_format($row['total_vat'], 2) }}</td>
+                <td class="text-end">{{ number_format($row['net_amount'], 2) }}</td>
+                <td class="text-end fw-bold">{{ number_format($row['net_amount_aed'], 2) }}</td>
+              </tr>
+            @empty
+              <tr><td colspan="15" class="text-center text-muted">No sale returns found.</td></tr>
+            @endforelse
+          </tbody>
+          @if($salesReturnRegister->count())
+          <tfoot class="table-light fw-bold">
+            <tr>
+              <td colspan="7">Totals ({{ $salesReturnRegister->count() }} returns)</td>
+              <td class="text-end">{{ $salesReturnRegister->sum('total_items') }}</td>
+              <td class="text-end">{{ number_format($salesReturnRegister->sum('total_gross_wt'), 3) }}</td>
+              <td class="text-end">{{ number_format($salesReturnRegister->sum('total_purity_wt'), 3) }}</td>
+              <td class="text-end">{{ number_format($salesReturnRegister->sum('total_material'), 2) }}</td>
+              <td class="text-end">{{ number_format($salesReturnRegister->sum('total_making'), 2) }}</td>
+              <td class="text-end">{{ number_format($salesReturnRegister->sum('total_vat'), 2) }}</td>
+              <td></td>
+              <td class="text-end">{{ number_format($salesReturnRegister->sum('net_amount_aed'), 2) }}</td>
             </tr>
           </tfoot>
           @endif

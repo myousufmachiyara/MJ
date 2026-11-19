@@ -6,6 +6,7 @@ use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoiceItem;
 use App\Models\SaleInvoice;
 use App\Models\SaleInvoiceItem;
+use App\Models\SaleReturn;
 use App\Models\Consignment;
 use App\Models\ConsignmentItem;
 use App\Models\ChartOfAccounts;
@@ -27,10 +28,20 @@ class DashboardController extends Controller
             $today     = $now->toDateString();
 
             // ── Sales KPIs ────────────────────────────────────────────────────
+            // FIX (sales figure overstated after returns): these used to be
+            // gross sale-invoice totals with no allowance for Sale Returns
+            // issued in the same period, so "Sales this month/year" never
+            // dropped when a customer returned goods. Net them against Sale
+            // Returns dated in the same window, the same way the customer
+            // ledger already nets them via AccountingEntry.
             $totalSalesMonth = (float) SaleInvoice::whereBetween('invoice_date', [$monthFrom, $monthTo])
+                ->whereNull('deleted_at')->sum('net_amount_aed');
+            $totalSalesMonth -= (float) SaleReturn::whereBetween('return_date', [$monthFrom, $monthTo])
                 ->whereNull('deleted_at')->sum('net_amount_aed');
 
             $totalSalesYear = (float) SaleInvoice::whereBetween('invoice_date', [$yearFrom, $yearTo])
+                ->whereNull('deleted_at')->sum('net_amount_aed');
+            $totalSalesYear -= (float) SaleReturn::whereBetween('return_date', [$yearFrom, $yearTo])
                 ->whereNull('deleted_at')->sum('net_amount_aed');
 
             $saleCount = (int) SaleInvoice::whereBetween('invoice_date', [$monthFrom, $monthTo])
@@ -234,6 +245,35 @@ class DashboardController extends Controller
                 foreach ($invoice->items as $item) {
                     $cost += $goldRate   * (float) ($item->purity_weight ?? 0);
                     $cost += $makingRate * (float) ($item->gross_weight  ?? 0);
+                }
+            }
+
+            // FIX (profit overstated after returns): a Sale Return dated in
+            // this period reverses revenue the customer no longer owes AND
+            // the cost of goods that came back into stock — neither side was
+            // ever removed from this total before, so a returned sale kept
+            // contributing its full original profit here forever. Net both
+            // out using the same purchase rates the original invoice sold
+            // under, same as SalesReportController::calcInvoiceProfit().
+            $returns = SaleReturn::with('items')
+                ->whereBetween('return_date', [$from, $to])
+                ->whereNull('deleted_at')
+                ->get();
+
+            foreach ($returns as $return) {
+                $revenue -= (float) ($return->net_amount_aed ?? 0);
+
+                $invoice = $return->saleInvoice;
+                if (!$invoice) {
+                    continue;
+                }
+
+                $goldRate   = (float) ($invoice->purchase_gold_rate_aed   ?? 0);
+                $makingRate = (float) ($invoice->purchase_making_rate_aed ?? 0);
+
+                foreach ($return->items as $item) {
+                    $cost -= $goldRate   * (float) ($item->purity_weight ?? 0);
+                    $cost -= $makingRate * (float) ($item->gross_weight  ?? 0);
                 }
             }
 

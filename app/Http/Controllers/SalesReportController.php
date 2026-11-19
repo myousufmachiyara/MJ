@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\SaleInvoice;
 use App\Models\SaleInvoiceItem;
+use App\Models\SaleReturn;
+use App\Models\SaleReturnItem;
 use App\Models\PurchaseInvoiceItem;
 use App\Models\ChartOfAccounts;
 use App\Services\myPDF;
@@ -27,23 +29,25 @@ class SalesReportController extends Controller
 
             $customers = ChartOfAccounts::where('account_type', 'customer')->orderBy('name')->get();
 
-            $saleRegister   = collect();
-            $customerWise   = collect();
-            $profitReport   = collect();
-            $itemAnalysis   = collect();
-            $paymentSummary = collect();
+            $saleRegister       = collect();
+            $customerWise       = collect();
+            $profitReport       = collect();
+            $itemAnalysis       = collect();
+            $paymentSummary     = collect();
+            $salesReturnRegister = collect();
 
             switch ($tab) {
-                case 'SR': $saleRegister   = $this->buildSaleRegister($from, $to, $customerId);   break;
-                case 'CW': $customerWise   = $this->buildCustomerWise($from, $to, $customerId);    break;
-                case 'PR': $profitReport   = $this->buildProfitReport($from, $to, $customerId);    break;
-                case 'IA': $itemAnalysis   = $this->buildItemAnalysis($from, $to, $customerId);    break;
-                case 'PM': $paymentSummary = $this->buildPaymentSummary($from, $to, $customerId);  break;
+                case 'SR':  $saleRegister         = $this->buildSaleRegister($from, $to, $customerId);         break;
+                case 'CW':  $customerWise         = $this->buildCustomerWise($from, $to, $customerId);         break;
+                case 'PR':  $profitReport         = $this->buildProfitReport($from, $to, $customerId);         break;
+                case 'IA':  $itemAnalysis         = $this->buildItemAnalysis($from, $to, $customerId);         break;
+                case 'PM':  $paymentSummary       = $this->buildPaymentSummary($from, $to, $customerId);       break;
+                case 'SRN': $salesReturnRegister  = $this->buildSalesReturnRegister($from, $to, $customerId);  break;
             }
 
             return view('reports.sales_reports', compact(
                 'saleRegister', 'customerWise', 'profitReport',
-                'itemAnalysis', 'paymentSummary',
+                'itemAnalysis', 'paymentSummary', 'salesReturnRegister',
                 'customers', 'from', 'to', 'tab', 'customerId'
             ));
 
@@ -65,7 +69,12 @@ class SalesReportController extends Controller
     {
         try {
             $invoice = SaleInvoice::with(['customer', 'items.parts'])->findOrFail($id);
-            [$profit, $cost, $margin] = $this->calcInvoiceProfit($invoice);
+            $p = $this->calcInvoiceProfit($invoice);
+            $profit  = $p['profit'];
+            $cost    = $p['cost'];
+            $margin  = $p['margin'];
+            $revenue = $p['revenue'];
+            $returnedAmount = $p['returned_amount'];
 
             $pdf = new myPDF();
             $pdf->setPrintHeader(false);
@@ -75,7 +84,7 @@ class SalesReportController extends Controller
             $pdf->setCellPadding(1.2);
             $pdf->AddPage();
 
-            $logoPath = public_path('assets/img/mj-logo.png');
+            $logoPath = public_path('assets/img/mj-logo.jpeg');
             $logoHtml = file_exists($logoPath) ? '<img src="' . $logoPath . '" width="85">' : '';
 
             $pdf->writeHTML('
@@ -83,7 +92,7 @@ class SalesReportController extends Controller
                     <tr>
                         <td width="40%">' . $logoHtml . '</td>
                         <td width="60%" style="text-align:right;font-size:10px;">
-                            <strong>YUNEEQ FINE JEWELRY L.L.C</strong><br>
+                            <strong>YUNEEQ FINE JEWELLERY L.L.C</strong><br>
                             Suite #M04, Mezzanine floor, Al Buteen 2 Building, Gold Souq. Gate no.1, Deira, Dubai<br>
                             TRN No: 104902647700003
                         </td>
@@ -139,8 +148,8 @@ class SalesReportController extends Controller
             $marginColor = $margin >= 0 ? '#198754' : '#dc3545';
             $html .= '
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
-                    <td colspan="8" align="right">TOTAL</td>
-                    <td>' . number_format($invoice->net_amount, 2) . '</td>
+                    <td colspan="8" align="right">TOTAL' . ($returnedAmount > 0 ? ' (net of returns)' : '') . '</td>
+                    <td>' . number_format($revenue, 2) . '</td>
                     <td>' . number_format($cost, 2) . '</td>
                     <td style="color:' . $marginColor . ';">' . number_format($profit, 2) . '</td>
                     <td style="color:' . $marginColor . ';">' . round($margin, 2) . '%</td>
@@ -154,7 +163,8 @@ class SalesReportController extends Controller
             $pdf->Cell(0, 5,
                 'Purchase Gold Rate: AED ' . number_format($purGoldR, 4) . '/gm  |  ' .
                 'Purchase Making Rate: AED ' . number_format($purMkR, 4) . '/gm  |  ' .
-                'Sale Currency: ' . $invoice->currency,
+                'Sale Currency: ' . $invoice->currency .
+                ($returnedAmount > 0 ? '  |  Returned: ' . number_format($returnedAmount, 2) . ' (excluded above)' : ''),
                 0, 1, 'L');
 
             return $pdf->Output('profit_' . $invoice->invoice_no . '.pdf', 'I');
@@ -178,16 +188,47 @@ class SalesReportController extends Controller
 
         if (!$inv->relationLoaded('items')) $inv->load('items');
 
-        $cost = $inv->items->sum(function ($item) use ($purGoldR, $purMkR) {
+        $grossCost = $inv->items->sum(function ($item) use ($purGoldR, $purMkR) {
             return ($purGoldR * (float) $item->purity_weight)
                  + ((float) $item->gross_weight * $purMkR);
         });
 
-        $revenue = (float) ($inv->net_amount ?? 0);
+        $grossRevenue = (float) ($inv->net_amount ?? 0);
+
+        // FIX (profit overstated after a Sale Return): this used to report
+        // the full original invoice revenue/cost forever, even after some or
+        // all of its items were returned via Sale Return — a returned item
+        // generates no real profit, but kept counting its original profit
+        // here indefinitely. Net out any items of THIS invoice that have
+        // since been returned, using the same purchase rates the invoice
+        // itself sold under (a return doesn't carry its own purchase rate).
+        $itemIds = $inv->items->pluck('id');
+        $returnedItems = $itemIds->isEmpty()
+            ? collect()
+            : SaleReturnItem::whereIn('sale_invoice_item_id', $itemIds)->get();
+
+        $returnedRevenue = (float) $returnedItems->sum('item_total');
+        $returnedCost    = (float) $returnedItems->sum(function ($ri) use ($purGoldR, $purMkR) {
+            return ($purGoldR * (float) $ri->purity_weight)
+                 + ((float) $ri->gross_weight * $purMkR);
+        });
+
+        $revenue = $grossRevenue - $returnedRevenue;
+        $cost    = $grossCost    - $returnedCost;
         $profit  = $revenue - $cost;
         $margin  = $cost > 0 ? round(($profit / $cost) * 100, 2) : 0;
 
-        return [$profit, $cost, $margin];
+        $exRate     = (float) ($inv->exchange_rate ?? 1);
+        $revenueAed = $inv->currency === 'USD' ? round($revenue * $exRate, 2) : round($revenue, 2);
+
+        return [
+            'profit'          => round($profit, 2),
+            'cost'            => round($cost, 2),
+            'margin'          => $margin,
+            'revenue'         => round($revenue, 2),
+            'revenue_aed'     => $revenueAed,
+            'returned_amount' => round($returnedRevenue, 2),
+        ];
     }
 
     // =========================================================================
@@ -296,7 +337,7 @@ class SalesReportController extends Controller
             if ($customerId) $query->where('customer_id', $customerId);
 
             return $query->get()->map(function ($inv) {
-                [$profit, $cost, $margin] = $this->calcInvoiceProfit($inv);
+                $p = $this->calcInvoiceProfit($inv);
 
                 return [
                     'id'                  => $inv->id,
@@ -305,11 +346,16 @@ class SalesReportController extends Controller
                         ? $inv->invoice_date->format('d-M-Y') : $inv->invoice_date,
                     'customer'            => $inv->customer->name ?? '-',
                     'currency'            => $inv->currency,
-                    'revenue'             => $inv->net_amount     ?? 0,
-                    'revenue_aed'         => $inv->net_amount_aed ?? 0,
-                    'cost'                => $cost,
-                    'profit'              => $profit,
-                    'margin'              => $margin,
+                    // FIX: net of any items since returned (see
+                    // calcInvoiceProfit) rather than the original gross
+                    // invoice total — 'returned_amount' shows how much of
+                    // the original was excluded, for transparency.
+                    'revenue'             => $p['revenue'],
+                    'revenue_aed'         => $p['revenue_aed'],
+                    'cost'                => $p['cost'],
+                    'profit'              => $p['profit'],
+                    'margin'              => $p['margin'],
+                    'returned_amount'     => $p['returned_amount'],
                     'purchase_gold_rate'  => $inv->purchase_gold_rate_aed   ?? 0,
                     'purchase_mk_rate'    => $inv->purchase_making_rate_aed ?? 0,
                     'total_gross_wt'      => $inv->items->sum('gross_weight'),
@@ -410,6 +456,48 @@ class SalesReportController extends Controller
 
         } catch (\Throwable $e) {
             Log::error('SalesReportController::buildPaymentSummary — ' . $e->getMessage());
+            return collect();
+        }
+    }
+
+    // =========================================================================
+    // 6. SALES RETURN REGISTER
+    // =========================================================================
+
+    private function buildSalesReturnRegister(string $from, string $to, ?int $customerId): \Illuminate\Support\Collection
+    {
+        try {
+            $query = SaleReturn::with(['customer', 'saleInvoice', 'items'])
+                ->whereBetween('return_date', [$from, $to])
+                ->whereNull('deleted_at')
+                ->orderBy('return_date')->orderBy('id');
+
+            if ($customerId) $query->where('customer_id', $customerId);
+
+            return $query->get()->map(function ($ret) {
+                return [
+                    'id'              => $ret->id,
+                    'return_no'       => $ret->return_no,
+                    'return_date'     => $ret->return_date instanceof Carbon
+                        ? $ret->return_date->format('d-M-Y') : $ret->return_date,
+                    'invoice_no'      => $ret->saleInvoice->invoice_no ?? '-',
+                    'customer'        => $ret->customer->name ?? '-',
+                    'currency'        => $ret->currency,
+                    'reason'          => $ret->reason ?? '-',
+                    'refund_method'   => ucwords(str_replace('_', ' ', $ret->refund_method ?? '-')),
+                    'total_items'     => $ret->items->count(),
+                    'total_gross_wt'  => $ret->items->sum('gross_weight'),
+                    'total_purity_wt' => $ret->items->sum('purity_weight'),
+                    'total_material'  => $ret->items->sum('material_value'),
+                    'total_making'    => $ret->items->sum('making_value'),
+                    'total_vat'       => $ret->items->sum('vat_amount'),
+                    'net_amount'      => $ret->net_amount     ?? 0,
+                    'net_amount_aed'  => $ret->net_amount_aed ?? 0,
+                ];
+            });
+
+        } catch (\Throwable $e) {
+            Log::error('SalesReportController::buildSalesReturnRegister — ' . $e->getMessage());
             return collect();
         }
     }
