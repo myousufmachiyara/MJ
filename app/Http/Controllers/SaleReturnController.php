@@ -765,8 +765,43 @@ class SaleReturnController extends Controller
         $diaPartsDr     = round($totals['diamond_parts'] ?? 0, 2);
         $vatDr          = round($totals['vat'],              2);
 
+        // FIX (customer ledger not reflecting sale return properly): the
+        // ORIGINAL sale can carry, on top of each item's own vat_amount
+        // (already reversed above as $vatDr), a separate INVOICE-LEVEL VAT
+        // (SaleInvoice::invoice_vat_amount / invoice_vat_percent — see
+        // SaleInvoiceController::createSaleAccountingEntries(), which debits
+        // the customer for this amount in addition to everything else). This
+        // return never reversed any part of it, so the customer's ledger
+        // kept showing them owing — or being refunded less than — that
+        // leftover VAT slice after every return on such an invoice.
+        //
+        // Reverse the same proportion of it that this return represents of
+        // the original invoice, using the same base the invoice used to
+        // calculate it (making-charges value when invoice_vat_on_making is
+        // set, otherwise the full net value) — so a full return reverses
+        // 100% of it, a partial return its fair share, and an invoice with
+        // no invoice-level VAT is completely unaffected (stays 0, exactly
+        // like before this fix).
+        $invoice              = $saleReturn->saleInvoice;
+        $invoiceVatReversalDr = 0.0;
+
+        if ($invoice && (float) ($invoice->invoice_vat_amount ?? 0) > 0) {
+            if ($invoice->invoice_vat_on_making) {
+                $invoiceBase = (float) $invoice->items()->sum('making_value');
+                $returnBase  = $makingDr;
+            } else {
+                $invoiceBase = (float) $invoice->net_amount_aed;
+                $returnBase  = $goldMaterialDr + $diaMaterialDr + $makingDr + $goldPartsDr + $diaPartsDr;
+            }
+
+            $ratio = $invoiceBase > 0.0 ? ($returnBase / $invoiceBase) : 0.0;
+            $ratio = max(0.0, min(1.0, $ratio)); // never reverse more than was charged
+
+            $invoiceVatReversalDr = round((float) $invoice->invoice_vat_amount * $ratio, 2);
+        }
+
         $totalReturn = round(
-            $goldMaterialDr + $diaMaterialDr + $makingDr + $goldPartsDr + $diaPartsDr + $vatDr,
+            $goldMaterialDr + $diaMaterialDr + $makingDr + $goldPartsDr + $diaPartsDr + $vatDr + $invoiceVatReversalDr,
             2
         );
 
@@ -843,6 +878,18 @@ class SaleReturnController extends Controller
                 'debit'      => $vatDr,
                 'credit'     => 0,
                 'narration'  => 'Output VAT reversed — Return #' . $saleReturn->return_no,
+            ];
+        }
+
+        // Invoice-level VAT (proportional share) → Output VAT Payable — see
+        // the $invoiceVatReversalDr comment above for why this is needed.
+        if ($invoiceVatReversalDr > 0) {
+            $entries[] = [
+                'voucher_id' => $voucher->id,
+                'account_id' => $acct('208001'),   // Output VAT Payable
+                'debit'      => $invoiceVatReversalDr,
+                'credit'     => 0,
+                'narration'  => 'Invoice-level VAT reversed (proportional share) — Return #' . $saleReturn->return_no,
             ];
         }
 

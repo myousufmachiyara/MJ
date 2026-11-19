@@ -75,4 +75,44 @@ class SaleInvoiceItem extends Model
     {
         return $this->hasMany(SaleInvoiceItemPart::class);
     }
+
+    // =========================================================================
+    // RETURN AVAILABILITY
+    //
+    // FIX: every "is this barcode already sold?" check across the app
+    // (Sale Invoice scan/POS/search, Quotation — which reuses the Sale
+    // Invoice endpoints — and Consignment scan) used to look only for the
+    // existence of a SaleInvoiceItem with that barcode, with no way to know
+    // a SaleReturn later brought it back into stock. These two helpers are
+    // the single place that now accounts for returns, so a returned item is
+    // treated as available again everywhere consistently, without touching
+    // how a genuinely still-sold item behaves.
+    // =========================================================================
+
+    /** Has this specific sold line since been returned via Sale Return? */
+    public function isReturned(): bool
+    {
+        return SaleReturnItem::where('sale_invoice_item_id', $this->id)->exists();
+    }
+
+    /**
+     * The item currently sold under this barcode — i.e. its latest sale,
+     * UNLESS that sale has since been returned, in which case the item is
+     * back in stock and this returns null (same as a barcode that was never
+     * sold at all).
+     */
+    public static function currentlySoldFor(?string $barcode): ?self
+    {
+        if (!$barcode) {
+            return null;
+        }
+
+        $latest = static::where('barcode_number', $barcode)->latest()->first();
+
+        if (!$latest || $latest->isReturned()) {
+            return null;
+        }
+
+        return $latest;
+    }
 }

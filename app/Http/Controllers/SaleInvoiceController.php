@@ -131,7 +131,11 @@ class SaleInvoiceController extends Controller
         // on a Sale Invoice has already been sold and is no longer in
         // stock. Reuses the existing barcode_number field/relationship —
         // no new stock table or stock-calculation logic.
-        $alreadySold = SaleInvoiceItem::where('barcode_number', $purchaseItem->barcode_number)->exists();
+        // FIX: an item sold and then returned via Sale Return is back in
+        // stock — currentlySoldFor() returns null for it (see
+        // SaleInvoiceItem::currentlySoldFor()), so it's no longer blocked
+        // here. A genuinely still-sold item is unaffected.
+        $alreadySold = SaleInvoiceItem::currentlySoldFor($purchaseItem->barcode_number) !== null;
         if ($alreadySold) {
             return response()->json([
                 'success' => false,
@@ -220,6 +224,16 @@ class SaleInvoiceController extends Controller
             ->where('barcode_number', $barcode)
             ->latest()
             ->first();
+
+        // FIX: a sale that has SINCE been returned (Sale Return) puts the
+        // item back in stock. Treat it the same as never having been sold —
+        // fall through to the consignment/purchase lookups below, which
+        // reflect its current, available state — instead of showing it here
+        // as a closed-out sale with stale pricing/costing data. Reused by
+        // Quotation too (it calls this same endpoint).
+        if ($saleItem && $saleItem->isReturned()) {
+            $saleItem = null;
+        }
 
         if ($saleItem) {
             return response()->json([
@@ -2890,6 +2904,11 @@ class SaleInvoiceController extends Controller
             ->latest()
             ->limit(10)
             ->get()
+            // FIX: skip a sold item that's since been returned — otherwise
+            // its stale "sale" row comes first and the results' unique(by
+            // barcode) call below silently drops the fresh, available
+            // purchase-item row for the same barcode.
+            ->reject(fn($item) => $item->isReturned())
             ->each(fn($item) => $results->push($this->formatNameSearchResult($item, 'sale')));
 
         \App\Models\ConsignmentItem::with(['parts', 'consignment.partner'])

@@ -278,6 +278,14 @@ class ConsignmentController extends Controller
                 ->latest()
                 ->first();
 
+            // FIX: a sale that has SINCE been returned (Sale Return) puts the
+            // item back in stock — fall through to the purchase-item lookup
+            // below (step 4), which reflects its current, available state,
+            // instead of treating it as a closed-out sale.
+            if ($saleItem && $saleItem->isReturned()) {
+                $saleItem = null;
+            }
+
             if ($saleItem) {
                 return response()->json($this->formScanPayload('sale', $saleItem));
             }
