@@ -551,11 +551,39 @@ class SaleReturnController extends Controller
             $pdf->Cell(0, 5, 'Remarks: ' . $saleReturn->remarks, 0, 1, 'L');
         }
 
-        $pdf->Ln(20);
+        // ── Signature block — keep both lines and both labels together as one ───
+        // unit, without stranding them alone on an otherwise-blank new page.
+        //
+        // Line() never triggers TCPDF's auto page-break (only text-writing
+        // calls like Cell()/MultiCell() do), so without this check a line
+        // drawn near the bottom of the page renders there while the label
+        // Cell() right after it auto-breaks onto the next page — splitting
+        // the two apart (and TCPDF's own auto-break margin here doesn't match
+        // the 10mm margin actually used everywhere else in this document, so
+        // it was also breaking well before the page was actually full).
+        // Same fix already applied to ConsignmentController::print().
+        $pageBottomMargin = 10; // matches SetMargins(10, 10, 10) above
+        $sigRowHeight      = 6;  // both lines + both labels sit on one row
+        $sigMinGap         = 4;  // smallest acceptable breathing room above it
+        $sigAvailable      = $pdf->getPageHeight() - $pdf->GetY() - $pageBottomMargin;
+
+        if ($sigAvailable < $sigRowHeight + $sigMinGap) {
+            $pdf->AddPage();
+            $gap = 10; // fresh page already has plenty of room above the block
+        } else {
+            $gap = min(20, $sigAvailable - $sigRowHeight);
+        }
+
+        $autoBreak = $pdf->getAutoPageBreak();
+        $pdf->SetAutoPageBreak(false);
+
+        $pdf->Ln($gap);
         $y = $pdf->GetY();
         $pdf->SetFont('helvetica', '', 7);
         $pdf->Line(20,  $y, 80,  $y); $pdf->SetXY(20,  $y + 1); $pdf->Cell(60, 5, "Customer's Signature",  0, 0, 'C');
         $pdf->Line(130, $y, 190, $y); $pdf->SetXY(130, $y + 1); $pdf->Cell(60, 5, 'Authorized Signature',  0, 0, 'C');
+
+        $pdf->SetAutoPageBreak($autoBreak, $pdf->getBreakMargin());
 
         return $pdf->Output($saleReturn->return_no . '.pdf', 'I');
     }
