@@ -438,7 +438,7 @@ class SaleReturnController extends Controller
                 <td width="6%">' . number_format($item->col_995,       3) . '</td>
                 <td width="6%">' . number_format($item->making_rate,   2) . '</td>
                 <td width="7%">' . number_format($item->making_value,  2) . '</td>
-                <td width="8%">' . ucfirst($item->material_type)          . '</td>
+                <td width="7%">' . ucfirst($item->material_type)          . '</td>
                 <td width="8%">' . number_format($item->material_value, 2) . '</td>
                 <td width="5%">' . number_format($item->vat_percent,   0) . '%</td>
                 <td width="8%" style="font-weight:bold;">' . number_format($item->item_total, 2) . '</td>
