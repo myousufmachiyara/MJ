@@ -404,9 +404,9 @@ class SaleReturnController extends Controller
         <table border="1" cellpadding="3" width="100%" style="font-size:8px;">
             <thead>
                 <tr style="font-weight:bold;background-color:#f5f5f5;text-align:center;">
-                    <th width="3%"  rowspan="2">#</th>
+                    <th width="5%"  rowspan="2">#</th>
                     <th width="12%" rowspan="2">Item Name</th>
-                    <th width="10%" rowspan="2">Description</th>
+                    <th width="12%" rowspan="2">Description</th>
                     <th width="6%"  rowspan="2">Gross Wt</th>
                     <th width="6%"  rowspan="2">Purity</th>
                     <th width="7%"  rowspan="2">Purity Wt</th>
@@ -429,9 +429,9 @@ class SaleReturnController extends Controller
 
             $html .= '
             <tr style="text-align:center;">
-                <td width="3%">' . ($index + 1) . '</td>
+                <td width="5%">' . ($index + 1) . '</td>
                 <td width="12%" style="text-align:left;">' . ($item->item_name ?? '-') . '</td>
-                <td width="10%" style="text-align:left;">' . ($item->item_description ?? '-') . '</td>
+                <td width="12%" style="text-align:left;">' . ($item->item_description ?? '-') . '</td>
                 <td width="6%">' . number_format($item->gross_weight,  3) . '</td>
                 <td width="6%">' . number_format($item->purity,        3) . '</td>
                 <td width="7%">' . number_format($item->purity_weight, 3) . '</td>
