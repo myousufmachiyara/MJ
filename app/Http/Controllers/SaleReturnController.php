@@ -640,6 +640,34 @@ class SaleReturnController extends Controller
                 $partsTotal += (float) ($partData['total'] ?? 0);
             }
 
+            // FIX (ledger not matching after return — double-counted parts):
+            // a part row's own 'total' is always a real, non-zero reference
+            // figure kept for the printout, EVEN when the original sale
+            // bundled that value into the item's flat selling price instead
+            // of billing it separately (see SaleInvoiceController::
+            // createItems()'s $isPosFlatPrice handling, which deliberately
+            // stores parts_total = 0 on the original SaleInvoiceItem for
+            // such items, while each part row still keeps its own
+            // informational total). $partsTotal above (re-summed from the
+            // submitted part rows) doesn't know that, so it was being added
+            // to the accounting reversal a SECOND time — overstating the
+            // customer's credit and under-reversing revenue by that same
+            // amount. When this return line is linked back to its original
+            // sale item, defer to THAT item's own stored parts_total for the
+            // accounting totals below — it's the authoritative record of
+            // what was actually billed separately. A manually-typed return
+            // line with no linked original item keeps the submitted figure,
+            // exactly as before. Nothing printed/displayed changes — this
+            // only feeds the two accounting-only totals just below.
+            $accountingPartsTotal = $partsTotal;
+            $sourceItemId         = $itemData['sale_invoice_item_id'] ?? null;
+            if ($sourceItemId) {
+                $sourceItem = \App\Models\SaleInvoiceItem::find($sourceItemId);
+                if ($sourceItem) {
+                    $accountingPartsTotal = (float) $sourceItem->parts_total;
+                }
+            }
+
             $returnItem = $saleReturn->items()->create([
                 'sale_invoice_item_id' => $itemData['sale_invoice_item_id'] ?? null,
                 'item_name'            => $itemData['item_name']            ?? null,
@@ -676,12 +704,15 @@ class SaleReturnController extends Controller
 
             if ($matType === 'gold') {
                 $totals['gold_material'] += $materialValue;
-                $totals['gold_parts']    += $partsTotal;
+                $totals['gold_parts']    += $accountingPartsTotal; // FIX: see comment above
             } else {
                 $totals['diamond_material'] += $materialValue;
-                $totals['diamond_parts']    += $partsTotal;
+                $totals['diamond_parts']    += $accountingPartsTotal; // FIX: see comment above
             }
 
+            // Display-only totals (print Summary's Material/Parts rows) —
+            // deliberately still the submitted $partsTotal, unchanged, so
+            // nothing on the printed document is affected by this fix.
             $totals['material'] += $materialValue;
             $totals['making']   += $makingValue;
             $totals['parts']    += $partsTotal;
