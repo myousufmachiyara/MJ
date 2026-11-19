@@ -455,8 +455,8 @@ class SaleReturnController extends Controller
                         <td style="text-align:left;">' . ($part->item_name ?? 'Part') . '</td>
                         <td style="text-align:left;">' . htmlspecialchars($part->part_description ?? '') . '</td>
                         <td colspan="2">' . number_format($part->qty, 3) . ' Ct</td>
-                        <td>St.' . number_format($part->stone_qty ?? 0, 2) . '</td>
-                        <td colspan="6"></td>
+                        <td colspan="2">St.' . number_format($part->stone_qty ?? 0, 2) . '</td>
+                        <td colspan="5"></td>
                         <td style="font-weight:bold;">' . number_format($part->total, 2) . '</td>
                     </tr>';
                 }
