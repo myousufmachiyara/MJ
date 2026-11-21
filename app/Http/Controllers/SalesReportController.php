@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use App\Models\SaleInvoice;
 use App\Models\SaleInvoiceItem;
 use App\Models\SaleReturn;
@@ -416,6 +417,19 @@ class SalesReportController extends Controller
                 ->whereHas('saleInvoice', function ($q) use ($from, $to, $customerId) {
                     $q->whereBetween('invoice_date', [$from, $to]);
                     if ($customerId) $q->where('customer_id', $customerId);
+                })
+                // FIX (returned items still showing in Item Analysis): an
+                // item sold then returned via Sale Return is no longer a
+                // real sale — it generates no profit and the stock is back
+                // — but this list kept showing it at full value forever,
+                // same class of bug already fixed in the Profit Report tab
+                // and its PDF. Exclude any item that has a matching
+                // SaleReturnItem (same check as
+                // SaleInvoiceItem::isReturned()).
+                ->whereNotExists(function ($q) {
+                    $q->select(DB::raw(1))
+                        ->from('sale_return_items')
+                        ->whereColumn('sale_return_items.sale_invoice_item_id', 'sale_invoice_items.id');
                 })
                 ->orderBy('id')
                 ->get()
