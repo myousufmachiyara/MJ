@@ -6,6 +6,7 @@ use App\Models\PurchaseInvoiceItem;
 use App\Models\SaleInvoiceItem;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * FEATURE: two Sale Profit reports.
@@ -73,6 +74,19 @@ class SaleProfitReportController extends Controller
                 if ($to) {
                     $q->whereDate('invoice_date', '<=', $to);
                 }
+            })
+            // FIX (returned items still showing in these Sale Profit
+            // reports): a sold line that has since been returned via Sale
+            // Return is no longer a real sale — the stock is back and
+            // there's no real profit/loss to count — but this report never
+            // checked for that at all, same class of bug already fixed in
+            // the Sales Reports → Profit Report and Item Analysis tabs.
+            // Excluded using the same "has a matching SaleReturnItem" check
+            // used everywhere else (SaleInvoiceItem::isReturned()).
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('sale_return_items')
+                    ->whereColumn('sale_return_items.sale_invoice_item_id', 'sale_invoice_items.id');
             });
 
         if ($search !== '') {
