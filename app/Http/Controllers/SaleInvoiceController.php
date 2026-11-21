@@ -551,8 +551,10 @@ class SaleInvoiceController extends Controller
         $banks       = ChartOfAccounts::whereIn('account_type', ['bank', 'cash'])->get();
         $products    = Product::with('measurementUnit')->get();
 
-        $goldAedOunce    = ($saleInvoice->gold_rate_aed    ?? 0) * 31.1035;
-        $diamondAedOunce = ($saleInvoice->diamond_rate_aed ?? 0) * 31.1035;
+        $goldAedOunce = ($saleInvoice->gold_rate_aed ?? 0) * 31.1035;
+        // NOTE: no diamond equivalent — diamond is priced per carat, not
+        // per troy ounce, so diamond_rate_usd is used to prefill the form
+        // directly (see sales/edit.blade.php), with no ounce conversion.
 
         $outboundConsignments = \App\Models\Consignment::where('direction', 'outbound')
             ->whereIn('status', ['active', 'partially_settled'])
@@ -627,7 +629,7 @@ class SaleInvoiceController extends Controller
 
         return view('sales.edit', compact(
             'saleInvoice', 'customers', 'banks', 'products',
-            'itemsData', 'goldAedOunce', 'diamondAedOunce', 'purities',
+            'itemsData', 'goldAedOunce', 'purities',
             'outboundConsignments'
         ));
     }

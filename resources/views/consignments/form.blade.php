@@ -108,7 +108,11 @@
           </div>
 
           <div class="col-12 col-md-2 mt-2">
-            <label>Diamond Rate (AED / <b>Gram</b>)</label>
+            {{-- FIX: this rate is multiplied straight into a diamond item's
+                 carat weight (see recalcRow() below) — diamond is priced
+                 per carat, not per gram, so the label was wrong even though
+                 the calculation itself was always correct. --}}
+            <label>Diamond Rate (AED / <b>Ct</b>)</label>
             <input type="number" step="any" name="diamond_rate_aed" id="diamond_rate_aed"
                    class="form-control" value="{{ old('diamond_rate_aed', 0) }}">
           </div>

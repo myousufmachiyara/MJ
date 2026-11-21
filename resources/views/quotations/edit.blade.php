@@ -74,18 +74,13 @@
             </div>
 
             <div class="col-12 col-md-2 mt-2">
-              <label>Diamond Rate (USD) / Ounce</label>
+              <label>Diamond Rate (USD / <b>Ct</b>)</label>
               <input type="number" step="any" id="diamond_rate_usd" name="diamond_rate_usd" class="form-control" value="{{ $quotation->diamond_rate_usd ?? 0 }}">
             </div>
 
-            <div class="col-12 col-md-2 mt-2">
-              <label>Diamond Rate (AED) / Ounce</label>
-              <input type="number" step="any" id="diamond_rate_aed_ounce" name="diamond_rate_aed_ounce" class="form-control" value="{{ round($diamondAedOunce, 4) }}">
-            </div>
-
             <div class="col-12 col-md-3 mt-2">
-              <label class="text-primary">Diamond Rate (AED / <b>Gram</b>)</label>
-              <input type="number" step="any" id="diamond_rate_aed_gram" name="diamond_rate_aed" class="form-control" value="{{ $quotation->diamond_rate_aed ?? 0 }}" readonly>
+              <label class="text-primary">Diamond Rate (AED / <b>Ct</b>)</label>
+              <input type="number" step="any" id="diamond_rate_aed" name="diamond_rate_aed" class="form-control" value="{{ $quotation->diamond_rate_aed ?? 0 }}" readonly>
               <small class="text-danger fw-bold">Used for calculations</small>
             </div>
 
@@ -1063,7 +1058,7 @@ $(document).ready(function () {
         updateProfitDisplay(row);
     });
 
-    $(document).on('input change', '.purity, .vat-percent, .discount-value, .discount-type, .material-type, #gold_rate_aed, #diamond_rate_aed_gram, #purchase_gold_rate_aed, #purchase_making_rate_aed', function() {
+    $(document).on('input change', '.purity, .vat-percent, .discount-value, .discount-type, .material-type, #gold_rate_aed, #diamond_rate_aed, #purchase_gold_rate_aed, #purchase_making_rate_aed', function() {
         $('#SaleTable tr.item-row').each(function() { calculateRow($(this)); updateProfitDisplay($(this)); });
         calculateTotals();
     });
@@ -1114,7 +1109,7 @@ $(document).ready(function () {
         const matType    = row.find('.material-type').val();
         const saleRate   = matType === 'gold'
             ? (parseFloat($('#gold_rate_aed').val())         || 0)
-            : (parseFloat($('#diamond_rate_aed_gram').val()) || 0);
+            : (parseFloat($('#diamond_rate_aed').val()) || 0);
 
         const purityWeight  = gross * purity;
         const col995        = purityWeight > 0 ? purityWeight / 0.995 : 0;
@@ -1258,15 +1253,18 @@ $(document).ready(function () {
     }
 
     // ===== RATE CONVERSION =====
-    $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #diamond_rate_aed_ounce, #exchange_rate', function() {
+    // FIX (diamond rate wrongly treated as per-gram): diamond is priced per
+    // carat, not per gram — no ounce-to-gram step applies to it.
+    // diamond_rate_aed = diamond_rate_usd × exchange_rate, same as Purchase
+    // Invoice always did it.
+    $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #exchange_rate', function() {
         const id     = $(this).attr('id');
         const exRate = parseFloat($('#exchange_rate').val()) || 3.6725;
         if (id === 'gold_rate_usd' || id === 'exchange_rate')
             $('#gold_rate_aed_ounce').val(((parseFloat($('#gold_rate_usd').val()) || 0) * exRate).toFixed(4));
         $('#gold_rate_aed').val(((parseFloat($('#gold_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
         if (id === 'diamond_rate_usd' || id === 'exchange_rate')
-            $('#diamond_rate_aed_ounce').val(((parseFloat($('#diamond_rate_usd').val()) || 0) * exRate).toFixed(4));
-        $('#diamond_rate_aed_gram').val(((parseFloat($('#diamond_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
+            $('#diamond_rate_aed').val(((parseFloat($('#diamond_rate_usd').val()) || 0) * exRate).toFixed(4));
         $('#SaleTable tr.item-row').each(function() { calculateRow($(this)); updateProfitDisplay($(this)); });
         calculateTotals();
     });

@@ -81,18 +81,13 @@
             </div>
 
             <div class="col-12 col-md-2 mt-2">
-              <label>Diamond Rate (USD) / Ounce</label>
+              <label>Diamond Rate (USD / <b>Ct</b>)</label>
               <input type="number" step="any" id="diamond_rate_usd" name="diamond_rate_usd" class="form-control" value="0">
             </div>
 
-            <div class="col-12 col-md-2 mt-2">
-              <label>Diamond Rate (AED) / Ounce</label>
-              <input type="number" step="any" id="diamond_rate_aed_ounce" name="diamond_rate_aed_ounce" class="form-control" value="0">
-            </div>
-
             <div class="col-12 col-md-3 mt-2">
-              <label class="text-primary">Diamond Rate (AED / <b>Gram</b>)</label>
-              <input type="number" step="any" id="diamond_rate_aed_gram" name="diamond_rate_aed" class="form-control" value="0" readonly>
+              <label class="text-primary">Diamond Rate (AED / <b>Ct</b>)</label>
+              <input type="number" step="any" id="diamond_rate_aed" name="diamond_rate_aed" class="form-control" value="0" readonly>
               <small class="text-danger fw-bold">Used for calculations</small>
             </div>
 
@@ -1490,7 +1485,7 @@ $(document).ready(function () {
     });
 
     // When purity/vat/material-type/gold-rate changes → recalculate all rows + profit displays
-    $(document).on('input change', '.purity, .vat-percent, .discount-value, .discount-type, .material-type, #gold_rate_aed, #diamond_rate_aed_gram, #purchase_gold_rate_aed, #purchase_making_rate_aed', function() {
+    $(document).on('input change', '.purity, .vat-percent, .discount-value, .discount-type, .material-type, #gold_rate_aed, #diamond_rate_aed, #purchase_gold_rate_aed, #purchase_making_rate_aed', function() {
         $('#SaleTable tr.item-row').each(function() {
             calculateRow($(this));
             updateProfitDisplay($(this));
@@ -1539,7 +1534,7 @@ $(document).ready(function () {
         const matType    = row.find('.material-type').val();
         const saleRate   = matType === 'gold'
             ? (parseFloat($('#gold_rate_aed').val())          || 0)
-            : (parseFloat($('#diamond_rate_aed_gram').val())  || 0);
+            : (parseFloat($('#diamond_rate_aed').val())  || 0);
 
         const purityWeight  = gross * purity;
         const col995        = purityWeight > 0 ? purityWeight / 0.995 : 0;
@@ -1701,15 +1696,21 @@ $(document).ready(function () {
     }
 
     // ===== RATE CONVERSION =====
-    $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #diamond_rate_aed_ounce, #exchange_rate', function() {
+    // FIX (diamond rate wrongly treated as per-gram): gold is priced per
+    // troy ounce and converted to AED/gram, but diamond is priced per
+    // carat, not per gram — there is no ounce-to-gram step for it at all.
+    // This used to run diamond through the exact same ounce→gram division
+    // as gold, silently understating the AED/Ct rate by ~31x (same bug
+    // Purchase Invoice never had — it always converts diamond straight:
+    // diamond_rate_aed = diamond_rate_usd × exchange_rate, per carat).
+    $(document).on('input', '#gold_rate_usd, #gold_rate_aed_ounce, #diamond_rate_usd, #exchange_rate', function() {
         const id     = $(this).attr('id');
         const exRate = parseFloat($('#exchange_rate').val()) || 3.6725;
         if (id === 'gold_rate_usd' || id === 'exchange_rate')
             $('#gold_rate_aed_ounce').val(((parseFloat($('#gold_rate_usd').val()) || 0) * exRate).toFixed(4));
         $('#gold_rate_aed').val(((parseFloat($('#gold_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
         if (id === 'diamond_rate_usd' || id === 'exchange_rate')
-            $('#diamond_rate_aed_ounce').val(((parseFloat($('#diamond_rate_usd').val()) || 0) * exRate).toFixed(4));
-        $('#diamond_rate_aed_gram').val(((parseFloat($('#diamond_rate_aed_ounce').val()) || 0) / TROY_OUNCE_TO_GRAM).toFixed(4));
+            $('#diamond_rate_aed').val(((parseFloat($('#diamond_rate_usd').val()) || 0) * exRate).toFixed(4));
         $('#SaleTable tr.item-row').each(function() { calculateRow($(this)); updateProfitDisplay($(this)); });
         calculateTotals();
     });
