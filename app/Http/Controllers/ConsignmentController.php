@@ -1691,6 +1691,19 @@ class ConsignmentController extends Controller
 
         $request->validate($rules);
 
+        // OFFLINE MODE: inbound consignments generate CSG-prefixed barcodes
+        // for new physical stock, the same way a Purchase Invoice does — and
+        // for the same reason Purchases are blocked offline, two separately
+        // numbered offline/live copies of that stock can't be reconciled
+        // after the fact. Outbound consignments (giving OUR existing, already
+        // barcoded stock to a partner) don't create new stock, so they stay
+        // allowed offline.
+        if (config('app.offline_mode') && !$updating && $request->direction === 'inbound') {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'direction' => ['Inbound consignments can only be created when connected to the live system (they generate new stock barcodes). Please try again once you\'re back online.'],
+            ]);
+        }
+
         // Ensure at least one item is present (via JSON or legacy form array)
         $items = $this->resolveItems($request);
         if (empty($items)) {

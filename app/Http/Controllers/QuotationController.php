@@ -1363,7 +1363,15 @@ class QuotationController extends Controller
     /** QUO-00001, QUO-00002 ... one series (taxable or not). */
     private function generateQuotationNo(): string
     {
-        $prefix    = 'QUO-';
+        $prefix = 'QUO-';
+
+        // OFFLINE MODE: see SaleInvoiceController::generateInvoiceNo() for
+        // why — keeps offline-generated quotation numbers from colliding
+        // with live ones when later imported.
+        if (config('app.offline_mode')) {
+            $prefix = 'OFF-' . $prefix;
+        }
+
         $prefixLen = strlen($prefix);
 
         $maxNo = Quotation::withTrashed()

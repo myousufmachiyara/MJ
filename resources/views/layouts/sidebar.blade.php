@@ -124,7 +124,15 @@
                who only has purchase_invoices.edit (e.g. someone granted just
                enough access to update Selling Price) so that link below
                isn't hidden behind the Invoices-list permission. --}}
-          @if(auth()->user()->can('purchase_invoices.index') || auth()->user()->can('purchase_invoices.edit') || auth()->user()->can('purchase_return.index'))
+          {{-- OFFLINE MODE: Purchasing creates new barcoded stock, which risks
+               an unreconcilable duplicate barcode if the client also receives
+               stock on the live site before syncing — so this whole menu is
+               hidden on an offline build (config/app.php "offline_mode").
+               The routes are also blocked server-side (see
+               App\Http\Middleware\BlockOfflineRestrictedModules), so this is
+               purely so the client doesn't see a dead link, not the only
+               safeguard. --}}
+          @if(!config('app.offline_mode') && (auth()->user()->can('purchase_invoices.index') || auth()->user()->can('purchase_invoices.edit') || auth()->user()->can('purchase_return.index')))
           <li class="nav-parent {{ request()->routeIs('purchase_invoices.*') || request()->routeIs('purchase_return.*') || request()->routeIs('selling_price.*') ? 'nav-expanded nav-active' : '' }}">
             <a class="nav-link" href="#">
               <i class="fa fa-shopping-cart"></i>
@@ -252,6 +260,19 @@
                 </li>
               @endcan
             </ul>
+          </li>
+          @endif
+
+          {{-- Offline/Live Sync — super-admin only (handles raw ledger data
+               directly, not a normal permission-gated module). On an offline
+               build this is "Export for Sync"; on the live site, once built,
+               it'll be "Import Offline Data" instead — same page. --}}
+          @if(auth()->user()->id === 1 || auth()->user()->hasRole('super-admin'))
+          <li class="{{ request()->routeIs('sync.*') ? 'active' : '' }}">
+            <a class="nav-link" href="{{ route('sync.index') }}">
+              <i class="fa fa-sync"></i>
+              <span>Sync</span>
+            </a>
           </li>
           @endif
 

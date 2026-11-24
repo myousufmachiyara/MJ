@@ -33,6 +33,14 @@ class Consignment extends Model
     public static function generateNo(string $direction): string
     {
         $prefix = $direction === 'inbound' ? 'CSG-IN-' : 'CSG-OUT-';
+
+        // OFFLINE MODE: inbound is blocked offline anyway (see
+        // ConsignmentController::validateConsignment()), but outbound still
+        // needs this — same reasoning as
+        // SaleInvoiceController::generateInvoiceNo().
+        if (config('app.offline_mode')) {
+            $prefix = 'OFF-' . $prefix;
+        }
         $last   = self::withTrashed()->where('consignment_no', 'LIKE', $prefix . '%')->orderByDesc('id')->first();
         $next   = $last ? ((int) str_replace($prefix, '', $last->consignment_no)) + 1 : 1;
         return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);

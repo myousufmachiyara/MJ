@@ -151,6 +151,13 @@ class Voucher extends Model
 
         $prefix = $prefixes[$type] ?? 'VO';
 
+        // OFFLINE MODE: see SaleInvoiceController::generateInvoiceNo() for
+        // why — keeps offline-generated voucher numbers from colliding with
+        // live ones when later imported.
+        if (config('app.offline_mode')) {
+            $prefix = 'OFF-' . $prefix;
+        }
+
         $last = self::withTrashed()
             ->where('voucher_no', 'LIKE', $prefix . '-%')
             ->orderBy('id', 'desc')

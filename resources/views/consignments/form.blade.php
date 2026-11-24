@@ -45,14 +45,24 @@
             <label class="fw-bold">Direction <span class="text-danger">*</span></label>
             <select name="direction" id="direction" class="form-control border-primary" required>
               <option value="">-- Select Direction --</option>
-              <option value="inbound"  {{ old('direction') === 'inbound'  ? 'selected' : '' }}>
-                ↓ Inbound — we receive goods from partner
+              {{-- OFFLINE MODE: inbound generates new CSG stock barcodes, which
+                   risks an unreconcilable duplicate if the client also receives
+                   stock on the live site before syncing — same reason
+                   Purchasing is unavailable offline. Disabled here for UX;
+                   also rejected server-side either way
+                   (ConsignmentController::validateConsignment()). --}}
+              <option value="inbound" {{ config('app.offline_mode') ? 'disabled' : '' }}
+                      {{ old('direction') === 'inbound'  ? 'selected' : '' }}>
+                ↓ Inbound — we receive goods from partner{{ config('app.offline_mode') ? ' (needs live connection)' : '' }}
               </option>
               <option value="outbound" {{ old('direction') === 'outbound' ? 'selected' : '' }}>
                 ↑ Outbound — we send goods to partner
               </option>
             </select>
             <small class="text-muted">Inbound = CSG barcodes generated. Outbound = no barcodes.</small>
+            @if(config('app.offline_mode'))
+              <small class="d-block text-warning">Inbound consignments can only be created when connected to the live system.</small>
+            @endif
           </div>
           @else
           <input type="hidden" name="direction" value="{{ $consignment->direction }}">

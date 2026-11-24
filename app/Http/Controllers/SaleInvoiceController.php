@@ -1774,6 +1774,17 @@ class SaleInvoiceController extends Controller
     {
         $prefix = $isTaxable ? 'SAL-TAX-' : 'SAL-';
 
+        // OFFLINE MODE: an offline install's own invoice sequence runs
+        // independently of the live site's, so without this an offline and a
+        // live invoice could both land on e.g. "SAL-TAX-00057" — a collision
+        // on invoice_no's unique constraint the moment this gets imported
+        // into live. The "OFF-" prefix keeps the two sequences visually and
+        // literally distinct, same reasoning as the reserved ID range in
+        // app:prepare-offline-db for the underlying row ids.
+        if (config('app.offline_mode')) {
+            $prefix = 'OFF-' . $prefix;
+        }
+
         // FIX (stuck invoice number): this used to pick "the row with the
         // highest id" via orderByDesc('id')->first() and assume that row also
         // had the highest invoice number. Those can disagree — a row edited

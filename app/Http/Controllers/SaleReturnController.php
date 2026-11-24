@@ -594,6 +594,13 @@ class SaleReturnController extends Controller
     {
         $prefix = 'SAL-RET-';
 
+        // OFFLINE MODE: see SaleInvoiceController::generateInvoiceNo() for
+        // why — keeps offline-generated return numbers from colliding with
+        // live ones when later imported.
+        if (config('app.offline_mode')) {
+            $prefix = 'OFF-' . $prefix;
+        }
+
         $last = SaleReturn::withTrashed()
             ->whereRaw('return_no REGEXP ?', ['^' . preg_quote($prefix, '/') . '[0-9]+$'])
             ->orderByDesc('id')

@@ -66,6 +66,17 @@ class COAController extends Controller
 
             $accountCode = $prefix . str_pad($maxSuffix + 1, 3, '0', STR_PAD_LEFT);
 
+            // OFFLINE MODE: account_code here is just digits (HOA+SHOA+serial),
+            // scoped by sub-head — the same sub-head exists in both the
+            // offline and live databases (shared config), so both could
+            // independently generate the exact same next code for a new
+            // customer/vendor. The "OFF-" prefix keeps them from colliding on
+            // account_code's unique constraint when later imported — same
+            // reasoning as SaleInvoiceController::generateInvoiceNo().
+            if (config('app.offline_mode')) {
+                $accountCode = 'OFF-' . $accountCode;
+            }
+
             ChartOfAccounts::create([
                 'shoa_id'      => $request->shoa_id,
                 'account_code' => $accountCode,

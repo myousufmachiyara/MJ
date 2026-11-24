@@ -123,4 +123,23 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Offline Mode
+    |--------------------------------------------------------------------------
+    |
+    | True only on an offline-installer build (set via OFFLINE_MODE=true in
+    | scripts\.env.offline, which first-run.bat copies to app\.env). Never
+    | true on the live mj.billtrix.com server. Used to:
+    |   - reserve a high AUTO_INCREMENT range on sync-eligible tables so
+    |     offline-created rows can never collide with live IDs
+    |   - prefix offline-generated document numbers with "OFF-"
+    |   - block modules that create new barcoded stock (Purchases, Purchase
+    |     Returns, inbound Consignments) since two separate copies of the
+    |     same physical item's barcode can't be reconciled after the fact
+    |
+    */
+
+    'offline_mode' => env('OFFLINE_MODE', false),
+
 ];
