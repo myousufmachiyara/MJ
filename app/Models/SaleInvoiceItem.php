@@ -100,6 +100,18 @@ class SaleInvoiceItem extends Model
      * UNLESS that sale has since been returned, in which case the item is
      * back in stock and this returns null (same as a barcode that was never
      * sold at all).
+     *
+     * FIX (deleted invoice keeps barcode stuck as "sold"): SaleInvoice uses
+     * SoftDeletes, so deleting an invoice only sets its deleted_at — the
+     * SaleInvoiceItem rows underneath it (which carry barcode_number) are
+     * left exactly as they were. Without the whereHas() below, this method
+     * would still find that item as the "latest" sale for the barcode and
+     * keep reporting it as already sold forever, even though the invoice
+     * that sold it no longer exists. whereHas('saleInvoice') requires a
+     * still-existing (non-soft-deleted) parent invoice, since the subquery
+     * it builds against SaleInvoice automatically carries that model's own
+     * SoftDeletingScope — so a genuinely still-sold item is unaffected, and
+     * only items whose invoice was deleted are released back to "available".
      */
     public static function currentlySoldFor(?string $barcode): ?self
     {
@@ -107,7 +119,10 @@ class SaleInvoiceItem extends Model
             return null;
         }
 
-        $latest = static::where('barcode_number', $barcode)->latest()->first();
+        $latest = static::where('barcode_number', $barcode)
+            ->whereHas('saleInvoice')
+            ->latest()
+            ->first();
 
         if (!$latest || $latest->isReturned()) {
             return null;
