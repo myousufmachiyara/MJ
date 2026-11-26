@@ -9,7 +9,7 @@
 		<meta name="csrf-token" content="{{ csrf_token() }}">
 
 		<!-- Web Fonts  -->
-		<link href="https://fonts.googleapis.com/css?family=Poppins:300,400,500,600,700,800|Shadows+Into+Light" rel="stylesheet">
+		<link href="{{ asset('assets/vendor-offline/fonts/fonts.css') }}" rel="stylesheet">
 
 		<!-- Vendor CSS -->
 		<link rel="stylesheet" href="{{ asset('assets/vendor/bootstrap/css/bootstrap.css') }}" />

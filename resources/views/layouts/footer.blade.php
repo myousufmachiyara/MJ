@@ -1,17 +1,17 @@
 <!-- jQuery -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.nanoscroller/0.8.7/jquery.nanoscroller.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-placeholder/2.3.1/jquery.placeholder.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/magnific-popup.js/1.1.0/jquery.magnific-popup.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui-touch-punch/0.2.3/jquery.ui.touch-punch.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.appear/0.4.1/jquery.appear.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="{{ asset('assets/vendor-offline/jquery/jquery.min.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/bootstrap/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/bootstrap-datepicker/bootstrap-datepicker.min.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/nanoscroller/jquery.nanoscroller.min.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/jquery-placeholder/jquery.placeholder.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/magnific-popup/jquery.magnific-popup.min.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/jquery-ui/jquery-ui.min.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/jquery-ui-touch-punch/jquery.ui.touch-punch.min.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/jquery-appear/jquery.appear.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/datatables/jquery.dataTables.min.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/datatables/dataTables.bootstrap5.min.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/moment/moment.min.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/xlsx/xlsx.full.min.js') }}"></script>
 <script src="{{ asset('/assets/vendor/bootstrapv5-multiselect/js/bootstrap-multiselect.js') }}"></script>
 <script src="{{ asset('/assets/vendor/dropzone/dropzone.js') }}"></script>
 
@@ -34,5 +34,5 @@
 <!-- Theme Initialization Files -->
 <script src="{{ asset('/assets/js/theme.init.js') }}"></script>
 <script src="{{ asset('/assets/vendor/jquery-nestable/jquery.nestable.js') }}"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
+<script src="{{ asset('assets/vendor-offline/chartjs/chart.umd.min.js') }}"></script>
+<script src="{{ asset('assets/vendor-offline/fingerprintjs/fp.min.js') }}"></script>

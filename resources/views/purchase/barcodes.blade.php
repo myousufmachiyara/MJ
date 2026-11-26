@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Barcodes — {{ $invoice->invoice_no }}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <link href="{{ asset('assets/vendor-offline/fonts/fonts.css') }}" rel="stylesheet">
+    <script src="{{ asset('assets/vendor-offline/jsbarcode/JsBarcode.all.min.js') }}"></script>
     <style>
         :root {
             --ink:      #0a0a0a;

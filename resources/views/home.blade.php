@@ -353,7 +353,7 @@
 </div>{{-- /mj-dash --}}
 
 @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="{{ asset('assets/vendor-offline/chartjs/chart.umd.min.js') }}"></script>
 <script>
 (function(){
     var ctx = document.getElementById('mjTrendChart');

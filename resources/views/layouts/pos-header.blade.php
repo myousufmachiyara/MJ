@@ -8,7 +8,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
 		<!-- Web Fonts  -->
-		<link href="https://fonts.googleapis.com/css?family=Poppins:300,400,500,600,700,800|Shadows+Into+Light" rel="stylesheet" type="text/css">
+		<link href="{{ asset('assets/vendor-offline/fonts/fonts.css') }}" rel="stylesheet">
 
 		<!-- Vendor CSS -->
         
@@ -17,7 +17,7 @@
 		<link rel="stylesheet" href="{{ asset('/assets/vendor/font-awesome/css/all.min.css') }}" />
 		<link rel="stylesheet" href="{{ asset('/assets/vendor/boxicons/css/boxicons.min.css') }}" />
 		<link rel="stylesheet" href="{{ asset('/assets/vendor/magnific-popup/magnific-popup.css') }}" />
-		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/css/bootstrap-datepicker.min.css" />
+		<link rel="stylesheet" href="{{ asset('assets/vendor-offline/bootstrap-datepicker/bootstrap-datepicker.min.css') }}" />
 		<link rel="stylesheet" href="{{ asset('/assets/vendor/datatables/media/css/dataTables.bootstrap5.css') }}" />
 		<link rel="stylesheet" href="{{ asset('/assets/vendor/select2/css/select2.css') }}" />
 		<link rel="stylesheet" href="{{ asset('/assets/vendor/select2-bootstrap-theme/select2-bootstrap.min.css') }}" />
@@ -26,8 +26,8 @@
 		<link rel="stylesheet" href="{{ asset('/assets/vendor/dropzone/dropzone.css') }}" />
 		<!-- Theme CSS -->
         <link rel="stylesheet" href="{{ asset('/assets/css/theme.css') }}" />
-        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+        <script src="{{ asset('assets/vendor-offline/jquery/jquery.min.js') }}"></script>
+        <script src="{{ asset('assets/vendor-offline/sortablejs/Sortable.min.js') }}"></script>
 
 		<!-- Skin CSS -->
         <link rel="stylesheet" href="{{ asset('/assets/css/skins/default.css') }}" />
@@ -115,7 +115,7 @@
         <header class="page-header m-0">
             <div class="logo-container d-none d-md-block">
                 <a href="/" class="logo ">
-                    <img src="/assets/img/mj-logo.png" width="60px" alt="Jild Logo" />
+                    <img src="/assets/img/mj-logo.jpeg" width="60px" alt="Jild Logo" />
                 </a>
                 <div id="userbox" class="userbox" style="float:right !important;">
                     <a class="btn btn-success" href="/pos_system"> POS System</a>
@@ -150,7 +150,7 @@
 
             <div class="logo-container d-md-none">
                 <a href="/" class="logo ">
-                    <img src="/assets/img/mj-logo.png" width="60px" alt="MJ Logo" />
+                    <img src="/assets/img/mj-logo.jpeg" width="60px" alt="MJ Logo" />
                 </a>
                 <div id="userbox" class="userbox" style="float:right !important;">
                     <a href="#" data-bs-toggle="dropdown" style="margin-right: 20px;">
