@@ -15,4 +15,8 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::get('/sync', [SyncController::class, 'index'])->name('sync.index');
     Route::post('/sync/export', [SyncController::class, 'export'])->name('sync.export');
     Route::post('/sync/import', [SyncController::class, 'import'])->name('sync.import');
+    // Inventory pull (live -> offline) — opposite direction from the sales
+    // sync above. See InventoryExportService/InventoryImportService.
+    Route::post('/sync/inventory/export', [SyncController::class, 'exportInventory'])->name('sync.inventory.export');
+    Route::post('/sync/inventory/import', [SyncController::class, 'importInventory'])->name('sync.inventory.import');
 });

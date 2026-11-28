@@ -61,7 +61,61 @@
             </div>
           </form>
         @endif
+      </div>
+    </section>
 
+    <section class="card mt-4">
+      <header class="card-header">
+        <h2 class="card-title">Inventory Update</h2>
+      </header>
+
+      <div class="card-body">
+        @if($isOfflineMode)
+          <p>
+            Pulls the latest purchase invoices &amp; items (real inventory — barcodes,
+            weights, certificates) from the live site, replacing what's here now.
+            Purchases can't be created offline, so this is always safe to run —
+            there's never anything offline-only in this data to lose.
+          </p>
+          <p class="text-muted">
+            Upload the file the live site's <strong>Export Inventory</strong> button
+            produced below.
+          </p>
+
+          <form action="{{ route('sync.inventory.import') }}" method="POST" enctype="multipart/form-data">
+            @csrf
+            <div class="row align-items-end">
+              <div class="col-md-6">
+                <label>Inventory file</label>
+                <input type="file" name="inventory_file" class="form-control" accept=".json" required>
+              </div>
+              <div class="col-md-3">
+                <button type="submit" class="btn btn-primary mt-2 mt-md-0">
+                  <i class="fa fa-download"></i> Import Inventory
+                </button>
+              </div>
+            </div>
+          </form>
+        @else
+          <p>
+            Produces a file with every purchase invoice &amp; item currently on this
+            site — download it and bring it to an offline install's own Sync page
+            whenever its inventory needs refreshing (new stock purchased since its
+            last update).
+          </p>
+
+          <form action="{{ route('sync.inventory.export') }}" method="POST">
+            @csrf
+            <button type="submit" class="btn btn-primary">
+              <i class="fa fa-upload"></i> Export Inventory for Offline
+            </button>
+          </form>
+        @endif
+      </div>
+    </section>
+
+    <section class="card mt-4">
+      <div class="card-body">
         <h4>Sync History</h4>
         @if($history->isEmpty())
           <p class="text-muted">Nothing synced yet.</p>
@@ -80,11 +134,22 @@
                 <tr>
                   <td>{{ $batch->created_at->format('d-M-Y h:i A') }}</td>
                   <td>
-                    @if($batch->direction === 'exported')
-                      <span class="badge bg-primary">Exported</span>
-                    @else
-                      <span class="badge bg-success">Imported</span>
-                    @endif
+                    @switch($batch->direction)
+                      @case('exported')
+                        <span class="badge bg-primary">Sync: Exported</span>
+                        @break
+                      @case('imported')
+                        <span class="badge bg-success">Sync: Imported</span>
+                        @break
+                      @case('inv_export')
+                        <span class="badge bg-warning text-dark">Inventory: Exported</span>
+                        @break
+                      @case('inv_import')
+                        <span class="badge bg-info text-dark">Inventory: Imported</span>
+                        @break
+                      @default
+                        <span class="badge bg-secondary">{{ $batch->direction }}</span>
+                    @endswitch
                   </td>
                   <td>{{ $batch->file_name ?? '-' }}</td>
                   <td>
