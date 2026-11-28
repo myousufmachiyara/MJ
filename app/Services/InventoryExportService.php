@@ -34,29 +34,52 @@ use Illuminate\Support\Str;
  *
  * The offline side is used for POS scanning, so it should only ever see
  * physical pieces that could actually still be scanned and sold — not
- * every purchase ever made. Per the client's explicit rule, a purchased
- * item is "available" (exported) unless it's currently sold, with two
- * carve-outs:
- *   1. excluded once sold ...................... currently sold, not returned
- *   2. ... but included again if returned ....... sold, then sale-returned
- *   3. excluded while out on consignment ........ sent out to another
- *                                                  business (outbound) and
- *                                                  not yet back in stock
+ * every purchase ever made, and not the full original quantity of
+ * something that's been partly sold.
  *
- * This reuses the exact same two checks the rest of the app already uses
- * for "is this barcode in stock right now?" rather than inventing a new
- * definition:
- *   - SaleInvoiceItem::currentlySoldFor() — same method POS scan
- *     (SaleInvoiceController::posScan()) already calls. "Latest sale for
- *     this barcode, unless that sale was itself sale-returned" — computed
- *     here in bulk (one query, not per-barcode) but to the same result.
- *   - The outbound-consignment exclusion InventoryReportController's own
- *     buildStockInHand() uses: a ConsignmentItem still 'in_stock' whose
- *     parent Consignment.direction is 'outbound'.
+ * PARTIAL WEIGHT — gold is sold in chunks, not as a whole binary item, so
+ * "available" is never a yes/no question per barcode; it's a remaining
+ * WEIGHT. This deliberately mirrors InventoryReportController's own
+ * buildStockInHand() exactly — same formula, same scaling — so this
+ * export's numbers always tie out against the live site's own "Stock In
+ * Hand" report rather than drifting from it with a second, slightly
+ * different definition of "available":
+ *
+ *   sold_weight      = SUM(gross_weight) of every sale_invoice_item for
+ *                      that barcode, whose sale invoice still exists
+ *                      (not soft-deleted) — i.e. genuinely sold, exactly
+ *                      what POS/live's own report already counts as sold.
+ *   outbound_weight  = SUM(gross_weight) of ConsignmentItem rows still
+ *                      'in_stock' whose parent Consignment is 'outbound'
+ *                      (physically away at a partner's shop).
+ *   remaining_weight = purchased_gross_weight - sold_weight - outbound_weight
+ *
+ * An item with remaining_weight <= 0 is fully consumed and dropped from
+ * the export entirely. A PARTIALLY sold item is kept, but its weight and
+ * value fields are scaled down to the remaining fraction before export
+ * (ratio = remaining_weight / purchased_weight) — same fields
+ * buildStockInHand() itself scales: gross_weight, net_weight,
+ * purity_weight, col_995, making_value, material_value, vat_amount,
+ * item_total. This table is a disposable, fully-replaced snapshot on the
+ * offline side (never the historical record of what was originally
+ * purchased — that stays intact on live), so it's safe and correct for
+ * the exported copy to represent "what's actually left right now," not
+ * the original purchased quantity; without this, an item live has
+ * already partly sold would show as fully available again offline,
+ * risking overselling the same physical weight twice.
+ *
+ * NOTE: buildStockInHand() does not currently credit sale returns back
+ * into sold_weight (no sale_return_items offset), so this export matches
+ * that as-is for now, to keep the two numbers comparable. If that should
+ * change, it needs to change in both places together, not just here.
  *
  * A purchase item with no barcode_number at all can't be matched against
- * either check, so it's kept (safer default — never hide real inventory
- * just because we can't prove it's gone).
+ * either lookup, so it's kept at its full original weight (safer default
+ * — never hide real inventory just because we can't prove it's gone).
+ *
+ * purchase_invoice_item_parts (diamonds/stones attached to an item) are
+ * NOT scaled, matching buildStockInHand()'s own choice to leave them
+ * untouched — only filtered down to parts whose parent item survived.
  *
  * purchase_invoices / purchase_invoice_attachments / purchase_returns /
  * purchase_return_items / purchase_return_item_parts are NOT filtered —
@@ -110,14 +133,39 @@ class InventoryExportService
             }
 
             if ($table === 'purchase_invoice_items') {
-                $available = $this->availableBarcodes();
-                $query->where(function ($q) use ($available) {
-                    $q->whereNull('barcode_number')
-                        ->orWhereIn('barcode_number', $available);
-                });
+                $soldWeightByBarcode     = $this->soldWeightByBarcode();
+                $outboundWeightByBarcode = $this->outboundWeightByBarcode();
 
-                $rows = $query->get();
-                $availableItemIds = $rows->pluck('id')->all();
+                $kept = [];
+                foreach ($query->get() as $row) {
+                    $arr         = (array) $row;
+                    $barcode     = $arr['barcode_number'] ?? null;
+                    $purchasedWt = (float) ($arr['gross_weight'] ?? 0);
+                    $soldWt      = $barcode !== null ? (float) ($soldWeightByBarcode[$barcode] ?? 0) : 0;
+                    $outboundWt  = $barcode !== null ? (float) ($outboundWeightByBarcode[$barcode] ?? 0) : 0;
+                    $remainingWt = $purchasedWt - $soldWt - $outboundWt;
+
+                    if ($remainingWt <= 0.0001) {
+                        continue; // fully consumed — drop entirely, same as buildStockInHand()
+                    }
+
+                    $ratio = $purchasedWt > 0 ? $remainingWt / $purchasedWt : 1;
+                    if ($ratio < 1) {
+                        foreach (['gross_weight', 'net_weight', 'purity_weight', 'col_995',
+                                  'making_value', 'material_value', 'vat_amount', 'item_total'] as $field) {
+                            if (array_key_exists($field, $arr) && $arr[$field] !== null) {
+                                $arr[$field] = (float) $arr[$field] * $ratio;
+                            }
+                        }
+                    }
+
+                    $kept[] = $arr;
+                }
+
+                $bundle['tables'][$table] = $kept;
+                $counts[$table] = count($kept);
+                $availableItemIds = array_column($kept, 'id');
+                continue; // already assembled $kept directly — skip the generic assembly below
             } elseif ($table === 'purchase_invoice_item_parts') {
                 $query->whereIn('purchase_invoice_item_id', $availableItemIds ?? []);
                 $rows = $query->get();
@@ -154,96 +202,43 @@ class InventoryExportService
     }
 
     /**
-     * Every distinct barcode_number currently in purchase_invoice_items
-     * that is NOT currently sold and NOT currently out on outbound
-     * consignment — i.e. "available" per the client's rule. See this
-     * class's own docblock for the exact rule and why each check below
-     * reuses existing app logic instead of a new definition.
+     * SUM(gross_weight) of every sale_invoice_item per barcode, counting
+     * only sales whose invoice still exists (not soft-deleted) — exactly
+     * InventoryReportController::buildStockInHand()'s $soldWeightByBarcode.
      *
-     * @return array<int, string>
+     * @return array<string, float> keyed by barcode
      */
-    private function availableBarcodes(): array
+    private function soldWeightByBarcode(): array
     {
-        $allBarcodes = DB::table('purchase_invoice_items')
-            ->whereNotNull('barcode_number')
-            ->distinct()
-            ->pluck('barcode_number')
-            ->all();
-
-        if (empty($allBarcodes)) {
-            return [];
-        }
-
-        $sold      = $this->currentlySoldBarcodes();
-        $outbound  = $this->outboundConsignmentBarcodes();
-        $unavailable = $sold + $outbound; // keys only matter — array union is fine
-
-        return array_values(array_diff($allBarcodes, array_keys($unavailable)));
-    }
-
-    /**
-     * Barcodes whose LATEST sale (by id — correlates with recency the same
-     * way Eloquent's latest() does) has NOT itself been sale-returned.
-     * Bulk-query equivalent of SaleInvoiceItem::currentlySoldFor($barcode)
-     * !== null, run once for every barcode instead of once per barcode.
-     * Also matches that method's own deleted-invoice handling: a sale whose
-     * parent SaleInvoice has been (soft-)deleted doesn't count as a sale at
-     * all, so its barcode is available again — see SaleInvoiceItem's own
-     * docblock for why that matters (the POS-scan-after-delete bug fix).
-     *
-     * @return array<string, true> keyed by barcode, for fast isset() checks
-     */
-    private function currentlySoldBarcodes(): array
-    {
-        $latestSaleItemIdByBarcode = DB::table('sale_invoice_items as sii')
+        return DB::table('sale_invoice_items as sii')
             ->join('sale_invoices as si', 'si.id', '=', 'sii.sale_invoice_id')
             ->whereNull('si.deleted_at')
             ->whereNotNull('sii.barcode_number')
-            ->selectRaw('sii.barcode_number as barcode, MAX(sii.id) as latest_id')
+            ->selectRaw('sii.barcode_number as barcode, SUM(sii.gross_weight) as total')
             ->groupBy('sii.barcode_number')
-            ->get();
-
-        if ($latestSaleItemIdByBarcode->isEmpty()) {
-            return [];
-        }
-
-        $latestIds = $latestSaleItemIdByBarcode->pluck('latest_id')->all();
-
-        $returnedItemIds = DB::table('sale_return_items')
-            ->whereIn('sale_invoice_item_id', $latestIds)
-            ->pluck('sale_invoice_item_id')
-            ->unique()
-            ->flip() // for isset() checks
+            ->pluck('total', 'barcode')
+            ->map(fn ($v) => (float) $v)
             ->all();
-
-        $sold = [];
-        foreach ($latestSaleItemIdByBarcode as $row) {
-            if (!isset($returnedItemIds[$row->latest_id])) {
-                $sold[$row->barcode] = true;
-            }
-        }
-
-        return $sold;
     }
 
     /**
-     * Barcodes still physically out on an OUTBOUND consignment (sent to
-     * another business, not yet back in stock) — same definition
-     * InventoryReportController::buildStockInHand() already uses.
+     * SUM(gross_weight) of ConsignmentItem rows still 'in_stock' whose
+     * parent Consignment is 'outbound', per source_barcode — exactly
+     * buildStockInHand()'s $outboundWeightByBarcode.
      *
-     * @return array<string, true> keyed by barcode, for fast isset() checks
+     * @return array<string, float> keyed by barcode
      */
-    private function outboundConsignmentBarcodes(): array
+    private function outboundWeightByBarcode(): array
     {
         return DB::table('consignment_items as ci')
             ->join('consignments as c', 'c.id', '=', 'ci.consignment_id')
             ->where('ci.item_status', 'in_stock')
             ->where('c.direction', 'outbound')
             ->whereNotNull('ci.source_barcode')
-            ->distinct()
-            ->pluck('ci.source_barcode')
-            ->flip()
-            ->map(fn () => true)
+            ->selectRaw('ci.source_barcode as barcode, SUM(ci.gross_weight) as total')
+            ->groupBy('ci.source_barcode')
+            ->pluck('total', 'barcode')
+            ->map(fn ($v) => (float) $v)
             ->all();
     }
 }
